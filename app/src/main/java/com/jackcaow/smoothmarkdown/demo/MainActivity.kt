@@ -171,7 +171,7 @@ private fun DemoHome(
         "html" -> "HTML Tags Demo"
         "plugin" -> "Plugin System Demo"
         else -> specialPage?.let { localizations.page(language, it) }
-            ?: localizations.example(language, example)
+            ?: example.title
     }
     val controller = remember(exampleId, isEditor) {
         MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown).also {
