@@ -60,4 +60,28 @@ class StreamMarkdownBufferTest {
         buffer.finish(51)
         assertEquals("lead <font colo", StreamSnapshot(buffer.visibleText, complete = true).renderText(enableHtml = true))
     }
+
+    @Test fun cumulativePrefixHandlesConflationAndLateSubscription() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0)
+        assertEquals(40L, buffer.appendPrefix("Hello", 10))
+        assertEquals(20L, buffer.appendPrefix("Hello world", 30))
+        buffer.flush(50)
+        assertEquals("Hello world", buffer.visibleText)
+        assertEquals("Hello world", buffer.fullText)
+
+        val late = StreamMarkdownBuffer(startMillis = 100)
+        assertEquals(40L, late.appendPrefix("Hello world", 110))
+        late.finish(150)
+        assertEquals("Hello world", late.visibleText)
+    }
+
+    @Test fun replacingPrefixResetsPreviousConversation() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0)
+        buffer.appendPrefix("First response", 50)
+        assertNull(buffer.appendPrefix("New", 60))
+        assertEquals("New", buffer.fullText)
+        assertEquals("New", buffer.visibleText)
+        buffer.finish(100)
+        assertEquals("New", buffer.visibleText)
+    }
 }

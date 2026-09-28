@@ -10,6 +10,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /** Appends incoming chunks and renders the accumulated Markdown document.
@@ -28,6 +29,7 @@ fun StreamMarkdown(
     plugins: ParserPluginRegistry? = null,
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
+    scrollable: Boolean = true,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     // HTML is a rendering option, not a new stream. Keep collecting the same
@@ -63,7 +65,57 @@ fun StreamMarkdown(
     }
     SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
         styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
-        imageBuilder = imageBuilder)
+        imageBuilder = imageBuilder, scrollable = scrollable)
+}
+
+/** Renders a cumulative streaming source. A late-composed chat bubble receives the latest
+ * complete prefix from [StateFlow], so lazy list recycling cannot lose earlier chunks.
+ */
+@Composable
+fun StreamMarkdown(
+    prefixes: StateFlow<String>,
+    modifier: Modifier = Modifier,
+    onLinkClick: (String) -> Unit = {},
+    onImageClick: (String) -> Unit = {},
+    onError: (Throwable) -> Unit = {},
+    throttleMillis: Long = 50,
+    enableHtml: Boolean = false,
+    styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
+    plugins: ParserPluginRegistry? = null,
+    onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
+    imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
+    scrollable: Boolean = true,
+) {
+    val errorHandler by rememberUpdatedState(onError)
+    val snapshot by produceState(initialValue = StreamSnapshot(), key1 = prefixes, key2 = throttleMillis) {
+        value = StreamSnapshot()
+        val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis())
+        var pending: Job? = null
+        try {
+            prefixes.collect { prefix ->
+                val wait = buffer.appendPrefix(prefix, SystemClock.uptimeMillis())
+                pending?.cancel()
+                if (wait == null) {
+                    value = StreamSnapshot(buffer.visibleText)
+                } else {
+                    pending = launch {
+                        delay(wait)
+                        buffer.flush(SystemClock.uptimeMillis())
+                        value = StreamSnapshot(buffer.visibleText)
+                    }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            errorHandler(error)
+        } finally {
+            pending?.cancel()
+        }
+    }
+    SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
+        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
+        imageBuilder = imageBuilder, scrollable = scrollable)
 }
 
 internal data class StreamSnapshot(val text: String = "", val complete: Boolean = false) {

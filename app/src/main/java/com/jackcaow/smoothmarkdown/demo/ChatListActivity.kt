@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
 import com.jackcaow.smoothmarkdown.SmoothMarkdownCache
+import com.jackcaow.smoothmarkdown.StreamMarkdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -66,6 +67,7 @@ private data class ChatMessage(
     val content: String,
     val user: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
+    val streamSession: MarkdownStreamSession? = null,
 )
 
 class ChatListActivity : ComponentActivity() {
@@ -117,18 +119,26 @@ private fun ChatListScreen(
             if (streaming) return@launch // Flutter ignores a response request during an active stream.
             streaming = true
             val id = nextId++
-            messages += ChatMessage(id, "", false)
+            val session = MarkdownStreamSession()
+            messages += ChatMessage(id, "", false, streamSession = session)
             val response = markdown.getValue(replyNames[fixedReply ?: Random.nextInt(replyNames.size)])
-            var offset = 0
-            while (offset < response.length) {
-                val end = (offset + 3 + Random.nextInt(3)).coerceAtMost(response.length)
+            try {
+                var offset = 0
+                while (offset < response.length) {
+                    val end = (offset + 3 + Random.nextInt(3)).coerceAtMost(response.length)
+                    val index = messages.indexOfFirst { it.id == id }
+                    if (index < 0) break
+                    messages[index] = messages[index].copy(content = session.append(response.substring(offset, end)))
+                    offset = end
+                    delay((20 + Random.nextInt(30)).toLong())
+                }
+            } finally {
                 val index = messages.indexOfFirst { it.id == id }
-                if (index < 0) break
-                messages[index] = messages[index].copy(content = response.substring(0, end))
-                offset = end
-                delay((20 + Random.nextInt(30)).toLong())
+                if (index >= 0 && messages[index].streamSession === session) {
+                    messages[index] = messages[index].copy(content = session.finish(), streamSession = null)
+                }
+                streaming = false
             }
-            streaming = false
         }
     }
 
@@ -250,13 +260,12 @@ private fun ChatBubble(message: ChatMessage, dark: Boolean, onLinkClick: (String
                 .testTag(if (message.user) "chat-user-${message.id}" else "chat-assistant-${message.id}"),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                if (message.content.isNotEmpty()) {
-                    SmoothMarkdown(
-                        markdown = message.content,
-                        styleSheet = style,
-                        scrollable = false,
-                        onLinkClick = onLinkClick,
-                    )
+                if (message.streamSession != null) {
+                    StreamMarkdown(prefixes = message.streamSession.prefixes,
+                        styleSheet = style, onLinkClick = onLinkClick, scrollable = false)
+                } else if (message.content.isNotEmpty()) {
+                    SmoothMarkdown(markdown = message.content, styleSheet = style,
+                        scrollable = false, onLinkClick = onLinkClick)
                 }
                 Text(
                     if (System.currentTimeMillis() - message.timestamp < 30_000) "Just now" else "Earlier",

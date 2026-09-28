@@ -65,6 +65,7 @@ import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.StreamMarkdown
 import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import kotlinx.coroutines.CancellationException
@@ -106,6 +107,7 @@ private data class AIChatMessage(
     val content: String,
     val user: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
+    val streamSession: MarkdownStreamSession? = null,
 )
 
 /** Content is synchronized from Flutter's example/lib/ai_chat_demo.dart. */
@@ -199,14 +201,15 @@ private fun AIChatScreen(
         }?.response ?: fixture.genericResponseTemplate.replace("{{prompt}}", text))
         val id = nextId++
         val epoch = conversationEpoch
-        messages += AIChatMessage(id, "", false)
+        val session = MarkdownStreamSession()
+        messages += AIChatMessage(id, "", false, streamSession = session)
         streaming = true
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 suspend fun append(chunk: String) {
                     if (epoch != conversationEpoch) return
                     val index = messages.indexOfFirst { it.id == id }
-                    if (index >= 0) messages[index] = messages[index].copy(content = messages[index].content + chunk)
+                    if (index >= 0) messages[index] = messages[index].copy(content = session.append(chunk))
                 }
                 if (useNetwork) {
                     qwen.stream(text, networkKey, networkModel, networkThinking) { chunk ->
@@ -226,15 +229,23 @@ private fun AIChatScreen(
                 // New conversation or Activity disposal cancelled the active stream.
             } catch (error: Exception) {
                 if (epoch == conversationEpoch) {
+                    session.cancel()
                     val detail = if (error is QwenHttpException) "API Error: ${error.statusCode}"
                         else "Network Error: ${error.javaClass.simpleName}"
                     val index = messages.indexOfFirst { it.id == id }
                     if (index >= 0) messages[index] = messages[index].copy(
                         content = "⚠️ **错误**: $detail\n\n请检查 API Key 配置或网络连接。",
+                        streamSession = null,
                     )
                 }
             } finally {
                 if (epoch == conversationEpoch) {
+                    val index = messages.indexOfFirst { it.id == id }
+                    if (index >= 0 && messages[index].streamSession === session) {
+                        messages[index] = messages[index].copy(
+                            content = session.finish(), streamSession = null,
+                        )
+                    }
                     streaming = false
                     streamJob = null
                 }
@@ -246,6 +257,7 @@ private fun AIChatScreen(
 
     fun newChat() {
         conversationEpoch++
+        messages.forEach { it.streamSession?.cancel() }
         qwen.cancel()
         streamJob?.cancel()
         streamJob = null
@@ -442,14 +454,17 @@ private fun AIMessageBubble(
                 .testTag(if (message.user) "ai-user-${message.id}" else "ai-assistant-${message.id}"),
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                if (message.content.isNotEmpty()) {
-                    SmoothMarkdown(
-                        markdown = message.content,
+                if (message.streamSession != null) {
+                    StreamMarkdown(
+                        prefixes = message.streamSession.prefixes,
                         styleSheet = style,
-                        scrollable = false,
                         plugins = plugins,
                         onLinkClick = onLinkClick,
+                        scrollable = false,
                     )
+                } else if (message.content.isNotEmpty()) {
+                    SmoothMarkdown(markdown = message.content, styleSheet = style,
+                        scrollable = false, plugins = plugins, onLinkClick = onLinkClick)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(aiTimestamp(message.timestamp), color = if (message.user) Color.White.copy(alpha = 0.7f)

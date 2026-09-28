@@ -23,6 +23,22 @@ class StreamMarkdownBuffer(
         return remaining
     }
 
+    /** Accepts a cumulative source snapshot, including a late collector's first value.
+     * StateFlow may skip intermediate snapshots; only the suffix is appended. A shorter or
+     * changed prefix starts a fresh stream rather than mixing two conversations.
+     */
+    fun appendPrefix(prefix: String, nowMillis: Long): Long? {
+        val previous = buffer.toString()
+        if (!prefix.startsWith(previous)) {
+            reset(nowMillis)
+            append(prefix, nowMillis)
+            // Do not leave the previous conversation visible for a throttle interval.
+            flush(nowMillis)
+            return null
+        }
+        return append(prefix.substring(buffer.length), nowMillis)
+    }
+
     fun flush(nowMillis: Long) {
         val full = buffer.toString()
         visibleText = if (enableHtml) SafeHtml.safeRenderPrefix(full) else full
