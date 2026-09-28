@@ -309,6 +309,14 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         var selectedSuggestion by remember(block.id) { mutableIntStateOf(0) }
                         var dismissedQuery by remember(block.id) { mutableStateOf<String?>(null) }
                         val showSuggestions = trigger != null && dismissedQuery != trigger.query
+                        val blockFocusRequester = remember(block.id) { FocusRequester() }
+                        val blockFocusTarget = controller.formattedBlockFocusTarget
+                        LaunchedEffect(blockFocusTarget) {
+                            if (blockFocusTarget == block.id) {
+                                blockFocusRequester.requestFocus()
+                                controller.clearFormattedBlockFocusTarget(block.id)
+                            }
+                        }
                         BasicTextField(
                             value = TextFieldValue(inline?.annotated(MaterialTheme.colorScheme.primary) ?: androidx.compose.ui.text.AnnotatedString(editableText), fieldSelection, fieldComposition),
                             onValueChange = { next ->
@@ -321,7 +329,7 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                                     controller.replaceFormattedBlockText(block.id, next.text)
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).onPreviewKeyEvent { event ->
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).focusRequester(blockFocusRequester).onPreviewKeyEvent { event ->
                                 if (!showSuggestions || event.type != KeyEventType.KeyDown) false else when (event.key) {
                                     Key.DirectionDown -> {
                                         if (suggestions.isNotEmpty()) selectedSuggestion = (selectedSuggestion + 1) % suggestions.size
@@ -418,14 +426,8 @@ private fun FormattedListItems(
                 }
                 if (firstLine != null) {
                     val lineIndex = item.lines.indexOf(firstLine)
-                    val visible = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks).visible
-                    BasicTextField(
-                        value = visible,
-                        onValueChange = { controller.replaceFormattedListLineText(blockId, path, lineIndex, it) },
-                        modifier = Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    )
+                    FormattedListTextField(controller, blockId, list, path, lineIndex,
+                        Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"))
                 }
             }
             var nestedBase = 0
@@ -433,15 +435,9 @@ private fun FormattedListItems(
                 when (part) {
                     is MarkdownSourceList.Line -> if (part != firstLine) {
                         val lineIndex = item.lines.indexOf(part)
-                        val visible = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks).visible
-                        BasicTextField(
-                            value = visible,
-                            onValueChange = { controller.replaceFormattedListLineText(blockId, path, lineIndex, it) },
-                            modifier = Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp)
-                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"),
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        )
+                        FormattedListTextField(controller, blockId, list, path, lineIndex,
+                            Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp)
+                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"))
                     }
                     is MarkdownSourceList.NestedList -> {
                         FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase)
@@ -456,6 +452,64 @@ private fun FormattedListItems(
             }
         }
     }
+}
+
+@Composable
+private fun FormattedListTextField(
+    controller: MarkdownEditorController,
+    blockId: String,
+    list: MarkdownSourceList,
+    path: List<Int>,
+    lineIndex: Int,
+    modifier: Modifier,
+) {
+    val inline = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks)
+    val active = controller.activeFormattedBlockId == blockId && controller.activeFormattedListPath == path &&
+        controller.activeFormattedListLine == lineIndex
+    val selection = if (active) controller.formattedListSelection else TextRange(inline.visible.length)
+    val safeSelection = TextRange(selection.start.coerceIn(0, inline.visible.length), selection.end.coerceIn(0, inline.visible.length))
+    val rawComposition = if (active) controller.formattedListComposition else null
+    val safeComposition = rawComposition?.let {
+        TextRange(it.start.coerceIn(0, inline.visible.length), it.end.coerceIn(0, inline.visible.length))
+    }
+    val focusRequester = remember(blockId, path, lineIndex) { FocusRequester() }
+    val focusTarget = controller.formattedListFocusTarget
+    LaunchedEffect(focusTarget) {
+        if (focusTarget == (path to lineIndex)) {
+            focusRequester.requestFocus()
+            controller.clearFormattedListFocusTarget(path, lineIndex)
+        }
+    }
+    BasicTextField(
+        value = TextFieldValue(inline.annotated(MaterialTheme.colorScheme.primary), safeSelection, safeComposition),
+        onValueChange = { next ->
+            val newline = next.text.indexOf('\n')
+            if (newline >= 0 && next.text.removeRange(newline, newline + 1) == inline.visible) {
+                controller.splitFormattedListLine(blockId, path, lineIndex, newline)
+            } else if (next.text == inline.visible || controller.replaceFormattedListLineText(blockId, path, lineIndex, next.text)) {
+                controller.setFormattedListSelection(blockId, path, lineIndex, next.selection, next.composition)
+            }
+        },
+        modifier = modifier.focusRequester(focusRequester).onFocusChanged {
+            if (it.isFocused) controller.setFormattedListSelection(blockId, path, lineIndex, safeSelection)
+        }.onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown || event.isCtrlPressed || event.isAltPressed) false
+            else when (event.key) {
+                Key.Tab -> {
+                    if (event.isShiftPressed) controller.outdentFormattedListItem(blockId, path)
+                    else controller.indentFormattedListItem(blockId, path)
+                    true
+                }
+                Key.Enter -> {
+                    if (event.isShiftPressed || !safeSelection.collapsed) false
+                    else controller.splitFormattedListLine(blockId, path, lineIndex, safeSelection.start)
+                }
+                else -> false
+            }
+        },
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+    )
 }
 
 @Composable

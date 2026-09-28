@@ -22,13 +22,36 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         private set
     internal var formattedComposition by mutableStateOf<TextRange?>(null)
         private set
+    internal var activeFormattedListPath by mutableStateOf<List<Int>?>(null)
+        private set
+    internal var activeFormattedListLine by mutableIntStateOf(0)
+        private set
+    internal var formattedListSelection by mutableStateOf(TextRange.Zero)
+        private set
+    internal var formattedListComposition by mutableStateOf<TextRange?>(null)
+        private set
+    internal var formattedListFocusTarget by mutableStateOf<Pair<List<Int>, Int>?>(null)
+        private set
+    internal var formattedBlockFocusTarget by mutableStateOf<String?>(null)
+        private set
 
     private val limit = historyLimit.coerceAtLeast(0)
-    private val undoStack = ArrayDeque<TextFieldValue>()
-    private val redoStack = ArrayDeque<TextFieldValue>()
+    private data class EditorSnapshot(
+        val value: TextFieldValue,
+        val blockId: String?,
+        val selection: TextRange,
+        val composition: TextRange?,
+        val listPath: List<Int>?,
+        val listLine: Int,
+        val listSelection: TextRange,
+        val listComposition: TextRange?,
+    )
+
+    private val undoStack = ArrayDeque<EditorSnapshot>()
+    private val redoStack = ArrayDeque<EditorSnapshot>()
     private var historyRevision by mutableIntStateOf(0)
     private var transactionDepth = 0
-    private var transactionBefore: TextFieldValue? = null
+    private var transactionBefore: EditorSnapshot? = null
 
     var text: String
         get() = value.text
@@ -58,33 +81,50 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         activeFormattedBlockId = blockId
         formattedSelection = selection
         formattedComposition = composition
+        activeFormattedListPath = null
+    }
+
+    internal fun setFormattedListSelection(blockId: String, path: List<Int>, lineIndex: Int, selection: TextRange, composition: TextRange? = null) {
+        activeFormattedBlockId = blockId
+        activeFormattedListPath = path
+        activeFormattedListLine = lineIndex
+        formattedListSelection = selection
+        formattedListComposition = composition
+    }
+
+    internal fun clearFormattedListFocusTarget(path: List<Int>, lineIndex: Int) {
+        if (formattedListFocusTarget == (path to lineIndex)) formattedListFocusTarget = null
+    }
+
+    internal fun clearFormattedBlockFocusTarget(blockId: String) {
+        if (formattedBlockFocusTarget == blockId) formattedBlockFocusTarget = null
     }
 
     fun undo(): Boolean {
         if (!canUndo) return false
-        redoStack.addLast(value)
-        value = undoStack.removeLast()
+        redoStack.addLast(snapshot())
+        restore(undoStack.removeLast())
         historyRevision++
         return true
     }
 
     fun redo(): Boolean {
         if (!canRedo) return false
-        push(undoStack, value)
-        value = redoStack.removeLast()
+        push(undoStack, snapshot())
+        restore(redoStack.removeLast())
         historyRevision++
         return true
     }
 
     fun <T> transaction(block: () -> T): T {
-        if (transactionDepth == 0) transactionBefore = value
+        if (transactionDepth == 0) transactionBefore = snapshot()
         transactionDepth++
         try { return block() } finally {
             transactionDepth--
             if (transactionDepth == 0) {
                 val before = transactionBefore
                 transactionBefore = null
-                if (before != null && before.text != value.text) {
+                if (before != null && before.value.text != value.text) {
                     push(undoStack, before)
                     redoStack.clear()
                     historyRevision++
@@ -229,6 +269,101 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val list = semanticDocument().blockById(blockId)?.let(MarkdownSourceList::parse) ?: return false
         val markdown = list.setChecked(itemPath, checked) ?: return false
         return replaceSemanticBlock(blockId, markdown)
+    }
+
+    /** Splits a formatted list line at its visible caret, preserving source around the edit. */
+    fun splitFormattedListLine(blockId: String, itemPath: List<Int>, lineIndex: Int, visibleOffset: Int): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val item = list.item(itemPath) ?: return false
+        if (lineIndex == 0 && item.lines.size == 1 && item.parts.all { it is MarkdownSourceList.Line } &&
+            list.lineContent(itemPath, 0).orEmpty().isBlank()) {
+            return if (itemPath.size > 1) outdentFormattedListItem(blockId, itemPath) else false
+        }
+        val edit = list.split(itemPath, lineIndex, visibleOffset, enableWikilinks) ?: return false
+        val target = validatedListTarget(block, edit) ?: return false
+        val line = list.item(itemPath)?.lines?.getOrNull(lineIndex) ?: return false
+        val rawOffset = MarkdownInlineEditing.parse(list.lineContent(itemPath, lineIndex).orEmpty(), enableWikilinks)
+            .sourceOffsetAtVisible(visibleOffset) ?: return false
+        val previousSelection = selection
+        setSelection(block.range.min + line.start + rawOffset)
+        if (!replaceSemanticBlock(blockId, edit.source)) {
+            setSelection(previousSelection.start, previousSelection.end)
+            return false
+        }
+        val targetLine = target.lines.firstOrNull() ?: return false
+        val rawCaret = MarkdownInlineEditing.parse(edit.source.substring(targetLine.start, targetLine.end), enableWikilinks)
+            .sourceOffsetAtVisible(0) ?: 0
+        setSelection(block.range.min + targetLine.start + rawCaret)
+        setFormattedListSelection(blockId, edit.targetPath, 0, TextRange.Zero)
+        formattedListFocusTarget = edit.targetPath to 0
+        return true
+    }
+
+    /** Indents the active item subtree under its preceding sibling. */
+    fun indentFormattedListItem(blockId: String, itemPath: List<Int>): Boolean = editFormattedListStructure(blockId, itemPath) { it.indent(itemPath) }
+
+    /** Outdents a nested item's subtree one level. */
+    fun outdentFormattedListItem(blockId: String, itemPath: List<Int>): Boolean {
+        if (itemPath.size > 1) return editFormattedListStructure(blockId, itemPath) { it.outdent(itemPath) }
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val lift = list.liftTopLevel(itemPath) ?: return false
+        val candidate = text.replaceRange(block.range.min, block.range.max, lift.source)
+        val targetOffset = block.range.min + lift.paragraphOffset
+        val target = MarkdownDocumentCodec.parse(candidate).blocks.firstOrNull {
+            it.range.min <= targetOffset && targetOffset < it.range.max &&
+                it.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING)
+        } ?: return false
+        val visibleSelection = if (activeFormattedBlockId == blockId && activeFormattedListPath == itemPath)
+            formattedListSelection else TextRange.Zero
+        replaceRange(block.range.min, block.range.max, lift.source)
+        val inline = MarkdownFormattedBlock.inline(target, enableWikilinks)
+        val offset = visibleSelection.start.coerceIn(0, inline?.visible?.length ?: 0)
+        setFormattedSelection(target.id, TextRange(offset))
+        formattedBlockFocusTarget = target.id
+        val rawOffset = inline?.sourceOffsetAtVisible(offset) ?: 0
+        val bodyOffset = target.source.indexOf(MarkdownFormattedBlock.text(target).orEmpty()).coerceAtLeast(0)
+        setSelection(targetOffset + bodyOffset + rawOffset)
+        return true
+    }
+
+    private fun editFormattedListStructure(
+        blockId: String,
+        itemPath: List<Int>,
+        transform: (MarkdownSourceList) -> MarkdownSourceList.StructureEdit?,
+    ): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val edit = transform(list) ?: return false
+        val target = validatedListTarget(block, edit) ?: return false
+        val oldLineIndex = if (activeFormattedBlockId == blockId && activeFormattedListPath == itemPath) activeFormattedListLine else 0
+        val oldSelection = if (activeFormattedBlockId == blockId && activeFormattedListPath == itemPath) formattedListSelection else TextRange.Zero
+        val oldLine = list.item(itemPath)?.lines?.getOrNull(oldLineIndex) ?: return false
+        val sourceOffset = MarkdownInlineEditing.parse(list.lineContent(itemPath, oldLineIndex).orEmpty(), enableWikilinks)
+            .sourceOffsetAtVisible(oldSelection.start) ?: return false
+        val previousSelection = selection
+        setSelection(block.range.min + oldLine.start + sourceOffset)
+        if (!replaceSemanticBlock(blockId, edit.source)) {
+            setSelection(previousSelection.start, previousSelection.end)
+            return false
+        }
+        val targetLineIndex = oldLineIndex.coerceAtMost(target.lines.lastIndex)
+        val targetLine = target.lines[targetLineIndex]
+        val inline = MarkdownInlineEditing.parse(edit.source.substring(targetLine.start, targetLine.end), enableWikilinks)
+        val caretStart = inline.sourceOffsetAtVisible(oldSelection.start.coerceIn(0, inline.visible.length)) ?: 0
+        val caretEnd = inline.sourceOffsetAtVisible(oldSelection.end.coerceIn(0, inline.visible.length)) ?: caretStart
+        setSelection(block.range.min + targetLine.start + caretStart, block.range.min + targetLine.start + caretEnd)
+        setFormattedListSelection(blockId, edit.targetPath, targetLineIndex, oldSelection)
+        formattedListFocusTarget = edit.targetPath to activeFormattedListLine
+        return true
+    }
+
+    private fun validatedListTarget(block: MarkdownDocumentBlock, edit: MarkdownSourceList.StructureEdit): MarkdownSourceList.Item? {
+        val parsed = MarkdownDocumentCodec.parse(edit.source)
+        if (parsed.blocks.size != 1 || parsed.blocks.single().range != TextRange(0, edit.source.length) ||
+            parsed.blocks.single().kind != block.kind) return null
+        return MarkdownSourceList.parse(parsed.blocks.single())?.item(edit.targetPath)
     }
 
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
@@ -388,15 +523,33 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         value = next
     }
 
+    private fun snapshot(): EditorSnapshot = EditorSnapshot(
+        value, activeFormattedBlockId, formattedSelection, formattedComposition,
+        activeFormattedListPath, activeFormattedListLine, formattedListSelection, formattedListComposition,
+    )
+
+    private fun restore(snapshot: EditorSnapshot) {
+        value = snapshot.value
+        activeFormattedBlockId = snapshot.blockId
+        formattedSelection = snapshot.selection
+        formattedComposition = snapshot.composition
+        activeFormattedListPath = snapshot.listPath
+        activeFormattedListLine = snapshot.listLine
+        formattedListSelection = snapshot.listSelection
+        formattedListComposition = snapshot.listComposition
+        formattedListFocusTarget = snapshot.listPath?.let { it to snapshot.listLine }
+        formattedBlockFocusTarget = if (snapshot.listPath == null) snapshot.blockId else null
+    }
+
     private fun recordUndo(previous: TextFieldValue) {
         if (transactionDepth == 0) {
-            push(undoStack, previous)
+            push(undoStack, snapshot().copy(value = previous))
             redoStack.clear()
             historyRevision++
         }
     }
 
-    private fun push(stack: ArrayDeque<TextFieldValue>, snapshot: TextFieldValue) {
+    private fun push(stack: ArrayDeque<EditorSnapshot>, snapshot: EditorSnapshot) {
         if (limit == 0) return
         if (stack.size == limit) stack.removeFirst()
         stack.addLast(snapshot)

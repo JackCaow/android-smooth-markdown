@@ -32,6 +32,12 @@ internal class MarkdownInlineEditing private constructor(
     private val ends: List<Int>,
     private val enableWikilinks: Boolean,
 ) {
+    /** UTF-16 source offset for a visible caret, including hidden Markdown delimiters. */
+    fun sourceOffsetAtVisible(offset: Int): Int? {
+        if (offset !in 0..visible.length) return null
+        return if (offset == 0) starts.firstOrNull() ?: 0 else ends[offset - 1]
+    }
+
     fun annotated(linkColor: Color): AnnotatedString = buildAnnotatedString {
         append(visible)
         marks.forEach { mark ->

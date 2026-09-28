@@ -6,6 +6,108 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MarkdownSourceListTest {
+    @Test fun splitsFormattedTaskAtVisibleCaretAndRestoresUndoSelection() {
+        val original = "before\n\n- [x] firstsecond\n- [ ] untouched\n\nafter"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.first { it.kind == MarkdownBlockKind.BULLET_LIST }.id
+        controller.setFormattedListSelection(id, listOf(0), 0, androidx.compose.ui.text.TextRange(5))
+        assertTrue(controller.splitFormattedListLine(id, listOf(0), 0, 5))
+        assertEquals("before\n\n- [x] first\n- [ ] second\n- [ ] untouched\n\nafter", controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+        assertEquals(androidx.compose.ui.text.TextRange.Zero, controller.formattedListSelection)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertTrue(controller.redo())
+        assertEquals("before\n\n- [x] first\n- [ ] second\n- [ ] untouched\n\nafter", controller.text)
+    }
+
+    @Test fun splitsNestedFormattedItemWithoutChangingNeighbors() {
+        val original = "- parent\r\n  - **childnext**\r\n  - sibling\r\n- outside"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.splitFormattedListLine(id, listOf(0, 0), 0, 5))
+        assertEquals("- parent\r\n  - **child**\r\n  - **next**\r\n  - sibling\r\n- outside", controller.text)
+        assertEquals(listOf(0, 1), controller.activeFormattedListPath)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+    }
+
+    @Test fun indentsAndOutdentsSubtreeAsSingleUndoableSourceEdits() {
+        val original = "- parent\n- **child**\n  - grandchild\n- untouched"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        controller.setFormattedListSelection(id, listOf(1), 0, androidx.compose.ui.text.TextRange(3))
+        assertTrue(controller.indentFormattedListItem(id, listOf(1)))
+        assertEquals("- parent\n  - **child**\n    - grandchild\n- untouched", controller.text)
+        assertEquals(listOf(0, 0), controller.activeFormattedListPath)
+        assertEquals(androidx.compose.ui.text.TextRange(3), controller.formattedListSelection)
+        assertTrue(controller.outdentFormattedListItem(id, listOf(0, 0)))
+        assertEquals(original, controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+        repeat(2) { assertTrue(controller.undo()) }
+        assertEquals(original, controller.text)
+        repeat(2) { assertTrue(controller.redo()) }
+        assertEquals(original, controller.text)
+    }
+
+    @Test fun structuralListEditsRejectInvalidTargetsWithoutTouchingSource() {
+        val original = "- parent\n  - first\n  - second\n- tail"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertFalse(controller.indentFormattedListItem(id, listOf(0)))
+        assertFalse(controller.splitFormattedListLine(id, listOf(0, 0), 0, 100))
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun outdentsFirstNestedItemAfterRemainingChildren() {
+        val original = "- parent\n  - first\n  - second\n- tail"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.outdentFormattedListItem(id, listOf(0, 0)))
+        assertEquals("- parent\n  - second\n- first\n- tail", controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+    }
+
+    @Test fun outdentsSimpleRootItemToParagraphAndKeepsBothListFragments() {
+        val original = "- first\n- **second**\n- third"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        controller.setFormattedListSelection(id, listOf(1), 0, androidx.compose.ui.text.TextRange(3))
+        assertTrue(controller.outdentFormattedListItem(id, listOf(1)))
+        assertEquals("- first\n\n**second**\n\n- third", controller.text)
+        assertEquals(3, controller.semanticDocument().blocks.size)
+        assertEquals(MarkdownBlockKind.PARAGRAPH, controller.semanticDocument().blocks[1].kind)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+        assertEquals(androidx.compose.ui.text.TextRange(3), controller.formattedListSelection)
+        assertTrue(controller.redo())
+        assertEquals("- first\n\n**second**\n\n- third", controller.text)
+    }
+
+    @Test fun enterOnEmptyNestedItemOutdentsInsteadOfAddingAnotherBlankItem() {
+        val original = "- parent\n  - "
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.splitFormattedListLine(id, listOf(0, 0), 0, 0))
+        assertEquals("- parent\n- ", controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+    }
+
+    @Test fun unsupportedEmptyRootExitAndComplexRootLiftLeaveMarkdownUntouched() {
+        val empty = MarkdownEditorController("- first\n- ")
+        val emptyId = empty.semanticDocument().blocks.single().id
+        assertFalse(empty.splitFormattedListLine(emptyId, listOf(1), 0, 0))
+        assertEquals("- first\n- ", empty.text)
+        val complex = MarkdownEditorController("- parent\n  - child")
+        val complexId = complex.semanticDocument().blocks.single().id
+        assertFalse(complex.outdentFormattedListItem(complexId, listOf(0)))
+        assertEquals("- parent\n  - child", complex.text)
+    }
+
     @Test fun editsBulletItemWithoutRewritingMarkerNestedContentOrNeighbors() {
         val original = "before\r\n\r\n+  **first**\r\n  continuation\r\n+ second\r\n\r\nafter"
         val controller = MarkdownEditorController(original)
