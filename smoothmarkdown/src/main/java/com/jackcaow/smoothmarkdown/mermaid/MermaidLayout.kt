@@ -15,6 +15,15 @@ data class MermaidPiePlacement(
 )
 data class MermaidTimelineSectionPlacement(val section: MermaidTimelineSection, val card: MermaidRect, val marker: MermaidPoint, val index: Int)
 data class MermaidTimelinePlacement(val axisY: Float, val sections: List<MermaidTimelineSectionPlacement>)
+data class MermaidGanttTaskPlacement(val task: MermaidGanttTask, val bar: MermaidRect, val rowY: Float)
+data class MermaidGanttPlacement(
+    val chartX: Float, val chartWidth: Float, val headerY: Float, val minDay: Long, val maxDay: Long,
+    val tasks: List<MermaidGanttTaskPlacement>,
+)
+data class MermaidKanbanColumnPlacement(
+    val column: MermaidKanbanColumn, val box: MermaidRect, val cards: List<MermaidRect>,
+)
+data class MermaidKanbanPlacement(val columns: List<MermaidKanbanColumnPlacement>)
 data class MermaidLayoutResult(
     val width: Float,
     val height: Float,
@@ -23,6 +32,8 @@ data class MermaidLayoutResult(
     val subgraphs: Map<String, MermaidRect>,
     val pie: MermaidPiePlacement? = null,
     val timeline: MermaidTimelinePlacement? = null,
+    val gantt: MermaidGanttPlacement? = null,
+    val kanban: MermaidKanbanPlacement? = null,
 )
 
 /** Deterministic layered layout for the supported flowchart and sequence subset. Units are dp. */
@@ -32,6 +43,41 @@ object MermaidLayout {
         MermaidKind.Sequence -> sequence(diagram)
         MermaidKind.Pie -> pie(diagram)
         MermaidKind.Timeline -> timeline(diagram)
+        MermaidKind.Gantt -> gantt(diagram)
+        MermaidKind.Kanban -> kanban(diagram)
+    }
+
+    private fun gantt(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.gantt)
+        val chartX = 190f
+        val chartWidth = ((data.maxDay - data.minDay + 1).coerceAtMost(180) * 16f).coerceIn(400f, 1000f)
+        val headerY = if (data.title.isNullOrBlank()) 18f else 56f
+        val rowStart = headerY + 54f
+        val dayWidth = chartWidth / (data.maxDay - data.minDay + 1).coerceAtLeast(1)
+        val tasks = data.tasks.mapIndexed { index, task ->
+            val x = chartX + (task.startDay - data.minDay) * dayWidth
+            val width = if (task.status == MermaidGanttStatus.Milestone) 16f
+                else ((task.endDay - task.startDay + 1) * dayWidth).toFloat().coerceAtLeast(6f)
+            val y = rowStart + index * 44f
+            MermaidGanttTaskPlacement(task, MermaidRect(x.toFloat(), y + 12f, width, 20f), y)
+        }
+        return MermaidLayoutResult(chartX + chartWidth + 24f, rowStart + tasks.size * 44f + 24f,
+            emptyMap(), emptyList(), emptyMap(),
+            gantt = MermaidGanttPlacement(chartX, chartWidth, headerY, data.minDay, data.maxDay, tasks))
+    }
+
+    private fun kanban(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.kanban)
+        val top = if (data.title.isNullOrBlank()) 16f else 58f
+        val columns = data.columns.mapIndexed { index, column ->
+            val x = 16f + index * 236f
+            val height = 68f + column.tasks.size * 92f + 12f
+            MermaidKanbanColumnPlacement(column, MermaidRect(x, top, 220f, height),
+                column.tasks.indices.map { card -> MermaidRect(x + 8f, top + 60f + card * 92f, 204f, 82f) })
+        }
+        return MermaidLayoutResult(16f + data.columns.size * 236f,
+            columns.maxOf { it.box.y + it.box.height } + 16f,
+            emptyMap(), emptyList(), emptyMap(), kanban = MermaidKanbanPlacement(columns))
     }
 
     private fun pie(diagram: MermaidDiagram): MermaidLayoutResult {

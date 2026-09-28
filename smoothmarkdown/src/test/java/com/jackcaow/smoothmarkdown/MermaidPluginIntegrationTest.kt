@@ -46,6 +46,17 @@ class MermaidPluginIntegrationTest {
         assertEquals("~~~", timeline.fence)
     }
 
+    @Test fun ganttAndKanbanFencesBecomePluginNodesOnlyWhenValid() {
+        val gantt = parseMarkdown("```mermaid\ngantt\nTask A :a, 2024-01-01, 3d\n```", plugins)
+        assertTrue(gantt.firstChild is MermaidDiagramNode)
+        val kanban = parseMarkdown("```mermaid\nkanban\n  todo[To Do]\n    task1[Ship]\n```", plugins)
+        assertTrue(kanban.firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown("```mermaid\nkanban\n title Empty\n```", plugins)
+            .firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown("```mermaid\nradar-beta\n axis A\n```", plugins)
+            .firstChild is FencedCodeBlock)
+    }
+
     @Test fun nestedFenceInQuoteIsTransformed() {
         val document = parseMarkdown("> ```mermaid\n> graph TB\n> A --> B\n> ```", plugins)
         assertTrue(document.firstChild.firstChild is MermaidDiagramNode)

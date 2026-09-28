@@ -11,7 +11,7 @@ import com.jackcaow.smoothmarkdown.mermaid.MermaidParser
 import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.Node
 
-/** Opt-in native renderer for supported Mermaid flowcharts and sequence diagrams. */
+/** Opt-in native renderer for supported Mermaid diagrams; unsupported fences stay code blocks. */
 class MermaidPlugin : BlockParserPlugin {
     override val id = "mermaid"
     override val name = "Mermaid Diagram Plugin"

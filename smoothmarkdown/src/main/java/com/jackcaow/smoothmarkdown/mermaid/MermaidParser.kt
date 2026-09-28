@@ -1,16 +1,23 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
-/** Dispatches the two currently supported native diagram syntaxes. */
+/** Dispatches supported native diagram syntaxes. */
 object MermaidParser {
     fun parse(source: String): MermaidDiagram? {
+        val rawLines = source.lineSequence().toList()
         val lines = source.lineSequence().map(String::trim).filter { it.isNotEmpty() && !it.startsWith("%%") }.toList()
-        val header = lines.firstOrNull() ?: return null
+        val header = if (lines.firstOrNull() == "---") {
+            val end = lines.drop(1).indexOf("---")
+            if (end < 0) return null
+            lines.getOrNull(end + 2) ?: return null
+        } else lines.firstOrNull() ?: return null
         return when {
             Regex("^(graph|flowchart)\\s+(TD|TB|BT|LR|RL)$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidFlowchartParser().parse(lines)
             header.equals("sequenceDiagram", ignoreCase = true) -> MermaidSequenceParser().parse(lines)
             Regex("^pie(?:\\s+showData)?$", RegexOption.IGNORE_CASE).matches(header) -> MermaidPieParser().parse(lines)
             header.equals("timeline", ignoreCase = true) -> MermaidTimelineParser().parse(lines)
+            header.equals("gantt", ignoreCase = true) -> MermaidGanttParser().parse(rawLines)
+            header.equals("kanban", ignoreCase = true) -> MermaidKanbanParser().parse(rawLines)
             else -> null
         }
     }

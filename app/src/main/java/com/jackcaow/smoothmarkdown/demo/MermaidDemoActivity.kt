@@ -27,6 +27,8 @@ class MermaidDemoActivity : ComponentActivity() {
                 "Sequence" to sequenceExample,
                 "Pie" to pieExample,
                 "Timeline" to timelineExample,
+                "Gantt" to ganttExample,
+                "Kanban" to kanbanExample,
             )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -75,4 +77,29 @@ private val timelineExample = """
             : Feedback
     Q2 2024 : Public beta
     Q3 2024 : Launch
+""".trimIndent()
+
+private val ganttExample = """
+    gantt
+    title Development Timeline
+    dateFormat YYYY-MM-DD
+    section Planning
+    Requirements :done, req, 2024-01-01, 12d
+    Design :active, design, after req, 10d
+    section Build
+    API :crit, api, 2024-01-19, 18d
+    Release :milestone, rel, after api, 0d
+""".trimIndent()
+
+private val kanbanExample = """
+    kanban
+      title Product Board
+      backlog[Backlog] wip:2
+        task1[User authentication] @{ assigned: "Alice", ticket: "APP-101", priority: "High" }
+        task2[Database design] @{ assigned: "Bob" }
+      doing[In Progress] wip:1
+        task3[Dashboard] @{ assigned: "Charlie", priority: "Very High" }
+        task4[API integration] @{ ticket: "APP-104" }
+      done[Done]
+        task5[CI pipeline] @{ assigned: "Alice", priority: "Low" }
 """.trimIndent()
