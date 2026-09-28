@@ -1,0 +1,15 @@
+Cmdline: /system/bin/simpleperf record --app com.jackcaow.smoothmarkdown.demo --add-meta-info app_type=debuggable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 99 -g --duration 8
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 265
+Event count: 2676767650
+
+Overhead  Command                           Shared Object
+69.06%    RenderThread                      [kernel.kallsyms]
+7.92%     com.jackcaow.smoothmarkdown.demo  /apex/com.android.art/lib64/libart.so
+5.66%     com.jackcaow.smoothmarkdown.demo  [JIT app cache]
+3.77%     com.jackcaow.smoothmarkdown.demo  [kernel.kallsyms]
+3.02%     Jit thread pool                   [kernel.kallsyms]
+2.64%     Jit thread pool                   /apex/com.android.art/lib64/libart.so
+2.64%     com.jackcaow.smoothmarkdown.demo  /apex/com.android.runtime/lib64/bionic/libc.so
+1.51%     RenderThread                      /system/lib64/libhwui.so

@@ -1,6 +1,7 @@
 # Reader parser and stream benchmark
 
 For the Compose Demo's repeatable 68,282-byte emulator render and scroll run, see [android-device.md](android-device.md).
+For a same-device scroll profile and an experiment that was reverted after regression, see [android-scroll-profile-2026-09-28.md](android-scroll-profile-2026-09-28.md).
 
 This is an opt-in host microbenchmark. It measures parsing and stream accumulation; it does not measure Compose layout, drawing, gesture latency, network images, or device memory.
 

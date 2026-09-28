@@ -1,0 +1,41 @@
+Cmdline: /system/bin/simpleperf record --app com.jackcaow.smoothmarkdown.demo --add-meta-info app_type=debuggable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 99 -g --duration 8
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 265
+Event count: 2676767650
+
+Children  Self    Symbol
+78.87%    0.00%   __pthread_start(void*)
+78.87%    0.00%   __start_thread
+75.85%    0.00%   [kernel.kallsyms][+ffffffc080011586]
+75.85%    0.00%   [kernel.kallsyms][+ffffffc08002d39e]
+75.85%    0.00%   [kernel.kallsyms][+ffffffc08102e5fa]
+75.85%    0.00%   [kernel.kallsyms][+ffffffc08102e686]
+75.47%    0.00%   [kernel.kallsyms][+ffffffc08002d42a]
+75.47%    0.00%   [kernel.kallsyms][+ffffffc08002d50a]
+72.45%    0.00%   android::Thread::_threadLoop(void*)
+71.70%    0.00%   android::uirenderer::renderthread::DrawFrameTask::run()
+71.70%    0.00%   android::uirenderer::renderthread::RenderThread::threadLoop()
+71.32%    0.00%   android::uirenderer::renderthread::CanvasContext::draw(bool)
+64.53%    0.00%   QemuPipeStream::commitBufferAndReadFully(unsigned long, void*, unsigned long)
+64.53%    0.00%   android::uirenderer::skiapipeline::SkiaOpenGLPipeline::draw(android::uirenderer::renderthread::Frame const&, SkRect const&, SkRect const&, android::uirenderer::LightGeometry const&, android::uirenderer::LayerUpdateQueue*, android::uirenderer::Rect const&, bool, android::uirenderer::LightInfo const&, std::__1::vector<android::sp<android::uirenderer::RenderNode>, std::__1::allocator<android::sp<android::uirenderer::RenderNode>>> const&, android::uirenderer::FrameInfoVisualizer*, android::uirenderer::renderthread::HardwareBufferRenderParams const&, std::__1::mutex&)
+63.40%    0.38%   read
+63.40%    0.00%   qemu_pipe_read
+63.02%    0.00%   GrDirectContext::flushAndSubmit(SkSurface*, GrSyncCpu)
+63.02%    0.00%   GrDirectContextPriv::flushSurfaces(SkSpan<GrSurfaceProxy*>, SkSurfaces::BackendSurfaceAccess, GrFlushInfo const&, skgpu::MutableTextureState const*)
+63.02%    0.00%   GrDrawingManager::flush(SkSpan<GrSurfaceProxy*>, SkSurfaces::BackendSurfaceAccess, GrFlushInfo const&, skgpu::MutableTextureState const*)
+63.02%    0.00%   GrDrawingManager::flushSurfaces(SkSpan<GrSurfaceProxy*>, SkSurfaces::BackendSurfaceAccess, GrFlushInfo const&, skgpu::MutableTextureState const*)
+63.02%    0.00%   [kernel.kallsyms][+ffffffc07a5fb7de]
+63.02%    0.00%   [kernel.kallsyms][+ffffffc08039cf36]
+63.02%    0.00%   [kernel.kallsyms][+ffffffc08039da1a]
+63.02%    0.00%   [kernel.kallsyms][+ffffffc08039daa6]
+59.62%    0.00%   GrGLBuffer::onUpdateData(void const*, unsigned long, unsigned long, bool)
+58.49%    0.00%   (anonymous namespace)::glBufferDataSyncAEMU_enc(void*, unsigned int, long, void const*, unsigned int)
+58.49%    0.00%   invalidate_buffer(GrGLGpu*, unsigned int, unsigned int, unsigned int, unsigned long) (.__uniq.147469646724423224731015792193028044282)
+58.49%    0.00%   invalidate_buffer(GrGLGpu*, unsigned int, unsigned int, unsigned int, unsigned long)::'lambda'()::operator()() const (.__uniq.147469646724423224731015792193028044282)
+54.72%    0.00%   GrRenderTask::prepare(GrOpFlushState*)
+54.72%    0.00%   skgpu::ganesh::AtlasTextOp::onPrepareDraws(GrMeshDrawTarget*)
+54.72%    0.00%   skgpu::ganesh::OpsTask::onPrepare(GrOpFlushState*)
+54.34%    0.00%   GrVertexBufferAllocPool::makeSpace(unsigned long, int, sk_sp<GrBuffer const>*, int*)
+50.94%    0.00%   [kernel.kallsyms][+ffffffc07a5fbed2]
+50.19%    50.19%  [kernel.kallsyms][+ffffffc07a5fb500]
