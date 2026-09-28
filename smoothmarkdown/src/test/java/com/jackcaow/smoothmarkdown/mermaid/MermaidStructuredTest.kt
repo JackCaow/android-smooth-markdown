@@ -73,6 +73,78 @@ class MermaidStructuredTest {
         assertEquals("1", klass.edges.single().targetLabel)
     }
 
+    @Test fun selfLoopsHaveVisibleRoutesAndLabelsOutsideNodesInEveryDirection() {
+        val source = """
+            stateDiagram-v2
+            [*] --> Idle
+            [*] --> Waiting
+            Idle --> Idle: RETRY
+            Waiting --> Waiting: WAIT
+            Idle --> Done
+            Waiting --> Done
+            Done --> [*]
+        """.trimIndent()
+        listOf("TB", "BT", "LR", "RL").forEach { direction ->
+            val graph = MermaidParser.parse(source.replaceFirst("\n", "\ndirection $direction\n"))!!
+            val layout = MermaidLayout.compute(graph)
+            val loops = layout.edges.filter { it.edge.from == it.edge.to }
+            assertEquals(direction, 2, loops.size)
+            assertFalse(direction, loops[0].labelBounds!!.overlaps(loops[1].labelBounds!!))
+            loops.forEach { loop ->
+                val box = layout.nodes.getValue(loop.edge.from)
+                val label = requireNotNull(loop.labelBounds)
+                assertNotNull(loop.curveControls)
+                assertTrue(direction, loop.start != loop.end)
+                assertTrue(direction, label.x >= 0 && label.y >= 0)
+                assertTrue(direction, label.x + label.width <= layout.width)
+                assertTrue(direction, label.y + label.height <= layout.height)
+                assertFalse(direction, label.overlaps(box))
+                layout.nodes.values.filter { it != box }.forEach { assertFalse(direction, label.overlaps(it)) }
+                if (direction == "TB" || direction == "BT") {
+                    assertTrue(direction, loop.start.x == box.x + box.width)
+                    assertTrue(direction, label.x > box.x + box.width)
+                } else {
+                    assertTrue(direction, loop.start.y == box.y)
+                    assertTrue(direction, label.y + label.height < box.y)
+                }
+            }
+        }
+    }
+
+    @Test fun longChineseSelfLoopLabelReservesCrossAxisLane() {
+        val source = """
+            stateDiagram-v2
+            A --> A: 等待支付结果并重新检查状态
+            B --> B: 重试并继续等待
+            A --> B
+        """.trimIndent()
+        listOf("TB", "BT", "LR", "RL").forEach { direction ->
+            val graph = MermaidParser.parse(source.replaceFirst("\n", "\ndirection $direction\n"))!!
+            val layout = MermaidLayout.compute(graph)
+            val loops = layout.edges.filter { it.edge.from == it.edge.to }
+            assertFalse(direction, loops[0].labelBounds!!.overlaps(loops[1].labelBounds!!))
+            loops.forEach { loop ->
+                val label = requireNotNull(loop.labelBounds)
+                assertTrue(direction, label.x + label.width <= layout.width)
+                assertTrue(direction, label.y + label.height <= layout.height)
+                layout.nodes.values.forEach { assertFalse(direction, label.overlaps(it)) }
+            }
+        }
+    }
+
+    @Test fun unlabeledSelfLoopStillFitsInsideCanvas() {
+        val graph = MermaidParser.parse("stateDiagram-v2\nIdle --> Idle")!!
+        val layout = MermaidLayout.compute(graph)
+        val loop = layout.edges.single()
+        val rightmost = loop.curveControls!!.let { maxOf(it.first.x, it.second.x) }
+        assertTrue(rightmost < layout.width)
+        assertNull(loop.labelBounds)
+    }
+
+    private fun MermaidRect.overlaps(other: MermaidRect): Boolean =
+        x < other.x + other.width && x + width > other.x &&
+            y < other.y + other.height && y + height > other.y
+
     @Test fun unsupportedStatementsFallBackWithoutPartialDiagram() {
         listOf(
             "stateDiagram-v2\nA --> B\nstate composite {",

@@ -10,7 +10,13 @@ data class MermaidRect(val x: Float, val y: Float, val width: Float, val height:
     val centerX: Float get() = x + width / 2
     val centerY: Float get() = y + height / 2
 }
-data class MermaidPlacedEdge(val edge: MermaidEdge, val start: MermaidPoint, val end: MermaidPoint)
+data class MermaidPlacedEdge(
+    val edge: MermaidEdge,
+    val start: MermaidPoint,
+    val end: MermaidPoint,
+    val curveControls: Pair<MermaidPoint, MermaidPoint>? = null,
+    val labelBounds: MermaidRect? = null,
+)
 data class MermaidPieSlicePlacement(val slice: MermaidPieSlice, val startAngle: Float, val sweepAngle: Float, val index: Int)
 data class MermaidPiePlacement(
     val center: MermaidPoint, val radius: Float, val legendY: Float,
@@ -293,24 +299,32 @@ object MermaidLayout {
         // Cycles left after Kahn's pass stay in their original layer rather than recursing forever.
         val layers = diagram.nodes.groupBy { rank.getValue(it.id) }.toSortedMap()
         val horizontal = diagram.direction == MermaidDirection.LR || diagram.direction == MermaidDirection.RL
+        val selfLoops = if (diagram.kind == MermaidKind.StateDiagram)
+            diagram.edges.filter { it.from == it.to } else emptyList()
+        fun labelWidth(label: String): Float = label.sumOf { if (it.code > 127) 16.0 else 8.0 }.toFloat() + 8f
+        val loopCrossGap = if (selfLoops.isEmpty()) 40f else if (horizontal) 72f else
+            max(40f, (selfLoops.maxOfOrNull { labelWidth(it.label.orEmpty()) } ?: 0f) + 72f)
+        val rankGap = if (horizontal && selfLoops.isNotEmpty())
+            max(64f, (selfLoops.maxOfOrNull { labelWidth(it.label.orEmpty()) } ?: 0f) + 24f)
+            else 64f
         val positions = linkedMapOf<String, MermaidRect>()
         var main = 24f
         var maxCross = 0f
         for (layer in layers.values) {
             val mainSize = layer.maxOf { if (horizontal) nodeWidth(it) else nodeHeight(it) }
-            var cross = 24f
+            var cross = if (horizontal && selfLoops.isNotEmpty()) 84f else 24f
             for (node in layer) {
                 val width = nodeWidth(node)
                 val height = nodeHeight(node)
                 positions[node.id] = if (horizontal) MermaidRect(main + (mainSize - width) / 2, cross, width, height)
                 else MermaidRect(cross, main + (mainSize - height) / 2, width, height)
-                cross += (if (horizontal) height else width) + 40f
+                cross += (if (horizontal) height else width) + loopCrossGap
             }
-            maxCross = max(maxCross, cross - 40f + 24f)
-            main += mainSize + 64f
+            maxCross = max(maxCross, cross - loopCrossGap + 24f)
+            main += mainSize + rankGap
         }
-        val mainExtent = main - 64f + 24f
-        val width = if (horizontal) mainExtent else maxCross
+        val mainExtent = main - rankGap + 24f
+        var width = if (horizontal) mainExtent else maxCross
         val height = if (horizontal) maxCross else mainExtent
         if (diagram.direction == MermaidDirection.RL || diagram.direction == MermaidDirection.BT) {
             positions.replaceAll { _, box ->
@@ -331,6 +345,22 @@ object MermaidLayout {
         val placedEdges = diagram.edges.mapNotNull { edge ->
             val from = positions[edge.from] ?: groupBoxes[edge.from] ?: return@mapNotNull null
             val to = positions[edge.to] ?: groupBoxes[edge.to] ?: return@mapNotNull null
+            if (edge.from == edge.to && diagram.kind == MermaidKind.StateDiagram) {
+                val estimatedWidth = labelWidth(edge.label.orEmpty())
+                val start = if (horizontal) MermaidPoint(from.x + from.width * .3f, from.y)
+                    else MermaidPoint(from.x + from.width, from.y + from.height * .3f)
+                val end = if (horizontal) MermaidPoint(from.x + from.width * .7f, from.y)
+                    else MermaidPoint(from.x + from.width, from.y + from.height * .7f)
+                val controls = if (horizontal)
+                    MermaidPoint(start.x - 25f, start.y - 45f) to MermaidPoint(end.x + 25f, end.y - 45f)
+                    else MermaidPoint(start.x + 45f, start.y - 25f) to MermaidPoint(end.x + 45f, end.y + 25f)
+                val label = if (edge.label.isNullOrBlank()) null else if (horizontal)
+                    MermaidRect(from.x, from.y - 58f, estimatedWidth, 18f)
+                    else MermaidRect(from.x + from.width + 48f, from.centerY - 9f, estimatedWidth, 18f)
+                if (!horizontal) width = max(width, from.x + from.width + 64f)
+                if (label != null) width = max(width, label.x + label.width + 24f)
+                return@mapNotNull MermaidPlacedEdge(edge, start, end, controls, label)
+            }
             val start: MermaidPoint
             val end: MermaidPoint
             when (diagram.direction) {

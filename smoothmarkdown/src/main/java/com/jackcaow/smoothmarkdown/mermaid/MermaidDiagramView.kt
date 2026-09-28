@@ -159,10 +159,10 @@ fun MermaidDiagramView(
                         color = foreground, style = MaterialTheme.typography.labelSmall)
                 }
                 placed.edge.label?.takeIf(String::isNotBlank)?.let { label ->
-                    val x = (placed.start.x + placed.end.x) / 2
-                    val y = (placed.start.y + placed.end.y) / 2
+                    val x = placed.labelBounds?.x ?: ((placed.start.x + placed.end.x) / 2 - label.length * 3.5f)
+                    val y = placed.labelBounds?.y ?: ((placed.start.y + placed.end.y) / 2 - 24f)
                     Text(label,
-                        modifier = Modifier.offset((x - label.length * 3.5f).dp, (y - 24f).dp)
+                        modifier = Modifier.offset(x.dp, y.dp)
                             .background(surface).padding(horizontal = 3.dp),
                         color = foreground, style = MaterialTheme.typography.labelSmall)
                 }
@@ -232,9 +232,15 @@ private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
     val dash = if (placed.edge.line == MermaidLine.Dotted)
         PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())) else null
     if (start == end) return
-    drawLine(color, start, end, width, pathEffect = dash)
-    val dx = end.x - start.x
-    val dy = end.y - start.y
+    placed.curveControls?.let { (first, second) ->
+        val path = Path().apply {
+            moveTo(start.x, start.y)
+            cubicTo(first.x * density, first.y * density, second.x * density, second.y * density, end.x, end.y)
+        }
+        drawPath(path, color, style = Stroke(width, pathEffect = dash))
+    } ?: drawLine(color, start, end, width, pathEffect = dash)
+    val dx = end.x - (placed.curveControls?.second?.x?.times(density) ?: start.x)
+    val dy = end.y - (placed.curveControls?.second?.y?.times(density) ?: start.y)
     val length = hypot(dx, dy).coerceAtLeast(1f)
     val ux = dx / length
     val uy = dy / length
