@@ -31,6 +31,8 @@ class MermaidDemoActivity : ComponentActivity() {
                 "Kanban" to kanbanExample,
                 "Radar" to radarExample,
                 "XY Chart" to xyChartExample,
+                "Class" to classExample,
+                "State" to stateExample,
             )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -125,4 +127,29 @@ private val xyChartExample = """
     y-axis "Revenue" 0 --> 100
     bar [23, 45, 67, 89]
     line [20, 50, 60, 85]
+""".trimIndent()
+
+private val classExample = """
+    classDiagram
+    Animal <|-- Duck
+    Animal : +int age
+    Animal : +isMammal() bool
+    class Duck {
+        +String beakColor
+        +swim()
+        +quack()
+    }
+    Pond o-- Duck : contains
+    Duck ..> Food : eats
+""".trimIndent()
+
+private val stateExample = """
+    stateDiagram-v2
+    [*] --> 待支付
+    待支付 --> 已支付: 支付成功
+    已支付 --> 已发货: 发货
+    已发货 --> 已完成: 确认收货
+    已完成 --> [*]
+    待支付 --> 已取消: 超时/取消
+    已取消 --> [*]
 """.trimIndent()

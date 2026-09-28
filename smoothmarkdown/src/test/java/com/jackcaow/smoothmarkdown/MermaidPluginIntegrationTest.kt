@@ -74,4 +74,15 @@ class MermaidPluginIntegrationTest {
         val document = parseMarkdown("> ```mermaid\n> graph TB\n> A --> B\n> ```", plugins)
         assertTrue(document.firstChild.firstChild is MermaidDiagramNode)
     }
+
+    @Test fun classAndStateFencesRequireOptInAndUnsupportedSyntaxStaysCode() {
+        val klass = "```mermaid\nclassDiagram\nAnimal <|-- Duck\n```"
+        val state = "```mermaid\nstateDiagram-v2\n[*] --> 待支付\n```"
+        assertTrue(parseMarkdown(klass).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(state).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(klass, plugins).firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown(state, plugins).firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown("```mermaid\nclassDiagram\nclass A {\n+int x\n```", plugins)
+            .firstChild is FencedCodeBlock)
+    }
 }

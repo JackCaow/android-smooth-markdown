@@ -1,12 +1,13 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 /** Parsed subset of Mermaid supported by the native Compose prototype. */
-enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart }
+enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart, ClassDiagram, StateDiagram }
 enum class MermaidDirection { TB, BT, LR, RL }
 enum class MermaidShape {
     Rectangle, Rounded, Stadium, Diamond, Hexagon, Circle, Subroutine,
-    Cylinder, Asymmetric, Parallelogram, Trapezoid,
+    Cylinder, Asymmetric, Parallelogram, Trapezoid, StateStart, StateEnd,
 }
+enum class MermaidEdgeMarker { Inheritance, Composition, Aggregation }
 enum class MermaidLine { Solid, Dotted, Thick }
 enum class MermaidArrow { None, Arrow, Cross, Circle }
 enum class MermaidParticipantType { Participant, Actor }
@@ -25,6 +26,7 @@ data class MermaidNode(
     val style: MermaidNodeStyle? = null,
     val className: String? = null,
     val participantType: MermaidParticipantType = MermaidParticipantType.Participant,
+    val compartments: List<List<String>> = emptyList(),
 )
 
 data class MermaidEdge(
@@ -34,6 +36,10 @@ data class MermaidEdge(
     val line: MermaidLine = MermaidLine.Solid,
     val arrow: MermaidArrow = MermaidArrow.Arrow,
     val subgraphEdge: Boolean = false,
+    val sourceMarker: MermaidEdgeMarker? = null,
+    val targetMarker: MermaidEdgeMarker? = null,
+    val sourceLabel: String? = null,
+    val targetLabel: String? = null,
 )
 
 data class MermaidSubgraph(val id: String, val label: String, val nodeIds: List<String>)

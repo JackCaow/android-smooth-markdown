@@ -62,6 +62,7 @@ object MermaidLayout {
         MermaidKind.Kanban -> kanban(diagram)
         MermaidKind.Radar -> radar(diagram)
         MermaidKind.XYChart -> xyChart(diagram)
+        MermaidKind.ClassDiagram, MermaidKind.StateDiagram -> flowchart(diagram)
     }
 
     private fun radar(diagram: MermaidDiagram): MermaidLayoutResult {
@@ -301,6 +302,11 @@ object MermaidLayout {
     }
 
     private fun nodeWidth(node: MermaidNode): Float {
+        if (node.shape == MermaidShape.StateStart || node.shape == MermaidShape.StateEnd) return 24f
+        if (node.compartments.isNotEmpty()) {
+            val longest = (listOf(node.label) + node.compartments.flatten()).maxOf { it.length }
+            return (longest * 8f + 32f).coerceIn(120f, 320f)
+        }
         val base = (node.label.length * 8f + 28f).coerceIn(88f, 280f)
         return when (node.shape) {
             MermaidShape.Diamond, MermaidShape.Hexagon -> base + 30f
@@ -310,7 +316,8 @@ object MermaidLayout {
     }
 
     private fun nodeHeight(node: MermaidNode): Float = when (node.shape) {
+        MermaidShape.StateStart, MermaidShape.StateEnd -> 24f
         MermaidShape.Diamond, MermaidShape.Hexagon, MermaidShape.Circle -> 76f
-        else -> 48f
+        else -> if (node.compartments.isNotEmpty()) 46f + node.compartments.sumOf { it.size }.toFloat() * 22f + 12f else 48f
     }
 }

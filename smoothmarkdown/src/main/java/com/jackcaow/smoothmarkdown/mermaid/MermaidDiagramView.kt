@@ -98,14 +98,41 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
             }
             diagram.nodes.forEach { node ->
                 layout.nodes[node.id]?.let { rect ->
-                    Box(Modifier.offset(rect.x.dp, rect.y.dp).width(rect.width.dp).height(rect.height.dp)
-                        .padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
-                        Text(node.label, color = node.style?.text?.let(::Color) ?: foreground,
-                            style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center, maxLines = 3)
+                    if (node.shape != MermaidShape.StateStart && node.shape != MermaidShape.StateEnd) {
+                        if (node.compartments.isNotEmpty()) {
+                            androidx.compose.foundation.layout.Column(Modifier.offset(rect.x.dp, rect.y.dp)
+                                .width(rect.width.dp).height(rect.height.dp).padding(5.dp)) {
+                                Text(node.label, color = foreground, style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.width(rect.width.dp), textAlign = TextAlign.Center, maxLines = 1)
+                                node.compartments.forEach { section ->
+                                    if (section.isNotEmpty()) {
+                                        androidx.compose.material3.HorizontalDivider()
+                                        section.forEach { row ->
+                                            Text(row, color = foreground, style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1)
+                                        }
+                                    }
+                                }
+                            }
+                        } else Box(Modifier.offset(rect.x.dp, rect.y.dp).width(rect.width.dp).height(rect.height.dp)
+                            .padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+                            Text(node.label, color = node.style?.text?.let(::Color) ?: foreground,
+                                style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center, maxLines = 3)
+                        }
                     }
                 }
             }
             layout.edges.forEach { placed ->
+                placed.edge.sourceLabel?.let { label ->
+                    Text(label, modifier = Modifier.offset(placed.start.x.dp + 5.dp, placed.start.y.dp - 19.dp)
+                        .background(surface).padding(horizontal = 2.dp),
+                        color = foreground, style = MaterialTheme.typography.labelSmall)
+                }
+                placed.edge.targetLabel?.let { label ->
+                    Text(label, modifier = Modifier.offset(placed.end.x.dp + 5.dp, placed.end.y.dp - 19.dp)
+                        .background(surface).padding(horizontal = 2.dp),
+                        color = foreground, style = MaterialTheme.typography.labelSmall)
+                }
                 placed.edge.label?.takeIf(String::isNotBlank)?.let { label ->
                     val x = (placed.start.x + placed.end.x) / 2
                     val y = (placed.start.y + placed.end.y) / 2
@@ -128,6 +155,13 @@ private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill
     val stroke = node.style?.stroke?.let(::Color) ?: defaultStroke
     val strokeWidth = (node.style?.strokeWidth ?: 1f) * density
     val actualShape = if (node.participantType == MermaidParticipantType.Actor) MermaidShape.Circle else node.shape
+    if (actualShape == MermaidShape.StateStart || actualShape == MermaidShape.StateEnd) {
+        drawCircle(stroke, minOf(width, height) / 2, Offset(left + width / 2, top + height / 2))
+        if (actualShape == MermaidShape.StateEnd) {
+            drawCircle(fill, minOf(width, height) / 3, Offset(left + width / 2, top + height / 2))
+        }
+        return
+    }
     val polygon: Path? = when (actualShape) {
         MermaidShape.Diamond -> polygon(left + width / 2 to top, left + width to top + height / 2,
             left + width / 2 to top + height, left to top + height / 2)
@@ -180,6 +214,29 @@ private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
     val ux = dx / length
     val uy = dy / length
     val size = 8.dp.toPx()
+    fun marker(at: Offset, toward: Offset, type: MermaidEdgeMarker) {
+        val vx = toward.x - at.x; val vy = toward.y - at.y
+        val len = hypot(vx, vy).coerceAtLeast(1f)
+        val ax = vx / len; val ay = vy / len
+        val tip = Offset(at.x + ax * size * 1.3f, at.y + ay * size * 1.3f)
+        val left = Offset(at.x - ay * size * 0.7f, at.y + ax * size * 0.7f)
+        val right = Offset(at.x + ay * size * 0.7f, at.y - ax * size * 0.7f)
+        when (type) {
+            MermaidEdgeMarker.Inheritance -> {
+                val triangle = Path().apply { moveTo(tip.x, tip.y); lineTo(left.x, left.y); lineTo(right.x, right.y); close() }
+                drawPath(triangle, color, style = Stroke(width))
+            }
+            MermaidEdgeMarker.Composition, MermaidEdgeMarker.Aggregation -> {
+                val far = Offset(at.x - ax * size * 1.3f, at.y - ay * size * 1.3f)
+                val diamond = Path().apply { moveTo(tip.x, tip.y); lineTo(left.x, left.y)
+                    lineTo(far.x, far.y); lineTo(right.x, right.y); close() }
+                if (type == MermaidEdgeMarker.Composition) drawPath(diamond, color)
+                else drawPath(diamond, color, style = Stroke(width))
+            }
+        }
+    }
+    placed.edge.sourceMarker?.let { marker(start, end, it) }
+    placed.edge.targetMarker?.let { marker(end, start, it) }
     when (placed.edge.arrow) {
         MermaidArrow.Arrow -> {
             drawLine(color, end, Offset(end.x - ux * size - uy * size * 0.5f,

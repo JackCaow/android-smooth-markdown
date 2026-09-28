@@ -19,6 +19,10 @@ object MermaidParser {
             header.equals("gantt", ignoreCase = true) -> MermaidGanttParser().parse(rawLines)
             header.equals("kanban", ignoreCase = true) -> MermaidKanbanParser().parse(rawLines)
             header.equals("radar-beta", ignoreCase = true) -> MermaidRadarParser().parse(lines)
+            header.equals("classDiagram", ignoreCase = true) ->
+                MermaidStructuredParser(MermaidKind.ClassDiagram).parse(lines)
+            Regex("^stateDiagram(?:-v2)?$", RegexOption.IGNORE_CASE).matches(header) ->
+                MermaidStructuredParser(MermaidKind.StateDiagram).parse(lines)
             Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidXYChartParser().parse(lines)
             else -> null
