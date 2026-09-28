@@ -89,19 +89,52 @@ class MarkdownSourceListTest {
     }
 
     @Test fun enterOnEmptyNestedItemOutdentsInsteadOfAddingAnotherBlankItem() {
-        val original = "- parent\n  - "
-        val controller = MarkdownEditorController(original)
-        val id = controller.semanticDocument().blocks.single().id
-        assertTrue(controller.splitFormattedListLine(id, listOf(0, 0), 0, 0))
-        assertEquals("- parent\n- ", controller.text)
-        assertEquals(listOf(1), controller.activeFormattedListPath)
+        listOf(
+            "- parent\n  - " to "- parent\n- ",
+            "- parent\n  - [ ] " to "- parent\n- [ ] ",
+            "1. parent\n   1. " to "1. parent\n1. ",
+        ).forEach { (original, expected) ->
+            val controller = MarkdownEditorController(original)
+            val id = controller.semanticDocument().blocks.single().id
+            assertTrue("$original should outdent", controller.splitFormattedListLine(id, listOf(0, 0), 0, 0))
+            assertEquals(expected, controller.text)
+            assertEquals(listOf(1), controller.activeFormattedListPath)
+            assertTrue(controller.undo())
+            assertEquals(original, controller.text)
+        }
     }
 
-    @Test fun unsupportedEmptyRootExitAndComplexRootLiftLeaveMarkdownUntouched() {
-        val empty = MarkdownEditorController("- first\n- ")
-        val emptyId = empty.semanticDocument().blocks.single().id
-        assertFalse(empty.splitFormattedListLine(emptyId, listOf(1), 0, 0))
-        assertEquals("- first\n- ", empty.text)
+    @Test fun enterOnEmptyRootItemLeavesAnEditableParagraphAndRestoresUndo() {
+        val cases = listOf(
+            Triple("- first\n- ", listOf(1), "- first\n\n"),
+            Triple("- first\n- \n- next", listOf(1), "- first\n\n\n\n- next"),
+            Triple("- \n- next", listOf(0), "\n\n- next"),
+            Triple("- [ ] ", listOf(0), ""),
+            Triple("7) first\n8) ", listOf(1), "7) first\n\n"),
+            Triple("- first\r\n- ", listOf(1), "- first\r\n\r\n"),
+        )
+        cases.forEach { (original, path, blank) ->
+            val controller = MarkdownEditorController(original)
+            val id = controller.semanticDocument().blocks.single().id
+            assertTrue("$original should exit", controller.splitFormattedListLine(id, path, 0, 0))
+            assertEquals(blank, controller.text)
+            assertEquals(path.single(), controller.pendingListExit?.beforeItemCount)
+            assertTrue(controller.completePendingListExit("paragraph", androidx.compose.ui.text.TextRange(9)))
+            assertTrue(controller.semanticDocument().blocks.any { it.kind == MarkdownBlockKind.PARAGRAPH && it.source == "paragraph" })
+            assertTrue(controller.undo())
+            assertEquals(blank, controller.text)
+            assertTrue(controller.pendingListExit != null)
+            assertTrue(controller.undo())
+            assertEquals(original, controller.text)
+            assertEquals(null, controller.pendingListExit)
+            assertTrue(controller.redo())
+            assertEquals(blank, controller.text)
+            assertTrue(controller.redo())
+            assertTrue(controller.text.contains("paragraph"))
+        }
+    }
+
+    @Test fun complexRootLiftStillLeavesMarkdownUntouched() {
         val complex = MarkdownEditorController("- parent\n  - child")
         val complexId = complex.semanticDocument().blocks.single().id
         assertFalse(complex.outdentFormattedListItem(complexId, listOf(0)))

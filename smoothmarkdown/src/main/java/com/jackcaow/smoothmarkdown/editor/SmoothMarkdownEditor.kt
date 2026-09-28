@@ -257,8 +257,16 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
 @Composable
 private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier, wikilinkSuggestions: List<String>) {
     val blocks = controller.semanticDocument().blocks
+    val pendingExit = controller.pendingListExit
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+        var pendingRendered = false
         blocks.forEach { block ->
+            if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
+                PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(bottom = 10.dp))
+                pendingRendered = true
+            }
+            if (pendingExit != null && pendingExit.offset > block.range.min && pendingExit.offset < block.range.max &&
+                block.kind in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST)) pendingRendered = true
             val editableText = MarkdownFormattedBlock.text(block)
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -384,12 +392,35 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                 }
             }
         }
+        if (pendingExit != null && !pendingRendered) {
+            PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(bottom = 10.dp))
+        }
     }
 }
 
 @Composable
+private fun PendingEmptyParagraphField(controller: MarkdownEditorController, modifier: Modifier = Modifier) {
+    val offset = controller.pendingListExit?.offset ?: return
+    val focusRequester = remember(offset) { FocusRequester() }
+    LaunchedEffect(offset) { focusRequester.requestFocus() }
+    BasicTextField(
+        value = TextFieldValue("", TextRange.Zero),
+        onValueChange = { controller.completePendingListExit(it.text, it.selection) },
+        modifier = modifier.heightIn(min = 32.dp).focusRequester(focusRequester).testTag("formatted-empty-paragraph"),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        decorationBox = { inner ->
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { inner() }
+        },
+    )
+}
+
+@Composable
 private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList) {
-    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0)
+    val block = controller.semanticDocument().blockById(blockId)
+    val pending = controller.pendingListExit
+    val showPending = block != null && pending != null && pending.offset > block.range.min && pending.offset < block.range.max
+    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending)
 }
 
 @Composable
@@ -401,9 +432,13 @@ private fun FormattedListItems(
     pathPrefix: List<Int>,
     depth: Int,
     indexBase: Int,
+    showPending: Boolean = false,
 ) {
     Column {
         items.forEachIndexed { index, item ->
+            if (showPending && controller.pendingListExit?.beforeItemCount == index) {
+                PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(vertical = 4.dp))
+            }
             val path = pathPrefix + (indexBase + index)
             val pathTag = path.joinToString("-")
             val firstLine = item.lines.firstOrNull { it.start == item.contentStart } ?: item.lines.firstOrNull()
@@ -450,6 +485,9 @@ private fun FormattedListItems(
                     )
                 }
             }
+        }
+        if (showPending && controller.pendingListExit?.beforeItemCount == items.size) {
+            PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(vertical = 4.dp))
         }
     }
 }

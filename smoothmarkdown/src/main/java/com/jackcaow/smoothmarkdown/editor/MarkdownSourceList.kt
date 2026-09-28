@@ -78,6 +78,21 @@ internal class MarkdownSourceList private constructor(
 
     data class StructureEdit(val source: String, val targetPath: List<Int>)
     data class LiftEdit(val source: String, val paragraphOffset: Int)
+    data class EmptyExitEdit(val source: String, val paragraphOffset: Int, val beforeItemCount: Int)
+
+    /** Removes an empty root item and leaves a blank paragraph slot between its neighbors. */
+    fun exitEmptyTopLevel(path: List<Int>): EmptyExitEdit? {
+        if (path.size != 1) return null
+        val selected = item(path) ?: return null
+        if (selected.lines.size != 1 || selected.parts.any { it !is Line } ||
+            source.substring(selected.contentStart, selected.contentEnd).isNotBlank()) return null
+        val before = source.substring(0, lineStart(selected))
+        val after = source.substring(selected.contentEnd)
+        val newline = if (source.contains("\r\n")) "\r\n" else "\n"
+        val prefix = if (before.isEmpty()) "" else before + if (before.endsWith(newline)) newline else newline + newline
+        val suffix = if (after.isEmpty()) "" else if (after.startsWith(newline)) newline + after else newline + newline + after
+        return EmptyExitEdit(prefix + suffix, prefix.length, path.first())
+    }
 
     /** Lifts a simple root item into a paragraph between the remaining list fragments. */
     fun liftTopLevel(path: List<Int>): LiftEdit? {
@@ -236,7 +251,25 @@ internal class MarkdownSourceList private constructor(
                             when (contentNode) {
                                 is Paragraph -> contentNode.sourceSpans.forEach { span ->
                                     if (span.inputIndex >= contentStart && span.inputIndex + span.length <= source.length) {
-                                        parts += Line(span.inputIndex, span.inputIndex + span.length, lineIndex++)
+                                        val nestedStart = source.lastIndexOf('\n', span.inputIndex - 1) + 1
+                                        val nestedEnd = source.indexOfAny(charArrayOf('\r', '\n'), nestedStart)
+                                            .let { if (it < 0) source.length else it }
+                                        val nestedMatch = if (nestedStart > lineStart)
+                                            marker.find(source.substring(nestedStart, nestedEnd)) else null
+                                        if (nestedMatch != null && nestedMatch.value.length == nestedEnd - nestedStart &&
+                                            nestedMatch.groupValues[1].length > match.groupValues[1].length) {
+                                            // CommonMark can absorb an empty ordered child as a parent paragraph continuation.
+                                            val nestedState = nestedMatch.groups[4]
+                                            parts += NestedList(listOf(Item(
+                                                marker = nestedMatch.groupValues[2], contentStart = nestedEnd,
+                                                contentEnd = nestedEnd,
+                                                taskStateOffset = nestedState?.let { nestedStart + it.range.first },
+                                                checked = nestedState?.value?.equals("x", ignoreCase = true) == true,
+                                                parts = listOf(Line(nestedEnd, nestedEnd, 0)),
+                                            )), nestedStart)
+                                        } else {
+                                            parts += Line(span.inputIndex, span.inputIndex + span.length, lineIndex++)
+                                        }
                                     }
                                 }
                                 is BulletList, is OrderedList -> {

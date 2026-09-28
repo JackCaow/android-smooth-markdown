@@ -34,6 +34,9 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         private set
     internal var formattedBlockFocusTarget by mutableStateOf<String?>(null)
         private set
+    internal data class PendingListExit(val offset: Int, val beforeItemCount: Int)
+    internal var pendingListExit by mutableStateOf<PendingListExit?>(null)
+        private set
 
     private val limit = historyLimit.coerceAtLeast(0)
     private data class EditorSnapshot(
@@ -45,6 +48,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val listLine: Int,
         val listSelection: TextRange,
         val listComposition: TextRange?,
+        val pendingListExit: PendingListExit?,
     )
 
     private val undoStack = ArrayDeque<EditorSnapshot>()
@@ -69,7 +73,10 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     fun clearHistory() { undoStack.clear(); redoStack.clear(); historyRevision++ }
 
     fun updateFromInput(next: TextFieldValue) {
-        if (next.text != value.text) recordUndo(value)
+        if (next.text != value.text) {
+            recordUndo(value)
+            pendingListExit = null
+        }
         value = next
     }
 
@@ -278,7 +285,8 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val item = list.item(itemPath) ?: return false
         if (lineIndex == 0 && item.lines.size == 1 && item.parts.all { it is MarkdownSourceList.Line } &&
             list.lineContent(itemPath, 0).orEmpty().isBlank()) {
-            return if (itemPath.size > 1) outdentFormattedListItem(blockId, itemPath) else false
+            return if (itemPath.size > 1) outdentFormattedListItem(blockId, itemPath)
+            else exitEmptyTopLevelListItem(block, list, itemPath)
         }
         val edit = list.split(itemPath, lineIndex, visibleOffset, enableWikilinks) ?: return false
         val target = validatedListTarget(block, edit) ?: return false
@@ -297,6 +305,36 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         setSelection(block.range.min + targetLine.start + rawCaret)
         setFormattedListSelection(blockId, edit.targetPath, 0, TextRange.Zero)
         formattedListFocusTarget = edit.targetPath to 0
+        return true
+    }
+
+    private fun exitEmptyTopLevelListItem(block: MarkdownDocumentBlock, list: MarkdownSourceList, path: List<Int>): Boolean {
+        val edit = list.exitEmptyTopLevel(path) ?: return false
+        val offset = block.range.min + edit.paragraphOffset
+        replaceRange(block.range.min, block.range.max, edit.source)
+        pendingListExit = PendingListExit(offset, edit.beforeItemCount)
+        activeFormattedBlockId = null
+        activeFormattedListPath = null
+        formattedListFocusTarget = null
+        setSelection(offset)
+        return true
+    }
+
+    /** Commits text entered into the empty paragraph created by leaving a root list item. */
+    internal fun completePendingListExit(visibleText: String, selection: TextRange): Boolean {
+        val pending = pendingListExit ?: return false
+        if (visibleText.isEmpty()) return true
+        val offset = pending.offset
+        replaceRange(offset, offset, visibleText)
+        val paragraph = semanticDocument().blocks.firstOrNull {
+            it.kind == MarkdownBlockKind.PARAGRAPH && it.range.min <= offset && offset + visibleText.length <= it.range.max
+        }
+        if (paragraph != null) {
+            val caret = TextRange(selection.start.coerceIn(0, visibleText.length), selection.end.coerceIn(0, visibleText.length))
+            setFormattedSelection(paragraph.id, caret)
+            formattedBlockFocusTarget = paragraph.id
+            setSelection(offset + caret.start, offset + caret.end)
+        }
         return true
     }
 
@@ -521,11 +559,13 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     private fun updateValue(next: TextFieldValue) {
         if (next.text != value.text) recordUndo(value)
         value = next
+        pendingListExit = null
     }
 
     private fun snapshot(): EditorSnapshot = EditorSnapshot(
         value, activeFormattedBlockId, formattedSelection, formattedComposition,
         activeFormattedListPath, activeFormattedListLine, formattedListSelection, formattedListComposition,
+        pendingListExit,
     )
 
     private fun restore(snapshot: EditorSnapshot) {
@@ -537,6 +577,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         activeFormattedListLine = snapshot.listLine
         formattedListSelection = snapshot.listSelection
         formattedListComposition = snapshot.listComposition
+        pendingListExit = snapshot.pendingListExit
         formattedListFocusTarget = snapshot.listPath?.let { it to snapshot.listLine }
         formattedBlockFocusTarget = if (snapshot.listPath == null) snapshot.blockId else null
     }
