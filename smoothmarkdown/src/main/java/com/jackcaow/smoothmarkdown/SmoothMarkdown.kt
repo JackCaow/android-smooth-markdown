@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -92,7 +93,7 @@ import org.commonmark.node.Text as MarkdownTextNode
 import org.commonmark.parser.Parser
 import org.commonmark.parser.IncludeSourceSpans
 
-private val parser = Parser.builder().extensions(
+private val baseParser = Parser.builder().extensions(
     listOf(
         StrikethroughExtension.create(),
         TablesExtension.create(),
@@ -106,7 +107,24 @@ private val parser = Parser.builder().extensions(
     .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
     .build()
 
-internal fun parseMarkdown(markdown: String): Node = FootnoteReferencePostProcessor(markdown).process(parser.parse(markdown))
+internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null): Node {
+    val parser = if (plugins == null || (plugins.blockPlugins.isEmpty() && plugins.inlinePlugins.isEmpty())) baseParser else {
+        val builder = Parser.builder().extensions(listOf(
+            StrikethroughExtension.create(), TablesExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create(),
+        ))
+        plugins.blockPlugins.forEach { builder.customBlockParserFactory(PluginBlockParserFactory(it)) }
+        builder.customBlockParserFactory(FootnoteDefinitionParserFactory())
+            .customBlockParserFactory(DetailsParserFactory())
+            .customBlockParserFactory(MathBlockParserFactory())
+            .customInlineContentParserFactory(MathInlineParserFactory())
+            .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
+        if (plugins.inlinePlugins.isNotEmpty()) builder.customInlineContentParserFactory(PluginInlineParserFactory(plugins))
+        builder.build()
+    }
+    return FootnoteReferencePostProcessor(markdown).process(parser.parse(markdown))
+}
+
+private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }
 
 /** Renders CommonMark and the currently supported GFM extensions with Compose. */
 @Composable
@@ -120,14 +138,16 @@ fun SmoothMarkdown(
     codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
     onCodeCopied: ((String) -> Unit)? = null,
     styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
+    plugins: ParserPluginRegistry? = null,
 ) {
-    val document = remember(markdown) { parseMarkdown(markdown) }
+    val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
     CompositionLocalProvider(
         LocalCodeBlockOptions provides codeBlockOptions,
         LocalCodeBlockBuilder provides codeBlockBuilder,
         LocalOnCodeCopied provides onCodeCopied,
         LocalMarkdownStyleSheet provides styleSheet,
+        LocalParserPlugins provides plugins,
     ) {
         LazyColumn(
             modifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier,
@@ -143,6 +163,7 @@ fun SmoothMarkdown(
 @Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
     val sheet = LocalMarkdownStyleSheet.current
+    val plugins = LocalParserPlugins.current
     when (node) {
         is Heading -> {
             val baseStyle = sheet.headingStyles?.get(node.level - 1) ?: MaterialTheme.typography.headlineMedium.copy(
@@ -150,7 +171,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 fontWeight = FontWeight.Bold,
             )
             MarkdownInlineText(
-                inlineRender(node, enableHtml, sheet),
+                inlineRender(node, enableHtml, sheet, plugins),
                 baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
                     ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface),
                 onLinkClick,
@@ -167,7 +188,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
                 )
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
-                else -> MarkdownInlineText(inlineRender(node, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
+                else -> MarkdownInlineText(inlineRender(node, enableHtml, sheet, plugins), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
             }
         }
         is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
@@ -186,6 +207,10 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         is TableBlock -> MarkdownTable(node, onLinkClick, onImageClick, enableHtml)
         is DetailsNode -> MarkdownDetails(node, onLinkClick, onImageClick, enableHtml)
         is BlockMathNode -> BlockMath(node)
+        is PluginBlockNode -> {
+            val renderer = plugins?.blockRenderer(node)
+            if (renderer != null) renderer.RenderBlock(node) { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) }
+        }
         is FootnoteDefinitionNode -> Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
         ) {
@@ -195,7 +220,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             )
             Box(Modifier.weight(1f)) {
                 MarkdownInlineText(
-                    inlineRender(node, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                    inlineRender(node, enableHtml, sheet, plugins), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                     onLinkClick, onImageClick, textAlign, bottomPadding = 0.dp,
                 )
             }
@@ -223,13 +248,13 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         ) {
                             Box(Modifier.width(3.dp).height(44.dp).background(sheet.quoteBarColor ?: MaterialTheme.colorScheme.primary))
                             Spacer(Modifier.width(12.dp))
-                            Column { parseMarkdown(html.content).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
+                            Column { parseMarkdown(html.content, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                         }
                     } else {
-                        Column { parseMarkdown(html.content).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
+                        Column { parseMarkdown(html.content, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                     }
                     if (html.trailing.isNotBlank()) {
-                        parseMarkdown(html.trailing).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
+                        parseMarkdown(html.trailing, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
                     }
                 }
                 else -> MarkdownText(AnnotatedString(node.literal), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
@@ -267,7 +292,7 @@ private fun MarkdownDetails(
                 val summary = node.summary.singleOrNull()
                 if (summary is Paragraph) {
                     MarkdownInlineText(
-                        inlineRender(summary, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                        inlineRender(summary, enableHtml, sheet, LocalParserPlugins.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                         onLinkClick, onImageClick, bottomPadding = 0.dp, interactive = false,
                     )
                 } else {
@@ -477,7 +502,7 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
                     val style = if (cell.isHeader) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
                     Box(Modifier.width(150.dp).border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline).padding(sheet.tableCellPadding)) {
-                        MarkdownInlineText(inlineRender(cell, enableHtml, sheet), style, onLinkClick, onImageClick)
+                        MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current), style, onLinkClick, onImageClick)
                     }
                 }
             }
@@ -491,9 +516,9 @@ internal data class InlineRender(
     val math: Map<String, String>,
 )
 
-internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = inlineRender(node, enableHtml).text
+internal fun inlineText(node: Node, enableHtml: Boolean, plugins: ParserPluginRegistry? = null): AnnotatedString = inlineRender(node, enableHtml, plugins = plugins).text
 
-internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default()): InlineRender {
+internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(), plugins: ParserPluginRegistry? = null): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
     val math = linkedMapOf<String, String>()
     val text = buildAnnotatedString {
@@ -564,6 +589,13 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                 val id = "math-${math.size}"
                 math[id] = current.latex
                 appendInlineContent(id, "$$${current.latex}$")
+            }
+            is PluginInlineNode -> {
+                val presentation = plugins?.renderInline(current)
+                if (presentation != null) {
+                    append(presentation.text)
+                    addStyle(presentation.style, start, length)
+                }
             }
             is Image -> appendImage(SafeHtml.ImageSpec(current.destination, current.plainText(), current.title, null, null))
             is HtmlInline -> {

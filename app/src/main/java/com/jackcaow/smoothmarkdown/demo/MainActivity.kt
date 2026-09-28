@@ -19,6 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
+import com.jackcaow.smoothmarkdown.ParserPluginRegistry
+import com.jackcaow.smoothmarkdown.MentionPlugin
+import com.jackcaow.smoothmarkdown.HashtagPlugin
+import com.jackcaow.smoothmarkdown.EmojiPlugin
+import com.jackcaow.smoothmarkdown.AdmonitionPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 
@@ -26,6 +31,12 @@ private val demoMarkdown = """
     # Smooth Markdown Android
 
     A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
+
+    Plugin demo: @alice checks #android :rocket:
+
+    ::: tip Plugin callout
+    This **admonition** is rendered by a registered plugin.
+    :::
 
     Inline math ${'$'}E=mc^2${'$'} and ${'$'}x^2+y^2=z^2${'$'} in one paragraph.
 
@@ -92,6 +103,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         setContent {
             val controller = remember { MarkdownEditorController(demoMarkdown) }
+            val plugins = remember { ParserPluginRegistry().also { it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin())) } }
             var showEditor by remember { mutableStateOf(false) }
             var enableHtml by remember { mutableStateOf(false) }
             var themeIndex by remember { mutableStateOf(0) }
@@ -126,6 +138,7 @@ class MainActivity : ComponentActivity() {
                             onLinkClick = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                             enableHtml = enableHtml,
                             styleSheet = themes[themeIndex].second,
+                            plugins = plugins,
                         )
                     }
                 }
