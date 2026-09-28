@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,11 +134,12 @@ private fun ConversationListScreen(
     onCopy: (String) -> Unit,
     onLinkClick: (String) -> Unit,
 ) {
-    var dark by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<ConversationSample?>(null) }
+    var dark by rememberSaveable { mutableStateOf(false) }
+    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selected = samples.firstOrNull { it.id == selectedId }
     var menuMessage by remember { mutableStateOf<ConversationMessage?>(null) }
     val openedAt = remember { System.currentTimeMillis() }
-    BackHandler(selected != null) { selected = null }
+    BackHandler(selected != null) { selectedId = null }
     val background = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
     val chrome = if (dark) Color(0xFF2C2C2E) else Color.White
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
@@ -147,7 +149,7 @@ private fun ConversationListScreen(
                     Modifier.fillMaxWidth().background(chrome).padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = { if (selected == null) onBack() else selected = null },
+                    TextButton(onClick = { if (selected == null) onBack() else selectedId = null },
                         modifier = Modifier.testTag("conversation-back")) { Text("‹") }
                     selected?.let { Avatar(it.avatar, it.avatarColor, 32) }
                     if (selected != null) Spacer(Modifier.width(10.dp))
@@ -168,7 +170,7 @@ private fun ConversationListScreen(
                 if (selected == null) {
                     LazyColumn(Modifier.fillMaxSize().testTag("conversation-list")) {
                         items(samples, key = { it.id }) { conversation ->
-                            ConversationRow(conversation, dark, openedAt) { selected = conversation }
+                            ConversationRow(conversation, dark, openedAt) { selectedId = conversation.id }
                         }
                     }
                 } else {

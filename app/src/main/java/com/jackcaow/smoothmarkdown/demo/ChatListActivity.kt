@@ -41,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,6 +72,10 @@ private data class ChatMessage(
 )
 
 class ChatListActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_PARENT_DARK = "com.jackcaow.smoothmarkdown.demo.PARENT_DARK"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val markdown = (listOf("welcome") + replyNames).associateWith { name ->
@@ -78,10 +83,12 @@ class ChatListActivity : ComponentActivity() {
         }
         // A fixed response makes device checks repeatable; normal navigation stays random like Flutter.
         val fixedReply = intent.getIntExtra("responseIndex", -1).takeIf { it in replyNames.indices }
+        val parentDark = intent.getBooleanExtra(EXTRA_PARENT_DARK, false)
         setContent {
             ChatListScreen(
                 markdown = markdown,
                 fixedReply = fixedReply,
+                parentDark = parentDark,
                 onBack = ::finish,
                 onLinkClick = { url ->
                     runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
@@ -95,6 +102,7 @@ class ChatListActivity : ComponentActivity() {
 private fun ChatListScreen(
     markdown: Map<String, String>,
     fixedReply: Int?,
+    parentDark: Boolean,
     onBack: () -> Unit,
     onLinkClick: (String) -> Unit,
 ) {
@@ -103,7 +111,9 @@ private fun ChatListScreen(
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     var streaming by remember { mutableStateOf(false) }
-    var dark by remember { mutableStateOf(false) }
+    // Flutter Chat List combines its own toggle with the inherited route brightness.
+    var darkOverride by rememberSaveable { mutableStateOf(false) }
+    val dark = parentDark || darkOverride
     var showStats by remember { mutableStateOf(false) }
     var nextId by remember { mutableStateOf(1L) }
     val background = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
@@ -163,7 +173,7 @@ private fun ChatListScreen(
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.testTag("chat-status"))
                 }
-                IconButton(onClick = { dark = !dark }, modifier = Modifier.testTag("chat-theme")) {
+                IconButton(onClick = { darkOverride = !darkOverride }, modifier = Modifier.testTag("chat-theme")) {
                     Text(if (dark) "☀️" else "🌙")
                 }
                 IconButton(onClick = { showStats = true }, modifier = Modifier.testTag("chat-cache")) {

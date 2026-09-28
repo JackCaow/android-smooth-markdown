@@ -115,7 +115,11 @@ class MainActivity : ComponentActivity() {
                     onThemeChange = { themeIndex = it },
                     openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
                     openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
-                    openChatList = { startActivity(Intent(this, ChatListActivity::class.java)) },
+                    openChatList = {
+                        startActivity(Intent(this, ChatListActivity::class.java).apply {
+                            putExtra(ChatListActivity.EXTRA_PARENT_DARK, demoThemeIsDark(themeIndex))
+                        })
+                    },
                     openAIChat = { startActivity(Intent(this, AIChatActivity::class.java)) },
                     openConversationList = { startActivity(Intent(this, ConversationListActivity::class.java)) },
                     openLink = { url -> Toast.makeText(this, "Link tapped: $url", Toast.LENGTH_SHORT).show() },
