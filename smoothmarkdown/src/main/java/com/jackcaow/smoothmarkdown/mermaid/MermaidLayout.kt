@@ -278,10 +278,33 @@ object MermaidLayout {
         if (diagram.nodes.isEmpty()) return MermaidLayoutResult(0f, 0f, emptyMap(), emptyList(), emptyMap())
         if (diagram.kind == MermaidKind.Flowchart && diagram.subgraphs.isNotEmpty()) return groupedFlowchart(diagram)
         val nodeIds = diagram.nodes.mapTo(mutableSetOf()) { it.id }
+        // Match Flutter's Dagre layout: keep cycle-closing edges for drawing, but
+        // exclude DFS back edges while assigning ranks so a single loop does not
+        // collapse every node in the cycle into the same layer.
+        val successors = diagram.nodes.associate { it.id to mutableListOf<String>() }
+        diagram.edges.forEach { edge ->
+            if (edge.from in nodeIds && edge.to in nodeIds && edge.from != edge.to) {
+                successors.getValue(edge.from) += edge.to
+            }
+        }
+        val visited = mutableSetOf<String>()
+        val inStack = mutableSetOf<String>()
+        val backEdges = mutableSetOf<Pair<String, String>>()
+        fun findBackEdges(id: String) {
+            if (!visited.add(id)) return
+            inStack += id
+            successors.getValue(id).forEach { next ->
+                if (next in inStack) backEdges += id to next
+                else if (next !in visited) findBackEdges(next)
+            }
+            inStack -= id
+        }
+        diagram.nodes.forEach { findBackEdges(it.id) }
         val outgoing = diagram.nodes.associate { it.id to mutableListOf<String>() }
         val indegree = diagram.nodes.associate { it.id to 0 }.toMutableMap()
         diagram.edges.forEach { edge ->
-            if (edge.from in nodeIds && edge.to in nodeIds && edge.from != edge.to) {
+            if (edge.from in nodeIds && edge.to in nodeIds && edge.from != edge.to &&
+                (edge.from to edge.to) !in backEdges) {
                 outgoing.getValue(edge.from) += edge.to
                 indegree[edge.to] = indegree.getValue(edge.to) + 1
             }
@@ -296,7 +319,6 @@ object MermaidLayout {
                 if (indegree.getValue(to) == 0) queue.addLast(to)
             }
         }
-        // Cycles left after Kahn's pass stay in their original layer rather than recursing forever.
         val layers = diagram.nodes.groupBy { rank.getValue(it.id) }.toSortedMap()
         val horizontal = diagram.direction == MermaidDirection.LR || diagram.direction == MermaidDirection.RL
         val selfLoops = if (diagram.kind == MermaidKind.StateDiagram)
