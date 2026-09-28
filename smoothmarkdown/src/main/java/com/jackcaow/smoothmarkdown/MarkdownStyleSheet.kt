@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -7,6 +8,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+/** Fill and left border for Markdown blockquotes. Set [borderWidth] to zero to hide the border. */
+data class MarkdownBlockquoteDecoration(
+    val backgroundColor: Color? = null,
+    val borderColor: Color? = null,
+    val borderWidth: Dp = 4.dp,
+) {
+    init {
+        require(borderWidth.value >= 0) { "Blockquote borderWidth cannot be negative" }
+    }
+}
 
 /** Visual overrides for [SmoothMarkdown]. Null colors and text styles inherit MaterialTheme. */
 data class MarkdownStyleSheet(
@@ -22,6 +34,10 @@ data class MarkdownStyleSheet(
     val footnoteColor: Color = Color(0xFF1976D2),
     val quoteBarColor: Color? = null,
     val quoteBackground: Color? = null,
+    /** Overrides [quoteBackground]; its border color falls back to [quoteBarColor] when unspecified. */
+    val blockquoteDecoration: MarkdownBlockquoteDecoration? = null,
+    /** Insets between the blockquote border and its rendered content. */
+    val blockquotePadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     val tableBorderColor: Color? = null,
     val ruleColor: Color? = null,
     val headingStyles: List<TextStyle>? = null,
@@ -58,7 +74,8 @@ data class MarkdownStyleSheet(
             textColor = Color(0xFF212121), headingColor = Color.Black,
             linkColor = Color(0xFF1976D2), codeBackground = Color(0xFFF5F5F5), codeTextColor = Color(0xFF212121),
             inlineCodeBackground = Color(0xFFEEEEEE), inlineCodeTextColor = Color(0xFFD32F2F),
-            quoteBarColor = Color(0xFFD0D7DE), tableBorderColor = Color(0xFFD0D7DE),
+            quoteBarColor = Color(0xFFBDBDBD), quoteBackground = Color(0xFFFAFAFA),
+            tableBorderColor = Color(0xFFD0D7DE),
             tableHeaderBackgroundColor = Color(0xFFEEEEEE),
             ruleColor = Color(0xFFD8DEE4), headingStyles = headingSizes(),
             paragraphStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
@@ -70,7 +87,8 @@ data class MarkdownStyleSheet(
             textColor = Color(0xFFB3B3B3), headingColor = Color.White,
             linkColor = Color(0xFF64B5F6), codeBackground = Color(0xFF212121),
             codeTextColor = Color(0xFFB3B3B3), inlineCodeBackground = Color(0xFF424242),
-            inlineCodeTextColor = Color(0xFFEF9A9A), quoteBarColor = Color(0xFF6E7681),
+            inlineCodeTextColor = Color(0xFFEF9A9A), quoteBarColor = Color(0xFF757575),
+            quoteBackground = Color(0xFF212121),
             tableBorderColor = Color(0xFF30363D), ruleColor = Color(0xFF30363D),
             tableHeaderBackgroundColor = Color(0xFF303030),
             headingStyles = headingSizes(), paragraphStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),

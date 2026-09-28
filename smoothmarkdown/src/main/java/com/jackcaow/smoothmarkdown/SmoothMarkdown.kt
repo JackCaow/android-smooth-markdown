@@ -33,11 +33,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
@@ -55,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
@@ -298,12 +301,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         }
         is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
         is IndentedCodeBlock -> EnhancedCodeBlock(node.literal, null)
-        is BlockQuote -> Row(
-            (if (sheet.quoteBackground != null) Modifier.fillMaxWidth().background(sheet.quoteBackground)
-            else Modifier.fillMaxWidth()).padding(bottom = sheet.blockSpacing),
-        ) {
-            Box(Modifier.width(3.dp).height(44.dp).background(sheet.quoteBarColor ?: MaterialTheme.colorScheme.primary))
-            Spacer(Modifier.width(12.dp))
+        is BlockQuote -> MarkdownBlockquote(sheet) {
             Column {
                 node.children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml, textAlign) }
             }
@@ -355,12 +353,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         else -> textAlign
                     }
                     if (html.name == "blockquote") {
-                        Row(
-                            (if (sheet.quoteBackground != null) Modifier.fillMaxWidth().background(sheet.quoteBackground)
-                            else Modifier.fillMaxWidth()).padding(bottom = sheet.blockSpacing),
-                        ) {
-                            Box(Modifier.width(3.dp).height(44.dp).background(sheet.quoteBarColor ?: MaterialTheme.colorScheme.primary))
-                            Spacer(Modifier.width(12.dp))
+                        MarkdownBlockquote(sheet) {
                             Column { parseMarkdown(html.content, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                         }
                     } else {
@@ -374,6 +367,44 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             }
         }
         else -> MarkdownText(AnnotatedString(node.plainText()), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick)
+    }
+}
+
+internal data class ResolvedBlockquoteDecoration(
+    val backgroundColor: Color?,
+    val borderColor: Color,
+    val borderWidth: androidx.compose.ui.unit.Dp,
+)
+
+internal fun resolveBlockquoteDecoration(sheet: MarkdownStyleSheet, defaultBorderColor: Color): ResolvedBlockquoteDecoration {
+    val override = sheet.blockquoteDecoration
+    return ResolvedBlockquoteDecoration(
+        backgroundColor = override?.backgroundColor ?: if (override == null) sheet.quoteBackground else null,
+        borderColor = override?.borderColor ?: sheet.quoteBarColor ?: defaultBorderColor,
+        borderWidth = override?.borderWidth ?: 4.dp,
+    )
+}
+
+@Composable
+private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, content: @Composable () -> Unit) {
+    val decoration = resolveBlockquoteDecoration(sheet, MaterialTheme.colorScheme.primary)
+    val background = decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(bottom = sheet.blockSpacing)
+            .testTag("markdown-blockquote")
+            .then(background)
+            .drawBehind {
+                if (decoration.borderWidth.value > 0) {
+                    drawRect(
+                        color = decoration.borderColor,
+                        size = Size(decoration.borderWidth.toPx().coerceAtMost(size.width), size.height),
+                    )
+                }
+            }
+            .padding(sheet.blockquotePadding),
+    ) {
+        content()
     }
 }
 
