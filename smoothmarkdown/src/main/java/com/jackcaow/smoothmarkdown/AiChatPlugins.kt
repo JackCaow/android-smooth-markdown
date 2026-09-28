@@ -60,7 +60,10 @@ class ThinkingPlugin : BlockParserPlugin {
         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
             Row(Modifier.fillMaxWidth()
                 .semantics { stateDescription = if (collapsed) "Collapsed" else "Expanded" }
-                .clickable(role = Role.Button) { collapsed = !collapsed }.padding(12.dp)) {
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (collapsed) "Expand thinking" else "Collapse thinking",
+                ) { collapsed = !collapsed }.padding(12.dp)) {
                 Text(if (collapsed) "›" else "⌄", color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
                 Text("Thinking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

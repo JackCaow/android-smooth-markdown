@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.hypot
@@ -38,39 +40,41 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
         Text(source, modifier = modifier)
         return
     }
+    val description = remember(diagram) { diagram.accessibilitySummary() }
+    val accessibleModifier = modifier.clearAndSetSemantics { contentDescription = description }
     val layout = remember(diagram) { MermaidLayout.compute(diagram) }
     if (diagram.kind == MermaidKind.Pie) {
-        MermaidPieView(diagram, layout, modifier)
+        MermaidPieView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.Timeline) {
-        MermaidTimelineView(diagram, layout, modifier)
+        MermaidTimelineView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.Gantt) {
-        MermaidGanttView(diagram, layout, modifier)
+        MermaidGanttView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.Kanban) {
-        MermaidKanbanView(diagram, layout, modifier)
+        MermaidKanbanView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.Radar) {
-        MermaidRadarView(diagram, layout, modifier)
+        MermaidRadarView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.XYChart) {
-        MermaidXYChartView(diagram, layout, modifier)
+        MermaidXYChartView(diagram, layout, accessibleModifier)
         return
     }
     if (diagram.kind == MermaidKind.ERDiagram) {
-        MermaidERView(diagram, layout, modifier)
+        MermaidERView(diagram, layout, accessibleModifier)
         return
     }
     val foreground = MaterialTheme.colorScheme.onSurface
     val nodeFill = MaterialTheme.colorScheme.surfaceVariant
     val surface = MaterialTheme.colorScheme.surface
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
+    Box(accessibleModifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
         Box(Modifier.size(layout.width.coerceAtLeast(1f).dp, layout.height.coerceAtLeast(1f).dp)) {
             Canvas(Modifier.fillMaxSize()) {
                 layout.subgraphs.forEach { (_, rect) ->

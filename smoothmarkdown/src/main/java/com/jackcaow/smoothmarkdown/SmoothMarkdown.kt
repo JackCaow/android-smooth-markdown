@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -56,6 +56,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.SubcomposeAsyncImage
@@ -202,6 +209,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 onLinkClick,
                 onImageClick,
                 textAlign,
+                modifier = Modifier.semantics { heading() },
             )
         }
         is Paragraph -> {
@@ -307,7 +315,10 @@ private fun MarkdownDetails(
         Row(
             Modifier.fillMaxWidth()
                 .semantics { stateDescription = if (expanded.value) "Expanded" else "Collapsed" }
-                .clickable(role = Role.Button) { expanded.value = !expanded.value }
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (expanded.value) "Collapse details" else "Expand details",
+                ) { expanded.value = !expanded.value }
                 .padding(12.dp),
         ) {
             Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
@@ -337,18 +348,33 @@ private fun MarkdownDetails(
 }
 
 @Composable
-private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null) {
+private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier) {
     val sheet = LocalMarkdownStyleSheet.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
-        ClickableText(
-            text = text,
-            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
-            onClick = { position ->
-                text.getStringAnnotations("url", position, position).firstOrNull()?.item
-                    ?.takeIf(::isSafeLink)?.let(onLinkClick)
+    val links = text.getStringAnnotations("url", 0, text.length).filter { isSafeLink(it.item) }
+    val actions = links.map { link ->
+        CustomAccessibilityAction("Open link ${text.text.substring(link.start, link.end)}") {
+            onLinkClick(link.item)
+            true
+        }
+    }
+    val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
+    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+    Text(
+        text = text,
+        style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+        modifier = if (links.isEmpty()) base else base
+            .semantics { customActions = actions }
+            .pointerInput(text) {
+                detectTapGestures { position ->
+                    layout.value?.getOffsetForPosition(position)?.let { offset ->
+                        text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
+                            ?.takeIf(::isSafeLink)?.let(onLinkClick)
+                    }
+                }
             },
-        )
+        onTextLayout = { layout.value = it },
+    )
 }
 
 @Composable
@@ -360,15 +386,16 @@ private fun MarkdownInlineText(
     textAlign: TextAlign? = null,
     bottomPadding: androidx.compose.ui.unit.Dp? = null,
     interactive: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     if (render.images.isEmpty() && render.math.isEmpty()) {
-        if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
+        if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier)
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier),
         )
         return
     }
@@ -409,15 +436,28 @@ private fun MarkdownInlineText(
             text = render.text,
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier),
         )
         return
+    }
+    val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
+    val actions = links.map { link ->
+        CustomAccessibilityAction("Open link ${render.text.text.substring(link.start, link.end)}") {
+            onLinkClick(link.item)
+            true
+        }
+    } + render.images.values.map { image ->
+        CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
+            onImageClick(image.source)
+            true
+        }
     }
         Text(
             text = render.text,
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).pointerInput(render.text) {
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                .semantics { customActions = actions }.pointerInput(render.text) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
                         render.text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
@@ -437,7 +477,9 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
     SubcomposeAsyncImage(
         model = imageRequest(image.source, model),
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
-        modifier = if (onImageClick != null) modifier.clickable { onImageClick(image.source) } else modifier,
+        modifier = if (onImageClick != null) modifier.clickable(
+            role = Role.Button, onClickLabel = "Open image",
+        ) { onImageClick(image.source) } else modifier,
         contentScale = ContentScale.Fit,
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
@@ -453,16 +495,19 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
         Text(image.alt, modifier = Modifier.padding(bottom = sheet.blockSpacing), color = sheet.textColor ?: Color.Unspecified)
         return
     }
-    var imageModifier: Modifier = Modifier.padding(bottom = sheet.blockSpacing)
+    var imageModifier: Modifier = Modifier
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
-    SubcomposeAsyncImage(
-        model = imageRequest(url, model),
-        contentDescription = image.alt.ifBlank { image.title ?: "Image" },
-        modifier = imageModifier.clickable { onImageClick(url) },
-        loading = { androidx.compose.material3.CircularProgressIndicator() },
-        error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
-    )
+    Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+        .clickable(role = Role.Button, onClickLabel = "Open image") { onImageClick(url) }) {
+        SubcomposeAsyncImage(
+            model = imageRequest(url, model),
+            contentDescription = image.alt.ifBlank { image.title ?: "Image" },
+            modifier = imageModifier,
+            loading = { androidx.compose.material3.CircularProgressIndicator() },
+            error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
+        )
+    }
 }
 
 @Composable
@@ -493,15 +538,19 @@ private fun imageModel(url: String): String? {
 private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
     val sheet = LocalMarkdownStyleSheet.current
     val start = (list as? OrderedList)?.startNumber ?: 1
-    Column(Modifier.fillMaxWidth().padding(bottom = sheet.listSpacing)) {
-        list.children().filterIsInstance<ListItem>().forEachIndexed { index, item ->
+    val items = list.children().filterIsInstance<ListItem>().toList()
+    Column(Modifier.fillMaxWidth().padding(bottom = sheet.listSpacing)
+        .semantics { collectionInfo = CollectionInfo(items.size, 1) }) {
+        items.forEachIndexed { index, item ->
             val task = item.children().filterIsInstance<TaskListItemMarker>().firstOrNull()
             val marker = when {
                 task != null -> if (task.isChecked) "☑" else "☐"
                 list is OrderedList -> "${start + index}."
                 else -> "•"
             }
-            Row(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                collectionItemInfo = CollectionItemInfo(index, 1, 0, 1)
+            }) {
                 Text(marker, modifier = Modifier.width(sheet.listIndent), style = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, color = sheet.textColor ?: Color.Unspecified)
                 Column(Modifier.weight(1f)) {
                     item.children().filterNot { it is TaskListItemMarker }.forEach {
@@ -516,13 +565,20 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
 @Composable
 private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
     val sheet = LocalMarkdownStyleSheet.current
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)) {
-        table.children().flatMap { it.children() }.filterIsInstance<TableRow>().forEach { row ->
+    val rows = table.children().flatMap { it.children() }.filterIsInstance<TableRow>().toList()
+    val columns = rows.maxOfOrNull { it.children().filterIsInstance<TableCell>().count() } ?: 0
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
+        .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
+        rows.forEachIndexed { rowIndex, row ->
             Row {
-                row.children().filterIsInstance<TableCell>().forEach { cell ->
+                row.children().filterIsInstance<TableCell>().forEachIndexed { columnIndex, cell ->
                     val style = if (cell.isHeader) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
-                    Box(Modifier.width(150.dp).border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline).padding(sheet.tableCellPadding)) {
+                    Box(Modifier.width(150.dp).border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline)
+                        .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
+                            collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
+                            if (cell.isHeader) heading()
+                        }) {
                         MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current), style, onLinkClick, onImageClick)
                     }
                 }
