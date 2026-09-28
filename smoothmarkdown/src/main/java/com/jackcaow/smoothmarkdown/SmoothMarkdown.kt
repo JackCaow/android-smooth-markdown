@@ -169,6 +169,8 @@ fun SmoothMarkdown(
     plugins: ParserPluginRegistry? = null,
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
+    /** Compose blocks without an inner scroll container, for use in a virtualized chat item. */
+    scrollable: Boolean = true,
 ) {
     val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
@@ -182,20 +184,39 @@ fun SmoothMarkdown(
         LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
         LocalImageBuilder provides imageBuilder,
     ) {
-        LazyColumn(
-            modifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
-        ) {
-            itemsIndexed(selectionGroups) { _, group ->
-                if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
-                    MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
-                } else {
-                    SelectionContainer {
-                        Column {
-                            group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
-                        }
-                    }
+        val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
+        if (scrollable) {
+            LazyColumn(
+                modifier = backgroundModifier,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
+            ) {
+                itemsIndexed(selectionGroups) { _, group ->
+                    MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml)
                 }
+            }
+        } else {
+            Column(backgroundModifier.padding(styleSheet.contentPadding)) {
+                selectionGroups.forEach { group ->
+                    MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownSelectionGroup(
+    group: List<Node>,
+    onLinkClick: (String) -> Unit,
+    onImageClick: (String) -> Unit,
+    enableHtml: Boolean,
+) {
+    if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
+        MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
+    } else {
+        SelectionContainer {
+            Column {
+                group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
             }
         }
     }

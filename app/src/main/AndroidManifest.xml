@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="Smooth Markdown Demo" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".ChatListActivity" android:exported="false" android:label="Chat List Demo" />
         <activity android:name=".MermaidDemoActivity" android:exported="true" android:label="Mermaid Prototype" />
         <activity android:name=".PerformanceActivity" android:exported="true" android:label="Long Document Benchmark" />
         <activity android:name=".MainActivity" android:exported="true">

@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
                     onLanguageChange = { preferences.edit().putString("language", it.code).apply() },
                     openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
                     openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
+                    openChatList = { startActivity(Intent(this, ChatListActivity::class.java)) },
                     openLink = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                 )
             }
@@ -110,6 +111,7 @@ private fun DemoHome(
     onLanguageChange: (DemoLanguage) -> Unit,
     openMermaid: () -> Unit,
     openPerformance: () -> Unit,
+    openChatList: () -> Unit,
     openLink: (String) -> Unit,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -174,6 +176,7 @@ private fun DemoHome(
                             onClick = {
                                 if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
                                 else if (item.id == "performance") scope.launch { drawerState.close(); openPerformance() }
+                                else if (item.id == "chat-list") scope.launch { drawerState.close(); openChatList() }
                                 else select(item.id)
                             }, modifier = Modifier.testTag("nav-${item.id}"))
                     }

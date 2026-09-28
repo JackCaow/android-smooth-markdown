@@ -54,7 +54,7 @@ val dedicatedPages = listOf(
     DemoPage("stream", "Streaming", "Incremental Markdown chunks"),
     DemoPage("footnote", "Footnotes", "References and definitions"),
     DemoPage("html", "HTML Tags", "Whitelisted HTML rendering"),
-    DemoPage("chat-list", "Chat List", "Static Markdown preview; list virtualization pending"),
+    DemoPage("chat-list", "Chat List", "Virtualized Markdown conversation with streamed replies"),
     DemoPage("ai", "AI Chat", "Offline Thinking, Artifact, ToolCall sample"),
     DemoPage("conversation-list", "Conversation List", "Static Markdown preview; gestures pending"),
     DemoPage("plugin", "Plugin System", "Mentions, emoji, admonitions"),
@@ -73,16 +73,6 @@ This paragraph arrives in small chunks. **Formatting**, lists, and code remain r
 ```kotlin
 StreamMarkdown(chunks = incoming)
 ```
-""".trimIndent()
-    "chat-list" -> """# Chat List Demo
-
-Static Markdown preview. Flutter's chat-list virtualization and live message updates are not ported yet.
-
-### Alice
-Hello! This reply contains **Markdown** and `code`.
-
-### Bob
-> A quoted response with a [link](https://github.com/JackCaow/flutter-smooth-markdown).
 """.trimIndent()
     "conversation-list" -> """# Conversation List
 
