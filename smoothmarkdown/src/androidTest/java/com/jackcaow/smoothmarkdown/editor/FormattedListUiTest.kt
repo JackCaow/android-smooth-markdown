@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.text.TextRange
 import org.junit.Assert.assertEquals
@@ -89,5 +90,22 @@ class FormattedListUiTest {
             keyUp(Key.ShiftLeft)
         }
         compose.runOnIdle { assertEquals("- parent\n- child\n- next", controller.text) }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test fun returnOnEmptyRootItemCreatesFocusedEditableParagraph() {
+        val controller = MarkdownEditorController("- parent\n- ")
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+        compose.onNodeWithText("Formatted").performClick()
+
+        compose.onNodeWithTag("formatted-list-item-block-0-1").performClick()
+        compose.onNodeWithTag("formatted-list-item-block-0-1").performKeyInput {
+            keyDown(Key.Enter)
+            keyUp(Key.Enter)
+        }
+        compose.runOnIdle { assertEquals("- parent\n\n", controller.text) }
+
+        compose.onNodeWithTag("formatted-empty-paragraph").performTextInput("body")
+        compose.runOnIdle { assertEquals("- parent\n\nbody", controller.text) }
     }
 }
