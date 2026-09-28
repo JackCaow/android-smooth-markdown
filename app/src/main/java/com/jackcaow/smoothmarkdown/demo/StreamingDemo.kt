@@ -45,10 +45,11 @@ fun loadStreamingDemoFixture(assets: AssetManager): StreamingDemoFixture {
     val markdown = chunks.joinToString("")
     val hash = MessageDigest.getInstance("SHA-256").digest(markdown.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
-    require(chunks.size == 48 && hash == fixture.getString("markdownSha256")) {
+    val delayMillis = fixture.getLong("delayMillis")
+    require(chunks.size == 48 && delayMillis == 50L && hash == fixture.getString("markdownSha256")) {
         "Flutter streaming demo fixture mismatch"
     }
-    return StreamingDemoFixture(chunks, fixture.getLong("delayMillis"))
+    return StreamingDemoFixture(chunks, delayMillis)
 }
 
 private enum class StreamPhase { Idle, Streaming, Complete }

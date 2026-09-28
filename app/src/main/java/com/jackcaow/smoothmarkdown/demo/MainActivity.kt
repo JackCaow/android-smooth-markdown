@@ -127,7 +127,9 @@ private fun DemoHome(
     val isEditor = pageId == "editor"
     val currentMarkdown = if (pageId == exampleId) example.markdown
         else staticPages[pageId] ?: dedicatedMarkdown(pageId)
-    val currentTitle = if (isEditor) "Markdown Editor" else if (pageId == "stream") "Streaming Markdown Demo" else specialPage?.let {
+    val currentTitle = if (isEditor) "Markdown Editor" else if (pageId == "stream") {
+        localizations.text(language, "streaming_demo_title")
+    } else specialPage?.let {
         localizations.page(language, it)
     } ?: localizations.example(language, example)
     val controller = remember(exampleId, isEditor) {
