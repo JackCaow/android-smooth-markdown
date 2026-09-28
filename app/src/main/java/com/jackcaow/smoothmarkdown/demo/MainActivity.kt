@@ -32,6 +32,12 @@ private val demoMarkdown = """
         A continued line.
     [^2]: Another note.
 
+    ```kotlin
+    val greeting = "Hello from Android"
+    val longLine = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    println(greeting)
+    ```
+
     <details>
     <summary>Tap for hidden Markdown</summary>
     - **First** nested item

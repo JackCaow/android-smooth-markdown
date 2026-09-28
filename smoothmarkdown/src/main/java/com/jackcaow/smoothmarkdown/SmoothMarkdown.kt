@@ -25,6 +25,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -111,12 +112,21 @@ fun SmoothMarkdown(
     onLinkClick: (String) -> Unit = {},
     onImageClick: (String) -> Unit = {},
     enableHtml: Boolean = false,
+    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
+    onCodeCopied: ((String) -> Unit)? = null,
 ) {
     val document = remember(markdown) { parseMarkdown(markdown) }
     val blocks = remember(document) { document.children().toList() }
-    LazyColumn(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-        itemsIndexed(blocks) { _, block ->
-            MarkdownBlock(block, onLinkClick, onImageClick, enableHtml)
+    CompositionLocalProvider(
+        LocalCodeBlockOptions provides codeBlockOptions,
+        LocalCodeBlockBuilder provides codeBlockBuilder,
+        LocalOnCodeCopied provides onCodeCopied,
+    ) {
+        LazyColumn(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+            itemsIndexed(blocks) { _, block ->
+                MarkdownBlock(block, onLinkClick, onImageClick, enableHtml)
+            }
         }
     }
 }
@@ -146,8 +156,8 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 else -> MarkdownInlineText(inlineRender(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
             }
         }
-        is FencedCodeBlock -> CodeBlock(node.literal, node.info)
-        is IndentedCodeBlock -> CodeBlock(node.literal, null)
+        is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
+        is IndentedCodeBlock -> EnhancedCodeBlock(node.literal, null)
         is BlockQuote -> Row(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             Box(Modifier.width(3.dp).height(44.dp).background(MaterialTheme.colorScheme.primary))
             Spacer(Modifier.width(12.dp))
@@ -341,22 +351,6 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
     )
-}
-
-@Composable
-private fun CodeBlock(code: String, info: String?) {
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp),
-    ) {
-        info?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(6.dp))
-        }
-        SelectionContainer {
-            Text(code, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
-        }
-    }
 }
 
 @Composable
