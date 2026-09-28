@@ -25,6 +25,9 @@ import com.jackcaow.smoothmarkdown.HashtagPlugin
 import com.jackcaow.smoothmarkdown.EmojiPlugin
 import com.jackcaow.smoothmarkdown.AdmonitionPlugin
 import com.jackcaow.smoothmarkdown.MermaidPlugin
+import com.jackcaow.smoothmarkdown.ThinkingPlugin
+import com.jackcaow.smoothmarkdown.ArtifactPlugin
+import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 
@@ -44,6 +47,22 @@ private val demoMarkdown = """
     A[Write] --> B{Review}
     B --> C[Publish]
     ```
+
+    <thinking>
+    Consider the constraints before answering.
+    </thinking>
+
+    <artifact id="sample-code" type="code" language="kotlin" title="Generated snippet">
+    println("Native artifact")
+    </artifact>
+
+    <tool_use>
+    <tool_name>search</tool_name>
+    <tool_id>demo-1</tool_id>
+    <input>
+    query: native markdown
+    </input>
+    </tool_use>
 
     Inline math ${'$'}E=mc^2${'$'} and ${'$'}x^2+y^2=z^2${'$'} in one paragraph.
 
@@ -110,7 +129,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         setContent {
             val controller = remember { MarkdownEditorController(demoMarkdown) }
-            val plugins = remember { ParserPluginRegistry().also { it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(), MermaidPlugin())) } }
+            val plugins = remember { ParserPluginRegistry().also { it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(), MermaidPlugin(), ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin())) } }
             var showEditor by remember { mutableStateOf(false) }
             var enableHtml by remember { mutableStateOf(false) }
             var themeIndex by remember { mutableStateOf(0) }

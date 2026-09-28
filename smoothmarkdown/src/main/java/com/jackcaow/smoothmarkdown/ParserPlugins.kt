@@ -50,6 +50,8 @@ interface BlockParserPlugin : ParserPlugin {
     /** Return null to let the next plugin or CommonMark handle the line. */
     fun createNode(openingLine: String): PluginBlockNode? = null
     fun isClosingLine(line: String): Boolean = false
+    /** Node-aware closing hook for plugins with multiple delimiter styles. */
+    fun isClosingLine(node: PluginBlockNode, line: String): Boolean = isClosingLine(line)
     /** Receives content lines, excluding delimiters, after the block is complete. */
     fun complete(node: PluginBlockNode, contentLines: List<String>) = Unit
     /** Converts a CommonMark fenced code block after parsing; return null for ordinary code. */
@@ -141,7 +143,7 @@ private class PluginBlockParser(private val plugin: BlockParserPlugin, private v
     override fun tryContinue(state: ParserState): BlockContinue? {
         if (closed) return null
         val line = state.line.content.toString()
-        if (plugin.isClosingLine(line)) closed = true
+        if (plugin.isClosingLine(node, line)) closed = true
         return BlockContinue.atIndex(if (closed) line.length else 0)
     }
     override fun addLine(line: SourceLine) {
