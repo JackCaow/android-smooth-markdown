@@ -6,7 +6,7 @@ import java.security.MessageDigest
 
 data class DemoExample(val id: String, val title: String, val markdown: String)
 
-/** The manifest and Markdown files are copied verbatim from Flutter example/lib/main.dart. */
+/** The manifest and Markdown files match Flutter example/lib/main.dart's runtime strings. */
 fun loadExamples(assets: AssetManager): List<DemoExample> {
     val manifest = JSONObject(assets.open("examples/manifest.json").bufferedReader().use { it.readText() })
     val entries = manifest.getJSONArray("examples")
@@ -27,6 +27,26 @@ fun loadExamples(assets: AssetManager): List<DemoExample> {
     return examples
 }
 
+/** Exact runtime strings from Flutter's static feature demos. */
+fun loadDemoPageMarkdown(assets: AssetManager): Map<String, String> {
+    val manifest = JSONObject(assets.open("examples/pages/pages.json").bufferedReader().use { it.readText() })
+    val entries = manifest.getJSONArray("pages")
+    require(entries.length() == 5) { "Expected five Flutter demo page fixtures" }
+    val pages = (0 until entries.length()).associate { index ->
+        val entry = entries.getJSONObject(index)
+        val filename = entry.getString("file")
+        val bytes = assets.open("examples/pages/$filename").use { it.readBytes() }
+        val hash = MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        require(hash == entry.getString("sha256")) { "Demo page checksum mismatch: $filename" }
+        entry.getString("id") to bytes.toString(Charsets.UTF_8)
+    }
+    require(pages.keys == setOf("math", "footnote", "html", "plugin", "editor")) {
+        "Incomplete Flutter demo page catalog"
+    }
+    return pages
+}
+
 data class DemoPage(val id: String, val title: String, val subtitle: String = "")
 
 val dedicatedPages = listOf(
@@ -43,14 +63,6 @@ val dedicatedPages = listOf(
 )
 
 fun dedicatedMarkdown(id: String): String = when (id) {
-    "math" -> """# Math Demo
-
-Inline: ${'$'}E=mc^2${'$'} and ${'$'}a^2+b^2=c^2${'$'}.
-
-Display:
-
-${'$'}${'$'}\frac{a}{b} = \sqrt{x^2 + 1}${'$'}${'$'}
-""".trimIndent()
     "stream" -> """# Streaming Markdown
 
 This paragraph arrives in small chunks. **Formatting**, lists, and code remain readable while the stream grows.
@@ -61,31 +73,6 @@ This paragraph arrives in small chunks. **Formatting**, lists, and code remain r
 ```kotlin
 StreamMarkdown(chunks = incoming)
 ```
-""".trimIndent()
-    "footnote" -> """# Footnotes
-
-A statement with a reference[^first] and another one[^second].
-
-[^first]: Footnotes can contain **formatted** text.
-[^second]: The second note follows the first.
-""".trimIndent()
-    "html" -> """# HTML Tags
-
-<b>Bold</b>, <i>italic</i>, <u>underlined</u>, and <span style="color: red">colored</span> text.
-
-<div align="center">Centered **Markdown** in a div.</div>
-
-<details><summary>Expand HTML details</summary>Hidden **Markdown** content.</details>
-
-<img src="smooth-markdown-mark.svg" alt="Bundled SVG" width="64" height="64">
-""".trimIndent()
-    "plugin" -> """# Plugin System
-
-@alice and @bob discuss #android and #markdown. A shortcode: :rocket:.
-
-::: tip Native plugin
-This **admonition** is parsed by a registered plugin.
-:::
 """.trimIndent()
     "chat-list" -> """# Chat List Demo
 

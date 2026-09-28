@@ -73,13 +73,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val examples = runCatching { loadExamples(assets) }
+        val staticPages = runCatching { loadDemoPageMarkdown(assets) }
         setContent {
             MaterialTheme {
-                if (examples.isFailure) {
-                    Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message}",
+                if (examples.isFailure || staticPages.isFailure) {
+                    Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message ?: staticPages.exceptionOrNull()?.message}",
                         modifier = Modifier.safeDrawingPadding().testTag("example-load-error"))
                 } else DemoHome(
                     examples = examples.getOrThrow(),
+                    staticPages = staticPages.getOrThrow(),
                     openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
                     openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
                     openLink = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
@@ -92,6 +94,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun DemoHome(
     examples: List<DemoExample>,
+    staticPages: Map<String, String>,
     openMermaid: () -> Unit,
     openPerformance: () -> Unit,
     openLink: (String) -> Unit,
@@ -107,9 +110,12 @@ private fun DemoHome(
     val example = examples.first { it.id == exampleId }
     val specialPage = dedicatedPages.firstOrNull { it.id == pageId }
     val isEditor = pageId == "editor"
-    val currentMarkdown = if (pageId == exampleId || isEditor) example.markdown else dedicatedMarkdown(pageId)
+    val currentMarkdown = if (pageId == exampleId) example.markdown
+        else staticPages[pageId] ?: dedicatedMarkdown(pageId)
     val currentTitle = if (isEditor) "Markdown Editor" else specialPage?.title ?: example.title
-    val controller = remember(exampleId, isEditor) { MarkdownEditorController(example.markdown) }
+    val controller = remember(exampleId, isEditor) {
+        MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown)
+    }
     val plugins = remember { ParserPluginRegistry().also {
         it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(),
             MermaidPlugin(), ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
