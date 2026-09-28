@@ -26,6 +26,10 @@ private val demoMarkdown = """
 
     A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+    Inline math ${'$'}E=mc^2${'$'} and ${'$'}x^2+y^2=z^2${'$'} in one paragraph.
+
+    ${'$'}${'$'}\frac{a}{b} = \sqrt{x^2 + 1}${'$'}${'$'}
+
     Native footnotes render in text[^note] and beside another reference[^2].
 
     [^note]: This is a **formatted** note.

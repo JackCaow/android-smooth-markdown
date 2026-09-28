@@ -2,6 +2,7 @@ package com.jackcaow.smoothmarkdown
 
 import java.net.URI
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -99,6 +101,8 @@ private val parser = Parser.builder().extensions(
     ),
 ).customBlockParserFactory(FootnoteDefinitionParserFactory())
     .customBlockParserFactory(DetailsParserFactory())
+    .customBlockParserFactory(MathBlockParserFactory())
+    .customInlineContentParserFactory(MathInlineParserFactory())
     .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
     .build()
 
@@ -168,6 +172,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         is BulletList, is OrderedList -> MarkdownList(node, onLinkClick, onImageClick, enableHtml)
         is TableBlock -> MarkdownTable(node, onLinkClick, onImageClick, enableHtml)
         is DetailsNode -> MarkdownDetails(node, onLinkClick, onImageClick, enableHtml)
+        is BlockMathNode -> BlockMath(node)
         is FootnoteDefinitionNode -> Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
         ) {
@@ -288,7 +293,7 @@ private fun MarkdownInlineText(
     bottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
     interactive: Boolean = true,
 ) {
-    if (render.images.isEmpty()) {
+    if (render.images.isEmpty() && render.math.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
         else Text(
             render.text,
@@ -310,6 +315,23 @@ private fun MarkdownInlineText(
             ),
         ) {
             InlineImage(image, width, height, if (interactive) onImageClick else null)
+        }
+    }.toMutableMap()
+    render.math.forEach { (id, latex) ->
+        val renderer = rememberMathRenderer(latex, displayMode = false)
+        val widthDp = with(density) { (renderer?.widthPx ?: (latex.length * 10f)).coerceAtLeast(1f).toDp() }
+        val heightDp = with(density) { (renderer?.totalHeightPx ?: 24f).coerceAtLeast(1f).toDp() }
+        inline[id] = InlineTextContent(
+            placeholder = Placeholder(
+                width = with(density) { widthDp.toSp() },
+                height = with(density) { heightDp.toSp() },
+                placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+            ),
+        ) {
+            if (renderer == null) Text("$$latex$")
+            else Canvas(Modifier.width(widthDp).height(heightDp)) {
+                renderer.draw(drawContext.canvas.nativeCanvas)
+            }
         }
     }
     if (!interactive) {
@@ -437,12 +459,17 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
     }
 }
 
-internal data class InlineRender(val text: AnnotatedString, val images: Map<String, SafeHtml.ImageSpec>)
+internal data class InlineRender(
+    val text: AnnotatedString,
+    val images: Map<String, SafeHtml.ImageSpec>,
+    val math: Map<String, String>,
+)
 
 internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = inlineRender(node, enableHtml).text
 
 internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
+    val math = linkedMapOf<String, String>()
     val text = buildAnnotatedString {
     val htmlStack = mutableListOf<SafeHtml.Tag>()
 
@@ -503,6 +530,11 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
                     ), start, length,
                 )
             }
+            is InlineMathNode -> {
+                val id = "math-${math.size}"
+                math[id] = current.latex
+                appendInlineContent(id, "$$${current.latex}$")
+            }
             is Image -> appendImage(SafeHtml.ImageSpec(current.destination, current.plainText(), current.title, null, null))
             is HtmlInline -> {
                 if (!enableHtml) append(current.literal)
@@ -541,7 +573,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
     }
     node.children().forEach(::appendNode)
     }
-    return InlineRender(text, images)
+    return InlineRender(text, images, math)
 }
 
 internal fun isSafeLink(value: String): Boolean {
