@@ -235,15 +235,20 @@ private fun DemoHome(
                     modifier = Modifier.testTag("current-theme"))
             }
             if (isEditor) {
+                Text("Scratch-style editor preview", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("editor-intro"))
+                Text("Toolbar, source and formatted modes, Markdown import/export, image selection, table editing, and search.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 exportedLength?.let {
-                    Text(localizations.exportStatus(language, it),
+                    Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
                 }
                 SmoothMarkdownEditor(
                     controller = controller,
                     modifier = Modifier.weight(1f),
-                    onPickImage = { MarkdownEditorImageSelection("smooth-markdown-mark.svg", "Demo mark", "Bundled SVG") },
-                    onImportMarkdown = { "# Imported sample\n\nA host supplied this Markdown." },
+                    onPickImage = { MarkdownEditorImageSelection("https://picsum.photos/640/360", "Sample image", "Demo image") },
+                    onImportMarkdown = { "## Imported markdown\n\nThis came from the host callback." },
                     onExportMarkdown = { exportedLength = it.length },
                 )
             } else if (pageId == "stream") {
