@@ -134,11 +134,46 @@ class MarkdownSourceListTest {
         }
     }
 
-    @Test fun complexRootLiftStillLeavesMarkdownUntouched() {
-        val complex = MarkdownEditorController("- parent\n  - child")
-        val complexId = complex.semanticDocument().blocks.single().id
-        assertFalse(complex.outdentFormattedListItem(complexId, listOf(0)))
-        assertEquals("- parent\n  - child", complex.text)
+    @Test fun liftsRootItemWithContinuationAndNestedSubtreeAsOneUndoableEdit() {
+        val original = "- first\n- **parent**\n  continuation\n  - child\n    - grandchild\n- last"
+        val expected = "- first\n\n**parent**\ncontinuation\n- child\n  - grandchild\n\n- last"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        controller.setFormattedListSelection(id, listOf(1), 0, androidx.compose.ui.text.TextRange(3))
+        assertTrue(controller.outdentFormattedListItem(id, listOf(1)))
+        assertEquals(expected, controller.text)
+        assertEquals(4, controller.semanticDocument().blocks.size)
+        assertEquals(MarkdownBlockKind.PARAGRAPH, controller.semanticDocument().blocks[1].kind)
+        assertEquals(MarkdownBlockKind.BULLET_LIST, controller.semanticDocument().blocks[2].kind)
+        assertEquals(androidx.compose.ui.text.TextRange(3), controller.formattedSelection)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertEquals(listOf(1), controller.activeFormattedListPath)
+        assertTrue(controller.redo())
+        assertEquals(expected, controller.text)
+    }
+
+    @Test fun liftsRootOrderedItemWithChildAndKeepsCrLfAndNeighborMarkers() {
+        val original = "7) first\r\n8) parent\r\n   1) child\r\n9) last"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.outdentFormattedListItem(id, listOf(1)))
+        assertEquals("7) first\r\n\r\nparent\r\n1) child\r\n\r\n9) last", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+    }
+
+    @Test fun rootLiftRefusesRawOrUnderindentedContentWithoutCreatingUndoEntry() {
+        listOf(
+            "- parent\n\n  ```text\n  code\n  ```\n- last",
+            "- parent\ncontinuation\n  - child\n- last",
+        ).forEach { original ->
+            val controller = MarkdownEditorController(original)
+            val id = controller.semanticDocument().blocks.single().id
+            assertFalse(controller.outdentFormattedListItem(id, listOf(0)))
+            assertEquals(original, controller.text)
+            assertFalse(controller.canUndo)
+        }
     }
 
     @Test fun editsBulletItemWithoutRewritingMarkerNestedContentOrNeighbors() {

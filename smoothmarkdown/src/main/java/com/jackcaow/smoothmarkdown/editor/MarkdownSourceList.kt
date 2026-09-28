@@ -94,29 +94,42 @@ internal class MarkdownSourceList private constructor(
         return EmptyExitEdit(prefix + suffix, prefix.length, path.first())
     }
 
-    /** Lifts a simple root item into a paragraph between the remaining list fragments. */
+    /** Lifts a root item's text and child lists between the remaining list fragments. */
     fun liftTopLevel(path: List<Int>): LiftEdit? {
         if (path.size != 1) return null
         val selected = item(path) ?: return null
-        if (selected.lines.size != 1 || selected.parts.any { it !is Line }) return null
-        val body = source.substring(selected.contentStart, selected.contentEnd)
-        if (body.isBlank()) return null
-        val before = source.substring(0, lineStart(selected))
-        val after = source.substring(selected.contentEnd)
+        if (selected.parts.any { !it.isLiftable() }) return null
+        val firstNested = selected.parts.indexOfFirst { it is NestedList }
+        if (firstNested >= 0 && selected.parts.drop(firstNested).any { it is Line }) return null
+        val (start, end) = subtreeRange(path) ?: return null
+        val firstLine = source.substring(selected.contentStart, selected.contentEnd)
+        if (firstLine.isBlank()) return null
+        if ('\t' in source.substring(start, selected.contentStart)) return null
+        val contentIndent = selected.contentStart - start
+        val remaining = shiftIndent(source.substring(selected.contentEnd, end), -contentIndent) ?: return null
+        val body = firstLine + remaining
+        val blocks = generateSequence(parseMarkdown(body).firstChild) { it.next }.toList()
+        if (blocks.firstOrNull() !is Paragraph && blocks.firstOrNull() !is Heading) return null
+        if (blocks.count { it is BulletList || it is OrderedList } != selected.parts.count { it is NestedList }) return null
+        val before = source.substring(0, start)
+        val after = source.substring(end)
         val newline = if (source.contains("\r\n")) "\r\n" else "\n"
-        val separator = newline + newline
-        val prefix = when {
-            before.isEmpty() || before.endsWith(separator) -> before
-            before.endsWith(newline) -> before + newline
-            else -> before + separator
-        }
-        val suffix = when {
-            after.isEmpty() || after.startsWith(separator) -> after
-            after.startsWith(newline) -> newline + after
-            else -> separator + after
-        }
-        val replacement = prefix + body + suffix
+        val prefix = before + blockSeparator(before, body, newline)
+        val replacement = prefix + body + blockSeparator(body, after, newline) + after
         return LiftEdit(replacement, prefix.length)
+    }
+
+    private fun Part.isLiftable(): Boolean = when (this) {
+        is Line -> true
+        is NestedList -> items.all { item -> item.parts.all { it.isLiftable() } }
+        is Raw -> false
+    }
+
+    private fun blockSeparator(before: String, after: String, newline: String): String {
+        if (before.isEmpty() || after.isEmpty()) return ""
+        val existing = before.takeLastWhile { it == '\r' || it == '\n' }.count { it == '\n' } +
+            after.takeWhile { it == '\r' || it == '\n' }.count { it == '\n' }
+        return newline.repeat((2 - existing).coerceAtLeast(0))
     }
 
     /** Splits a visible line into sibling items while retaining every untouched source slice. */
