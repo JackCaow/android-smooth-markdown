@@ -133,6 +133,9 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     val document = parser.parse(markdown)
     plugins?.transformFencedBlocks(document)
     val result = FootnoteReferencePostProcessor(markdown).process(document)
+    (plugins?.getInlinePlugin("wikilink") as? WikilinkPlugin)?.let {
+        WikilinkPostProcessor.process(result, it)
+    }
     if (plugins == null) SmoothMarkdownCache.put(markdown, result)
     return result
 }

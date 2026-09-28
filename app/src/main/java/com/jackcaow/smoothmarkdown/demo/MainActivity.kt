@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown.demo
 
 import android.content.Intent
-import android.net.Uri
+import android.widget.Toast
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
                     openChatList = { startActivity(Intent(this, ChatListActivity::class.java)) },
                     openAIChat = { startActivity(Intent(this, AIChatActivity::class.java)) },
                     openConversationList = { startActivity(Intent(this, ConversationListActivity::class.java)) },
-                    openLink = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                    openLink = { url -> Toast.makeText(this, "Link tapped: $url", Toast.LENGTH_SHORT).show() },
                 )
             }
         }
