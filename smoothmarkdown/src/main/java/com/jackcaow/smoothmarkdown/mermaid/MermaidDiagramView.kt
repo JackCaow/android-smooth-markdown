@@ -39,6 +39,14 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
         return
     }
     val layout = remember(diagram) { MermaidLayout.compute(diagram) }
+    if (diagram.kind == MermaidKind.Pie) {
+        MermaidPieView(diagram, layout, modifier)
+        return
+    }
+    if (diagram.kind == MermaidKind.Timeline) {
+        MermaidTimelineView(diagram, layout, modifier)
+        return
+    }
     val foreground = MaterialTheme.colorScheme.onSurface
     val nodeFill = MaterialTheme.colorScheme.surfaceVariant
     val surface = MaterialTheme.colorScheme.surface

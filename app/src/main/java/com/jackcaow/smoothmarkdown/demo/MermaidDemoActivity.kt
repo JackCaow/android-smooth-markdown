@@ -21,13 +21,19 @@ class MermaidDemoActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var sequence by remember { mutableStateOf(false) }
+            var exampleIndex by remember { mutableStateOf(0) }
+            val examples = listOf(
+                "Flowchart" to flowExample,
+                "Sequence" to sequenceExample,
+                "Pie" to pieExample,
+                "Timeline" to timelineExample,
+            )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    TextButton(onClick = { sequence = !sequence }) {
-                        Text(if (sequence) "Show flowchart" else "Show sequence")
+                    TextButton(onClick = { exampleIndex = (exampleIndex + 1) % examples.size }) {
+                        Text("${examples[exampleIndex].first} · Next diagram")
                     }
-                    MermaidDiagramView(if (sequence) sequenceExample else flowExample, Modifier.weight(1f))
+                    MermaidDiagramView(examples[exampleIndex].second, Modifier.weight(1f))
                 }
             }
         }
@@ -52,4 +58,21 @@ private val sequenceExample = """
     A->>B: Hello
     B-->>A: Hi
     A-)B: Async work
+""".trimIndent()
+
+private val pieExample = """
+    pie showData
+    title Favorite Pets
+    "Dogs" : 386
+    "Cats" : 85
+    "Rats" : 15
+""".trimIndent()
+
+private val timelineExample = """
+    timeline
+    title Product Releases
+    Q1 2024 : First preview
+            : Feedback
+    Q2 2024 : Public beta
+    Q3 2024 : Launch
 """.trimIndent()

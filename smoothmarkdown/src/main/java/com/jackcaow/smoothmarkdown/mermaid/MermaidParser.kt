@@ -9,6 +9,8 @@ object MermaidParser {
             Regex("^(graph|flowchart)\\s+(TD|TB|BT|LR|RL)$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidFlowchartParser().parse(lines)
             header.equals("sequenceDiagram", ignoreCase = true) -> MermaidSequenceParser().parse(lines)
+            Regex("^pie(?:\\s+showData)?$", RegexOption.IGNORE_CASE).matches(header) -> MermaidPieParser().parse(lines)
+            header.equals("timeline", ignoreCase = true) -> MermaidTimelineParser().parse(lines)
             else -> null
         }
     }

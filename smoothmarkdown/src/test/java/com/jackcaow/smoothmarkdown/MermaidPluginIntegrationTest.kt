@@ -31,9 +31,19 @@ class MermaidPluginIntegrationTest {
     }
 
     @Test fun unsupportedOrEmptyMermaidFallsBackToCode() {
-        assertTrue(parseMarkdown("```mermaid\npie\n  \"A\": 5\n```", plugins).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown("```mermaid\ngantt\n  title Roadmap\n```", plugins).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown("```mermaid\npie\n  title Empty\n```", plugins).firstChild is FencedCodeBlock)
         assertTrue(parseMarkdown("```mermaid\n```", plugins).firstChild is FencedCodeBlock)
         assertTrue(parseMarkdown("```kotlin\ngraph LR\nA --> B\n```", plugins).firstChild is FencedCodeBlock)
+    }
+
+    @Test fun pieAndTimelineFencesBecomePluginNodes() {
+        val pie = parseMarkdown("```mermaid\npie showData\n  \"A\": 30\n  \"B\": 70\n```", plugins)
+            .firstChild as MermaidDiagramNode
+        assertEquals("pie showData\n  \"A\": 30\n  \"B\": 70", pie.code)
+        val timeline = parseMarkdown("~~~mermaid\ntimeline\n  2024 : Launch\n~~~", plugins)
+            .firstChild as MermaidDiagramNode
+        assertEquals("~~~", timeline.fence)
     }
 
     @Test fun nestedFenceInQuoteIsTransformed() {

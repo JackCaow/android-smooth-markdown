@@ -66,7 +66,7 @@ class MermaidParserTest {
         assertEquals(MermaidDirection.RL, second.direction)
         assertEquals(listOf("X", "Y"), second.nodes.map { it.id })
         assertFalse(second.nodes.any { it.id == "A" })
-        assertNull(MermaidParser.parse("pie\n  \"A\": 5"))
+        assertEquals(MermaidKind.Pie, MermaidParser.parse("pie\n  \"A\": 5")?.kind)
     }
 
     @Test fun subgraphEndpointUsesGroupBoundsWithoutPhantomNode() {

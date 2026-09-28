@@ -8,12 +8,21 @@ data class MermaidRect(val x: Float, val y: Float, val width: Float, val height:
     val centerY: Float get() = y + height / 2
 }
 data class MermaidPlacedEdge(val edge: MermaidEdge, val start: MermaidPoint, val end: MermaidPoint)
+data class MermaidPieSlicePlacement(val slice: MermaidPieSlice, val startAngle: Float, val sweepAngle: Float, val index: Int)
+data class MermaidPiePlacement(
+    val center: MermaidPoint, val radius: Float, val legendY: Float,
+    val slices: List<MermaidPieSlicePlacement>,
+)
+data class MermaidTimelineSectionPlacement(val section: MermaidTimelineSection, val card: MermaidRect, val marker: MermaidPoint, val index: Int)
+data class MermaidTimelinePlacement(val axisY: Float, val sections: List<MermaidTimelineSectionPlacement>)
 data class MermaidLayoutResult(
     val width: Float,
     val height: Float,
     val nodes: Map<String, MermaidRect>,
     val edges: List<MermaidPlacedEdge>,
     val subgraphs: Map<String, MermaidRect>,
+    val pie: MermaidPiePlacement? = null,
+    val timeline: MermaidTimelinePlacement? = null,
 )
 
 /** Deterministic layered layout for the supported flowchart and sequence subset. Units are dp. */
@@ -21,6 +30,38 @@ object MermaidLayout {
     fun compute(diagram: MermaidDiagram): MermaidLayoutResult = when (diagram.kind) {
         MermaidKind.Flowchart -> flowchart(diagram)
         MermaidKind.Sequence -> sequence(diagram)
+        MermaidKind.Pie -> pie(diagram)
+        MermaidKind.Timeline -> timeline(diagram)
+    }
+
+    private fun pie(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.pie)
+        val titleHeight = if (data.title.isNullOrBlank()) 0f else 22f
+        val center = MermaidPoint(180f, 138f + titleHeight)
+        val legendY = 268f + titleHeight
+        val height = legendY + data.slices.size * 30f + 20f
+        var angle = -90f
+        val slices = data.slices.mapIndexed { index, slice ->
+            val sweep = (slice.value / data.totalValue * 360).toFloat()
+            MermaidPieSlicePlacement(slice, angle, sweep, index).also { angle += sweep }
+        }
+        return MermaidLayoutResult(360f, height, emptyMap(), emptyList(), emptyMap(),
+            pie = MermaidPiePlacement(center, 108f, legendY, slices))
+    }
+
+    private fun timeline(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.timeline)
+        val axisY = if (data.title.isNullOrBlank()) 72f else 102f
+        val cardY = axisY + 50f
+        val sections = data.sections.mapIndexed { index, section ->
+            val x = 24f + index * 192f
+            val height = 36f + section.events.size * 30f + section.events.count { !it.description.isNullOrBlank() } * 20f
+            MermaidTimelineSectionPlacement(section, MermaidRect(x, cardY, 168f, height),
+                MermaidPoint(x + 84f, axisY), index)
+        }
+        val height = sections.maxOf { it.card.y + it.card.height } + 24f
+        return MermaidLayoutResult(48f + sections.size * 192f, height, emptyMap(), emptyList(), emptyMap(),
+            timeline = MermaidTimelinePlacement(axisY, sections))
     }
 
     private fun flowchart(diagram: MermaidDiagram): MermaidLayoutResult {
