@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
@@ -134,6 +136,10 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         val table = controller.semanticTable(block.id)
                         if (table != null) FormattedTable(controller, block.id, table)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                    } else if (block.kind == MarkdownBlockKind.BULLET_LIST || block.kind == MarkdownBlockKind.ORDERED_LIST) {
+                        val list = MarkdownSourceList.parse(block)
+                        if (list != null) FormattedList(controller, block.id, list)
+                        else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block)
                         val rawSelection = if (controller.activeFormattedBlockId == block.id) controller.formattedSelection else TextRange.Zero
@@ -177,6 +183,37 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList) {
+    Column {
+        list.items.forEachIndexed { index, item ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                if (item.taskStateOffset != null) {
+                    Checkbox(
+                        checked = item.checked,
+                        onCheckedChange = { controller.setFormattedTaskChecked(blockId, index, it) },
+                        modifier = Modifier.testTag("formatted-task-$blockId-$index"),
+                    )
+                } else {
+                    Text(
+                        text = if (item.marker.first().isDigit()) item.marker else "•",
+                        modifier = Modifier.width(40.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                val visible = MarkdownInlineEditing.parse(list.content(index).orEmpty()).visible
+                BasicTextField(
+                    value = visible,
+                    onValueChange = { controller.replaceFormattedListItemText(blockId, index, it) },
+                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                )
             }
         }
     }

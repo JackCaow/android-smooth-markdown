@@ -185,6 +185,23 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         return replaceSemanticBlock(blockId, updated.toMarkdown())
     }
 
+    /** Edits one list item's visible primary text while retaining its marker and neighboring source. */
+    fun replaceFormattedListItemText(blockId: String, itemIndex: Int, visibleText: String): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val raw = list.content(itemIndex) ?: return false
+        val updated = MarkdownInlineEditing.parse(raw).replaceVisible(visibleText) ?: return false
+        val markdown = list.replaceContent(itemIndex, updated) ?: return false
+        return markdown != block.source && replaceSemanticBlock(blockId, markdown)
+    }
+
+    /** Toggles a task marker in one list item using the source undo history. */
+    fun setFormattedTaskChecked(blockId: String, itemIndex: Int, checked: Boolean): Boolean {
+        val list = semanticDocument().blockById(blockId)?.let(MarkdownSourceList::parse) ?: return false
+        val markdown = list.setChecked(itemIndex, checked) ?: return false
+        return replaceSemanticBlock(blockId, markdown)
+    }
+
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
 
     fun insertMarkdownBlock(markdown: String) {
