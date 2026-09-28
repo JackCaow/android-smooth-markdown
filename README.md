@@ -49,6 +49,10 @@ SmoothMarkdown(markdown = content, plugins = plugins)
 
 The built-in plugins match Flutter's mention, hashtag, emoji, admonition, and Mermaid fence syntax. Emoji supports a custom shortcode map. Admonition content is parsed as Markdown. The opt-in Thinking, Artifact, and ToolCall plugins parse Flutter's corresponding AI chat block syntaxes. Thinking starts collapsed and can be expanded; artifact and tool inputs are rendered as selectable text without executing HTML or tool calls. Code artifacts reuse the native code block renderer. These readers do not yet provide artifact download, live tool status updates, or rich HTML/component previews.
 
+## Flutter example fixture parity
+
+Keep `flutter-smooth-markdown` and `android-smooth-markdown` as sibling directories. Run `python3 tools/check_flutter_example_parity.py` from this repository after changing the Flutter example. It checks the ten home samples, five static pages, Mermaid gallery, streaming chunks, AI Chat mock responses, Chat List replies, conversations, and six localization dictionaries against the actual Flutter source. If a check fails, regenerate the corresponding fixture with its `sync_flutter_*.py` script and review the Demo behavior that uses it.
+
 ## Demo theme check
 
 The six Flutter theme presets also set the Android Demo's outer Material theme. To check the visible result, open the Demo home screen, use **Theme** to select **Default dark**, **GitHub dark**, and **VS Code dark** in turn, and confirm that the page background, toolbar controls, source dialog, and **☰ Examples** drawer all use dark colors. Repeat with their three light counterparts and confirm white page and drawer surfaces. The selected Markdown stylesheet should still change with each preset. Dedicated demos keep their own light/dark controls like Flutter; Chat List additionally inherits the home page's dark setting.
