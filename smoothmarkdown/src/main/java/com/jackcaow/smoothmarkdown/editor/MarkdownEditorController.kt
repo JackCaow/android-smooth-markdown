@@ -101,12 +101,44 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     fun insertTable(rows: Int = 3, columns: Int = 3) {
-        val rowCount = rows.coerceAtLeast(2)
+        val rowCount = rows.coerceAtLeast(1)
         val columnCount = columns.coerceAtLeast(1)
-        val header = (1..columnCount).joinToString(" | ") { "Column $it" }
+        val header = List(columnCount) { "Column" }.joinToString(" | ")
         val separator = List(columnCount) { "---" }.joinToString(" | ")
-        val body = List(rowCount - 1) { List(columnCount) { " " }.joinToString(" | ") }
+        val body = List(rowCount - 1) { List(columnCount) { "Cell" }.joinToString(" | ") }
         insertSeparatedBlock((listOf("| $header |", "| $separator |") + body.map { "| $it |" }).joinToString("\n"))
+    }
+
+    /** Returns the GFM table under the current source selection. */
+    fun tableAtSelection(): MarkdownSourceTable? = findSourceTable(text, selection.min)?.table
+
+    fun replaceTableCellText(rowIndex: Int, columnIndex: Int, cellText: String, header: Boolean = false): Boolean =
+        editSelectedTable { it.replaceCell(rowIndex, columnIndex, cellText, header) }
+
+    fun insertTableRowBefore(rowIndex: Int): Boolean = editSelectedTable { it.insertRowBefore(rowIndex) }
+    fun insertTableRowAfter(rowIndex: Int): Boolean = editSelectedTable { it.insertRowAfter(rowIndex) }
+    fun deleteTableRow(rowIndex: Int): Boolean = editSelectedTable { it.deleteRow(rowIndex) }
+    fun insertTableColumnBefore(columnIndex: Int): Boolean = editSelectedTable { it.insertColumnBefore(columnIndex) }
+    fun insertTableColumnAfter(columnIndex: Int): Boolean = editSelectedTable { it.insertColumnAfter(columnIndex) }
+    fun deleteTableColumn(columnIndex: Int): Boolean = editSelectedTable { it.deleteColumn(columnIndex) }
+    fun setTableColumnAlignment(columnIndex: Int, alignment: MarkdownTableAlignment?): Boolean =
+        editSelectedTable { it.setColumnAlignment(columnIndex, alignment) }
+
+    fun deleteTableAtSelection(): Boolean {
+        val located = findSourceTable(text, selection.min) ?: return false
+        replaceRange(located.range.min, located.range.max, "")
+        return true
+    }
+
+    private fun editSelectedTable(transform: (MarkdownSourceTable) -> MarkdownSourceTable): Boolean {
+        val located = findSourceTable(text, selection.min) ?: return false
+        val updated = transform(located.table)
+        if (updated != located.table) {
+            val replacement = updated.toMarkdown()
+            val relativeCaret = (selection.min - located.range.min).coerceIn(0, replacement.length)
+            replaceRange(located.range.min, located.range.max, replacement, relativeCaret)
+        }
+        return true
     }
 
     fun findMatches(query: String, caseSensitive: Boolean = false): List<TextRange> {

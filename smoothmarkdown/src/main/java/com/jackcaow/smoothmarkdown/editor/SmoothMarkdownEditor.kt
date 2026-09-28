@@ -57,6 +57,7 @@ fun SmoothMarkdownEditor(
                 "Task" to MarkdownEditorCommand.TASK_LIST,
                 "Code" to MarkdownEditorCommand.CODE_BLOCK,
                 "Link" to MarkdownEditorCommand.LINK,
+                "Table" to MarkdownEditorCommand.TABLE,
             ).forEach { (label, command) ->
                 TextButton(onClick = { controller.applyCommand(command) }) { Text(label) }
             }

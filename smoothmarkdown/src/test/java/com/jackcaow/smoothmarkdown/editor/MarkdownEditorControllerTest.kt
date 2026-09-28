@@ -53,4 +53,40 @@ class MarkdownEditorControllerTest {
         controller.applyCommand(MarkdownEditorCommand.PARAGRAPH)
         assertEquals("done", controller.text)
     }
+
+    @Test fun tableInsertionMatchesFlutterDefaults() {
+        val controller = MarkdownEditorController()
+        controller.insertTable(rows = 2, columns = 2)
+        assertEquals("| Column | Column |\n| --- | --- |\n| Cell | Cell |", controller.text)
+    }
+
+    @Test fun tableStructureEditsKeepAlignmentAndSupportUndo() {
+        val controller = MarkdownEditorController("before\n\n| A | B |\n| --- | ---: |\n| 1 | 2 |\n\nafter")
+        controller.setSelection(controller.text.indexOf("| 1"))
+        assertTrue(controller.insertTableColumnAfter(0))
+        assertTrue(controller.replaceTableCellText(0, 1, "inserted"))
+        assertTrue(controller.insertTableRowAfter(0))
+        assertEquals(
+            "before\n\n| A |  | B |\n| --- | --- | ---: |\n| 1 | inserted | 2 |\n|  |  |  |\n\nafter",
+            controller.text,
+        )
+        assertTrue(controller.undo())
+        assertFalse(controller.text.contains("|  |  |  |"))
+    }
+
+    @Test fun tableLookupSkipsFencedCodeAndEscapedPipes() {
+        val controller = MarkdownEditorController("```\n| X | Y |\n| --- | --- |\n```\n\n| A \\| B | C |\n| --- | --- |")
+        controller.setSelection(controller.text.indexOf("| X"))
+        assertEquals(null, controller.tableAtSelection())
+        controller.setSelection(controller.text.indexOf("| A"))
+        assertEquals(listOf("A \\| B", "C"), controller.tableAtSelection()?.headers)
+    }
+
+    @Test fun tableOffsetAfterEmojiUsesUtf16AndLongFenceStaysClosed() {
+        val controller = MarkdownEditorController("😀\n\n````\n```\n| X |\n| --- |\n````\n\n| A |\n| --- |")
+        controller.setSelection(controller.text.indexOf("| X"))
+        assertEquals(null, controller.tableAtSelection())
+        controller.setSelection(controller.text.indexOf("| A"))
+        assertEquals(listOf("A"), controller.tableAtSelection()?.headers)
+    }
 }
