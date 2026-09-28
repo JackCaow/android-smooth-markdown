@@ -56,7 +56,7 @@ val dedicatedPages = listOf(
     DemoPage("html", "HTML Tags", "Whitelisted HTML rendering"),
     DemoPage("chat-list", "Chat List", "Virtualized Markdown conversation with streamed replies"),
     DemoPage("ai", "AI Chat", "Offline Thinking, Artifact, ToolCall sample"),
-    DemoPage("conversation-list", "Conversation List", "Static Markdown preview; gestures pending"),
+    DemoPage("conversation-list", "Conversation List", "Twelve conversations and message actions"),
     DemoPage("plugin", "Plugin System", "Mentions, emoji, admonitions"),
     DemoPage("mermaid", "Mermaid diagrams", "Native diagram gallery"),
     DemoPage("performance", "Long document benchmark"),
@@ -73,16 +73,6 @@ This paragraph arrives in small chunks. **Formatting**, lists, and code remain r
 ```kotlin
 StreamMarkdown(chunks = incoming)
 ```
-""".trimIndent()
-    "conversation-list" -> """# Conversation List
-
-Static Markdown preview. Flutter's long-press menus, swipe actions, and multi-select are not ported yet.
-
-### Project discussion
-Latest message: **Build passed**.
-
-### Design review
-Latest message: Please check the [prototype](https://github.com/JackCaow/flutter-smooth-markdown).
 """.trimIndent()
     "ai" -> """# AI Chat Blocks
 
