@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -35,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -56,6 +58,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
@@ -63,13 +67,23 @@ import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
 import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 private val aiPurple = Color(0xFF667EEA)
 private val aiBlue = Color(0xFF007AFF)
+private val qwenModels = listOf(
+    "qwen3-235b-a22b" to "Qwen3 Max (思考模式)",
+    "qwen-max" to "Qwen Max",
+    "qwen-plus" to "Qwen Plus",
+    "qwen-turbo" to "Qwen Turbo",
+)
 
 private data class AIQuickPrompt(
     val id: String,
@@ -149,6 +163,7 @@ private fun AIChatScreen(
     val messages = remember(fixture) { mutableStateListOf(AIChatMessage(0L, fixture.welcome, false)) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val qwen = remember { QwenChatClient() }
     val plugins = remember {
         ParserPluginRegistry().also {
             it.registerAll(listOf(ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
@@ -162,32 +177,61 @@ private fun AIChatScreen(
     var conversationEpoch by remember { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
     var sourceMessage by remember { mutableStateOf<AIChatMessage?>(null) }
+    // Match Flutter's in-memory settings; never bundle or persist a credential.
+    var apiKey by remember { mutableStateOf("") }
+    var selectedModel by remember { mutableStateOf(qwenModels.first().first) }
+    var enableThinking by remember { mutableStateOf(true) }
+    var useRealAPI by remember { mutableStateOf(true) }
 
-    DisposableEffect(Unit) { onDispose { streamJob?.cancel() } }
+    DisposableEffect(Unit) { onDispose { qwen.cancel(); streamJob?.cancel() } }
 
     fun sendMessage(rawText: String) {
         val text = rawText.trim()
         if (text.isEmpty() || streaming) return
         messages += AIChatMessage(nextId++, text, true)
         input = ""
-        val response = fixture.quickPrompts.firstOrNull {
+        val networkKey = apiKey.trim()
+        val networkModel = selectedModel
+        val networkThinking = enableThinking
+        val useNetwork = useRealAPI && networkKey.isNotEmpty()
+        val response = if (useNetwork) "" else (fixture.quickPrompts.firstOrNull {
             text.contains(it.prompt) || it.prompt.contains(text)
-        }?.response ?: fixture.genericResponseTemplate.replace("{{prompt}}", text)
+        }?.response ?: fixture.genericResponseTemplate.replace("{{prompt}}", text))
         val id = nextId++
         val epoch = conversationEpoch
         messages += AIChatMessage(id, "", false)
         streaming = true
-        streamJob = scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                // Kotlin String offsets, like Dart String offsets, count UTF-16 code units.
-                var offset = 0
-                while (offset < response.length) {
-                    val end = (offset + fixture.chunkSizeUTF16).coerceAtMost(response.length)
+                suspend fun append(chunk: String) {
+                    if (epoch != conversationEpoch) return
                     val index = messages.indexOfFirst { it.id == id }
-                    if (index < 0) break
-                    messages[index] = messages[index].copy(content = response.substring(0, end))
-                    offset = end
-                    delay(fixture.delayMillis)
+                    if (index >= 0) messages[index] = messages[index].copy(content = messages[index].content + chunk)
+                }
+                if (useNetwork) {
+                    qwen.stream(text, networkKey, networkModel, networkThinking) { chunk ->
+                        withContext(Dispatchers.Main) { append(chunk) }
+                    }
+                } else {
+                    // Kotlin String offsets, like Dart String offsets, count UTF-16 code units.
+                    var offset = 0
+                    while (offset < response.length) {
+                        val end = (offset + fixture.chunkSizeUTF16).coerceAtMost(response.length)
+                        append(response.substring(offset, end))
+                        offset = end
+                        delay(fixture.delayMillis)
+                    }
+                }
+            } catch (_: CancellationException) {
+                // New conversation or Activity disposal cancelled the active stream.
+            } catch (error: Exception) {
+                if (epoch == conversationEpoch) {
+                    val detail = if (error is QwenHttpException) "API Error: ${error.statusCode}"
+                        else "Network Error: ${error.javaClass.simpleName}"
+                    val index = messages.indexOfFirst { it.id == id }
+                    if (index >= 0) messages[index] = messages[index].copy(
+                        content = "⚠️ **错误**: $detail\n\n请检查 API Key 配置或网络连接。",
+                    )
                 }
             } finally {
                 if (epoch == conversationEpoch) {
@@ -196,10 +240,13 @@ private fun AIChatScreen(
                 }
             }
         }
+        streamJob = job
+        job.start()
     }
 
     fun newChat() {
         conversationEpoch++
+        qwen.cancel()
         streamJob?.cancel()
         streamJob = null
         streaming = false
@@ -226,8 +273,11 @@ private fun AIChatScreen(
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text("AI Chat Demo", style = MaterialTheme.typography.titleMedium)
-                        Text(if (streaming) "正在输入..." else "模拟模式",
-                            color = if (streaming) aiBlue else Color(0xFFFF9500),
+                        Text(if (streaming) "正在输入..." else if (useRealAPI && apiKey.isNotBlank()) {
+                            selectedModel + if (enableThinking && selectedModel.startsWith("qwen3")) " (思考)" else ""
+                        } else "模拟模式",
+                            color = if (streaming) aiBlue else if (useRealAPI && apiKey.isNotBlank())
+                                Color(0xFF34C759) else Color(0xFFFF9500),
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.testTag("ai-status"))
                     }
@@ -293,7 +343,49 @@ private fun AIChatScreen(
         if (showSettings) AlertDialog(
             onDismissRequest = { showSettings = false },
             title = { Text("API 设置") },
-            text = { Text("当前原生 Demo 使用与 Flutter example 相同的模拟响应。真实 Qwen API 需要单独配置密钥；此页面不会发送网络请求。") },
+            text = {
+                Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    OutlinedTextField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it },
+                        label = { Text("Qwen API Key") },
+                        placeholder = { Text("sk-...") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("ai-api-key"),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text("选择模型", style = MaterialTheme.typography.titleSmall)
+                    qwenModels.forEach { (id, label) ->
+                        TextButton(onClick = { selectedModel = id },
+                            modifier = Modifier.testTag("ai-model-$id")) {
+                            Text(if (selectedModel == id) "✓ $label" else label)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("启用思考模式")
+                            Text(if (selectedModel.startsWith("qwen3")) "显示 AI 的推理过程"
+                                else "仅 Qwen3 系列模型支持", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Switch(checked = enableThinking,
+                            onCheckedChange = { enableThinking = it },
+                            enabled = selectedModel.startsWith("qwen3"),
+                            modifier = Modifier.testTag("ai-thinking"))
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("使用真实 API")
+                            Text("关闭时使用模拟响应", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Switch(checked = useRealAPI, onCheckedChange = { useRealAPI = it },
+                            modifier = Modifier.testTag("ai-real-api"))
+                    }
+                    Text("模拟模式可测试所有 AI 格式解析功能",
+                        style = MaterialTheme.typography.labelSmall)
+                }
+            },
             confirmButton = { TextButton(onClick = { showSettings = false }) { Text("关闭") } },
         )
         sourceMessage?.let { message ->
