@@ -121,7 +121,9 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
         if (plugins.inlinePlugins.isNotEmpty()) builder.customInlineContentParserFactory(PluginInlineParserFactory(plugins))
         builder.build()
     }
-    return FootnoteReferencePostProcessor(markdown).process(parser.parse(markdown))
+    val document = parser.parse(markdown)
+    plugins?.transformFencedBlocks(document)
+    return FootnoteReferencePostProcessor(markdown).process(document)
 }
 
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }

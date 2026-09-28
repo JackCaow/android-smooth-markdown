@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.SpanStyle
 import org.commonmark.node.CustomBlock
 import org.commonmark.node.CustomNode
+import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.Node
 import org.commonmark.parser.SourceLine
 import org.commonmark.parser.beta.InlineContentParser
@@ -45,12 +46,14 @@ open class PluginBlockNode : CustomBlock() {
 }
 
 interface BlockParserPlugin : ParserPlugin {
-    fun canStart(line: String): Boolean
+    fun canStart(line: String): Boolean = false
     /** Return null to let the next plugin or CommonMark handle the line. */
-    fun createNode(openingLine: String): PluginBlockNode?
-    fun isClosingLine(line: String): Boolean
+    fun createNode(openingLine: String): PluginBlockNode? = null
+    fun isClosingLine(line: String): Boolean = false
     /** Receives content lines, excluding delimiters, after the block is complete. */
-    fun complete(node: PluginBlockNode, contentLines: List<String>)
+    fun complete(node: PluginBlockNode, contentLines: List<String>) = Unit
+    /** Converts a CommonMark fenced code block after parsing; return null for ordinary code. */
+    fun parseFencedCodeBlock(block: FencedCodeBlock): PluginBlockNode? = null
     @Composable fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit)
 }
 
@@ -96,6 +99,25 @@ class ParserPluginRegistry {
         inlines.firstNotNullOfOrNull { it.render(node) }
     internal fun blockRenderer(node: PluginBlockNode): BlockParserPlugin? =
         blocks.firstOrNull { it.canRender(node) }
+    internal fun transformFencedBlocks(root: Node) {
+        fun visit(parent: Node) {
+            var child = parent.firstChild
+            while (child != null) {
+                val next = child.next
+                if (child is FencedCodeBlock) {
+                    val replacement = blocks.firstNotNullOfOrNull { plugin ->
+                        plugin.parseFencedCodeBlock(child)?.also { it.pluginId = plugin.id }
+                    }
+                    if (replacement != null) {
+                        child.insertBefore(replacement)
+                        child.unlink()
+                    }
+                } else visit(child)
+                child = next
+            }
+        }
+        visit(root)
+    }
 }
 
 /** Rendering dispatch is by the plugin that created the node. */

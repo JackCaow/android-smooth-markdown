@@ -173,18 +173,18 @@ class MermaidFlowchartParser {
         val arrowPattern = Regex("""\s*(====|---->|==>|===|-\.->|-->|---)\s*(\|[^|]*\|)?\s*""")
         val shapePatterns = listOf(
             Regex("""^(\w+)\(\((.+)\)\)$""") to MermaidShape.Circle,
-            Regex("""^(\w+)\{\{(.+)}}$""") to MermaidShape.Hexagon,
-            Regex("""^(\w+)\[\[(.+)]]$""") to MermaidShape.Subroutine,
+            Regex("""^(\w+)\{\{(.+)\}\}$""") to MermaidShape.Hexagon,
+            Regex("""^(\w+)\[\[(.+)\]\]$""") to MermaidShape.Subroutine,
             Regex("""^(\w+)\[\((.+)\)]$""") to MermaidShape.Cylinder,
-            Regex("""^(\w+)\(\[(.+)]\)$""") to MermaidShape.Stadium,
-            Regex("""^(\w+)\[/(.+)/]$""") to MermaidShape.Parallelogram,
-            Regex("""^(\w+)\[\\(.+)\\]$""") to MermaidShape.Parallelogram,
-            Regex("""^(\w+)\[/(.+)\\]$""") to MermaidShape.Trapezoid,
-            Regex("""^(\w+)\[\\(.+)/]$""") to MermaidShape.Trapezoid,
-            Regex("""^(\w+)>(.+)]$""") to MermaidShape.Asymmetric,
-            Regex("""^(\w+)\[(.+)]$""") to MermaidShape.Rectangle,
+            Regex("""^(\w+)\(\[(.+)\]\)$""") to MermaidShape.Stadium,
+            Regex("""^(\w+)\[/(.+)/\]$""") to MermaidShape.Parallelogram,
+            Regex("""^(\w+)\[\\(.+)\\\]$""") to MermaidShape.Parallelogram,
+            Regex("""^(\w+)\[/(.+)\\\]$""") to MermaidShape.Trapezoid,
+            Regex("""^(\w+)\[\\(.+)/\]$""") to MermaidShape.Trapezoid,
+            Regex("""^(\w+)>(.+)\]$""") to MermaidShape.Asymmetric,
+            Regex("""^(\w+)\[(.+)\]$""") to MermaidShape.Rectangle,
             Regex("""^(\w+)\((.+)\)$""") to MermaidShape.Rounded,
-            Regex("""^(\w+)\{(.+)}$""") to MermaidShape.Diamond,
+            Regex("""^(\w+)\{(.+)\}$""") to MermaidShape.Diamond,
         )
         val namedColors = mapOf(
             "red" to 0xFFFF0000.toInt(), "green" to 0xFF00FF00.toInt(), "blue" to 0xFF0000FF.toInt(),
