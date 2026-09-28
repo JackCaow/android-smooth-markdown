@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown.editor
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -10,8 +11,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.keyDown
-import androidx.compose.ui.test.keyUp
 import androidx.compose.ui.input.key.Key
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -53,6 +52,7 @@ class EditorControlsUiTest {
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test fun ctrlFAndCtrlShiftEnterWorkFromFocusedEditor() {
         val controller = MarkdownEditorController("Alpha beta alpha")
         controller.mode = MarkdownEditorMode.SOURCE
