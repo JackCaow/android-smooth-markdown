@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import coil.compose.SubcomposeAsyncImage
@@ -77,6 +78,7 @@ import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.ThematicBreak
 import org.commonmark.node.Text as MarkdownTextNode
 import org.commonmark.parser.Parser
+import org.commonmark.parser.IncludeSourceSpans
 
 private val parser = Parser.builder().extensions(
     listOf(
@@ -85,9 +87,11 @@ private val parser = Parser.builder().extensions(
         TaskListItemsExtension.create(),
         AutolinkExtension.create(),
     ),
-).build()
+).customBlockParserFactory(FootnoteDefinitionParserFactory())
+    .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
+    .build()
 
-internal fun parseMarkdown(markdown: String): Node = parser.parse(markdown)
+internal fun parseMarkdown(markdown: String): Node = FootnoteReferencePostProcessor(markdown).process(parser.parse(markdown))
 
 /** Renders CommonMark and the currently supported GFM extensions with Compose. */
 @Composable
@@ -143,6 +147,20 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         }
         is BulletList, is OrderedList -> MarkdownList(node, onLinkClick, onImageClick, enableHtml)
         is TableBlock -> MarkdownTable(node, onLinkClick, onImageClick, enableHtml)
+        is FootnoteDefinitionNode -> Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+        ) {
+            Text(
+                "[${node.label}]: ",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, color = Color(0xFF1976D2)),
+            )
+            Box(Modifier.weight(1f)) {
+                MarkdownInlineText(
+                    inlineRender(node, enableHtml), MaterialTheme.typography.bodyLarge,
+                    onLinkClick, onImageClick, textAlign, bottomPadding = 0.dp,
+                )
+            }
+        }
         is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
         is HtmlBlock -> {
             val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
@@ -180,12 +198,12 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
 }
 
 @Composable
-private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null) {
+private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp = 12.dp) {
     SelectionContainer {
         ClickableText(
             text = text,
             style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
             onClick = { position ->
                 text.getStringAnnotations("url", position, position).firstOrNull()?.item
                     ?.takeIf(::isSafeLink)?.let(onLinkClick)
@@ -201,9 +219,10 @@ private fun MarkdownInlineText(
     onLinkClick: (String) -> Unit,
     onImageClick: (String) -> Unit,
     textAlign: TextAlign? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
 ) {
     if (render.images.isEmpty()) {
-        MarkdownText(render.text, style, onLinkClick, textAlign)
+        MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
         return
     }
     val density = LocalDensity.current
@@ -226,7 +245,7 @@ private fun MarkdownInlineText(
             text = render.text,
             inlineContent = inline,
             style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).pointerInput(render.text) {
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding).pointerInput(render.text) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
                         render.text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
@@ -393,6 +412,16 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
             is org.commonmark.node.Text -> append(current.literal)
             is Code -> append(current.literal)
             is SoftLineBreak, is HardLineBreak -> append("\n")
+            is FootnoteReferenceNode -> {
+                append("[${current.label}]")
+                addStyle(
+                    SpanStyle(
+                        baselineShift = BaselineShift.Superscript,
+                        fontSize = 0.75.em,
+                        color = Color(0xFF1976D2),
+                    ), start, length,
+                )
+            }
             is Image -> appendImage(SafeHtml.ImageSpec(current.destination, current.plainText(), current.title, null, null))
             is HtmlInline -> {
                 if (!enableHtml) append(current.literal)
