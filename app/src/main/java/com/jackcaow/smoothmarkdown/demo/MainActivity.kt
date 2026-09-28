@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -228,7 +228,8 @@ private fun DemoHome(
             }
         },
     ) {
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
+        Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { scope.launch { drawerState.open() } },
@@ -316,6 +317,7 @@ private fun DemoHome(
         if (!isEditor && pageId != "stream") FloatingActionButton(onClick = { showSource = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("open-source")) {
             Text(localizations.chrome(language, "source"), modifier = Modifier.padding(horizontal = 12.dp))
+        }
         }
         }
         if (showSource) {
