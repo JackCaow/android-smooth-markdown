@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
@@ -38,6 +42,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -68,6 +73,20 @@ private val themeOptions = listOf(
     "VS Code dark" to MarkdownStyleSheet.vscode(dark = true),
 )
 
+// Flutter's six presets share two chrome palettes: each preset selects its own
+// MarkdownStyleSheet, while its brightness controls the surrounding demo page.
+internal fun demoThemeIsDark(themeIndex: Int): Boolean = themeIndex in setOf(1, 3, 5)
+
+internal fun demoColorScheme(themeIndex: Int): ColorScheme = if (demoThemeIsDark(themeIndex)) {
+    darkColorScheme(
+        background = Color(0xFF0D1117),
+        surface = Color(0xFF161B22),
+        surfaceContainerLow = Color(0xFF161B22),
+    )
+} else {
+    lightColorScheme(background = Color.White, surface = Color.White)
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,7 +96,8 @@ class MainActivity : ComponentActivity() {
         val localizations = runCatching { DemoLocalizations.load(assets) }
         val preferences = getSharedPreferences("smooth-markdown-demo", MODE_PRIVATE)
         setContent {
-            MaterialTheme {
+            var themeIndex by rememberSaveable { mutableStateOf(0) }
+            MaterialTheme(colorScheme = demoColorScheme(themeIndex)) {
                 if (examples.isFailure || staticPages.isFailure || streamingFixture.isFailure) {
                     Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message ?: staticPages.exceptionOrNull()?.message ?: streamingFixture.exceptionOrNull()?.message}",
                         modifier = Modifier.safeDrawingPadding().testTag("example-load-error"))
@@ -91,6 +111,8 @@ class MainActivity : ComponentActivity() {
                     localizations = localizations.getOrThrow(),
                     initialLanguage = DemoLanguage.fromCode(preferences.getString("language", null)),
                     onLanguageChange = { preferences.edit().putString("language", it.code).apply() },
+                    themeIndex = themeIndex,
+                    onThemeChange = { themeIndex = it },
                     openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
                     openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
                     openChatList = { startActivity(Intent(this, ChatListActivity::class.java)) },
@@ -111,6 +133,8 @@ private fun DemoHome(
     localizations: DemoLocalizations,
     initialLanguage: DemoLanguage,
     onLanguageChange: (DemoLanguage) -> Unit,
+    themeIndex: Int,
+    onThemeChange: (Int) -> Unit,
     openMermaid: () -> Unit,
     openPerformance: () -> Unit,
     openChatList: () -> Unit,
@@ -124,7 +148,6 @@ private fun DemoHome(
     val language = DemoLanguage.fromCode(languageCode)
     var exampleId by remember { mutableStateOf(examples.first().id) }
     var pageId by remember { mutableStateOf(examples.first().id) }
-    var themeIndex by remember { mutableStateOf(0) }
     var themeMenu by remember { mutableStateOf(false) }
     var showSource by remember { mutableStateOf(false) }
     var exportedLength by remember { mutableStateOf<Int?>(null) }
@@ -158,7 +181,7 @@ private fun DemoHome(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
                     Text(localizations.text(language, "drawer_header_title"),
                         style = MaterialTheme.typography.titleLarge,
@@ -205,7 +228,7 @@ private fun DemoHome(
             }
         },
     ) {
-        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { scope.launch { drawerState.open() } },
@@ -222,7 +245,7 @@ private fun DemoHome(
                     DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
                         themeOptions.forEachIndexed { index, item ->
                             DropdownMenuItem(text = { Text(localizations.theme(language, index)) }, onClick = {
-                                themeIndex = index
+                                onThemeChange(index)
                                 themeMenu = false
                             }, modifier = Modifier.testTag("theme-$index"))
                         }
