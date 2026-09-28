@@ -32,6 +32,17 @@ private val demoMarkdown = """
         A continued line.
     [^2]: Another note.
 
+    <details>
+    <summary>Tap for hidden Markdown</summary>
+    - **First** nested item
+    - Second nested item
+    </details>
+
+    <details open>
+    <summary>Already open</summary>
+    Visible **Markdown** content.
+    </details>
+
     Inline Markdown image ![GitHub](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png) and text.
 
     Inline HTML image <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" width="24" height="24"> and text.

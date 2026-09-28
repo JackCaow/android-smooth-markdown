@@ -27,7 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
@@ -47,6 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.SubcomposeAsyncImage
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -88,6 +94,7 @@ private val parser = Parser.builder().extensions(
         AutolinkExtension.create(),
     ),
 ).customBlockParserFactory(FootnoteDefinitionParserFactory())
+    .customBlockParserFactory(DetailsParserFactory())
     .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
     .build()
 
@@ -147,6 +154,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         }
         is BulletList, is OrderedList -> MarkdownList(node, onLinkClick, onImageClick, enableHtml)
         is TableBlock -> MarkdownTable(node, onLinkClick, onImageClick, enableHtml)
+        is DetailsNode -> MarkdownDetails(node, onLinkClick, onImageClick, enableHtml)
         is FootnoteDefinitionNode -> Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
         ) {
@@ -198,6 +206,51 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
 }
 
 @Composable
+private fun MarkdownDetails(
+    node: DetailsNode,
+    onLinkClick: (String) -> Unit,
+    onImageClick: (String) -> Unit,
+    enableHtml: Boolean,
+) {
+    val expanded = rememberSaveable(node) { mutableStateOf(node.isOpen) }
+    val shape = RoundedCornerShape(6.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clip(shape),
+    ) {
+        Row(
+            Modifier.fillMaxWidth()
+                .semantics { stateDescription = if (expanded.value) "Expanded" else "Collapsed" }
+                .clickable(role = Role.Button) { expanded.value = !expanded.value }
+                .padding(12.dp),
+        ) {
+            Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.weight(1f)) {
+                val summary = node.summary.singleOrNull()
+                if (summary is Paragraph) {
+                    MarkdownInlineText(
+                        inlineRender(summary, enableHtml), MaterialTheme.typography.bodyLarge,
+                        onLinkClick, onImageClick, bottomPadding = 0.dp, interactive = false,
+                    )
+                } else {
+                    Column {
+                        node.summary.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
+                    }
+                }
+            }
+        }
+        if (expanded.value && node.body.isNotEmpty()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                node.body.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp = 12.dp) {
     SelectionContainer {
         ClickableText(
@@ -220,9 +273,15 @@ private fun MarkdownInlineText(
     onImageClick: (String) -> Unit,
     textAlign: TextAlign? = null,
     bottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    interactive: Boolean = true,
 ) {
     if (render.images.isEmpty()) {
-        MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
+        if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
+        else Text(
+            render.text,
+            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
+        )
         return
     }
     val density = LocalDensity.current
@@ -237,8 +296,17 @@ private fun MarkdownInlineText(
                 placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
             ),
         ) {
-            InlineImage(image, width, height, onImageClick)
+            InlineImage(image, width, height, if (interactive) onImageClick else null)
         }
+    }
+    if (!interactive) {
+        Text(
+            text = render.text,
+            inlineContent = inline,
+            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
+        )
+        return
     }
     SelectionContainer {
         Text(
@@ -259,12 +327,13 @@ private fun MarkdownInlineText(
 }
 
 @Composable
-private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: (String) -> Unit) {
+private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: ((String) -> Unit)?) {
     val model = imageModel(image.source) ?: return Text(image.alt)
+    val modifier = Modifier.width(width.dp).height(height.dp)
     SubcomposeAsyncImage(
         model = model,
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
-        modifier = Modifier.width(width.dp).height(height.dp).clickable { onImageClick(image.source) },
+        modifier = if (onImageClick != null) modifier.clickable { onImageClick(image.source) } else modifier,
         contentScale = ContentScale.Fit,
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
