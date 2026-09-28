@@ -52,6 +52,28 @@ class ParserPluginsTest {
         assertEquals("🎉", paragraph.children().filterIsInstance<EmojiNode>().single().emoji)
     }
 
+    @Test fun parsedMentionAndHashtagTapsKeepTheirOwnIdsAndDoNotStealLinksOrCode() {
+        val registry = ParserPluginRegistry().also { it.registerAll(listOf(MentionPlugin(), HashtagPlugin())) }
+        val paragraph = parseMarkdown("Hello @john and #flutter, [@jane](https://example.com) with `@code`", registry)
+            .firstChild as Paragraph
+        val text = inlineText(paragraph, false, registry)
+        assertEquals(listOf("john", "jane"), text.getStringAnnotations("mention", 0, text.length).map { it.item })
+        assertEquals(listOf("flutter"), text.getStringAnnotations("hashtag", 0, text.length).map { it.item })
+        val events = mutableListOf<String>()
+        fun tap(value: String) = dispatchTextTap(
+            text, text.text.indexOf(value) + 1,
+            onLinkClick = { events += "link:$it" },
+            onPlainTextTap = { events += "plain" },
+            onMentionClick = { events += "mention:$it" },
+            onHashtagClick = { events += "hashtag:$it" },
+        )
+        tap("@john")
+        tap("#flutter")
+        tap("@jane")
+        tap("@code")
+        assertEquals(listOf("mention:john", "hashtag:flutter", "link:https://example.com", "plain"), events)
+    }
+
     @Test fun higherPriorityWinsAndNullParseFallsThroughSameTrigger() {
         val registry = ParserPluginRegistry()
         registry.registerInline(object : InlineParserPlugin {

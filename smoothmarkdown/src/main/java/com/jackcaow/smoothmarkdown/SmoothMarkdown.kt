@@ -137,6 +137,8 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }
 private val LocalOnImageClickWithMetadata = compositionLocalOf<((String, String?, String?) -> Unit)?> { null }
 private val LocalImageBuilder = compositionLocalOf<(@Composable (String, String?, String?) -> Unit)?> { null }
+private val LocalOnMentionClick = compositionLocalOf<((String) -> Unit)?> { null }
+private val LocalOnHashtagClick = compositionLocalOf<((String) -> Unit)?> { null }
 
 /** Sends the original image source and metadata to both registered callbacks. */
 internal fun dispatchImageClick(
@@ -171,6 +173,10 @@ fun SmoothMarkdown(
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     /** Compose blocks without an inner scroll container, for use in a virtualized chat item. */
     scrollable: Boolean = true,
+    /** Receives the username without @ when a parsed mention is tapped. */
+    onMentionClick: ((String) -> Unit)? = null,
+    /** Receives the tag without # when a parsed hashtag is tapped. */
+    onHashtagClick: ((String) -> Unit)? = null,
 ) {
     val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
@@ -183,6 +189,8 @@ fun SmoothMarkdown(
         LocalParserPlugins provides plugins,
         LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
         LocalImageBuilder provides imageBuilder,
+        LocalOnMentionClick provides onMentionClick,
+        LocalOnHashtagClick provides onHashtagClick,
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
         if (scrollable) {
@@ -395,6 +403,8 @@ private fun MarkdownDetails(
 @Composable
 private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier, onPlainTextTap: (() -> Unit)? = null) {
     val sheet = LocalMarkdownStyleSheet.current
+    val onMentionClick = LocalOnMentionClick.current
+    val onHashtagClick = LocalOnHashtagClick.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     val links = text.getStringAnnotations("url", 0, text.length).filter { isSafeLink(it.item) }
     val actions = links.map { link ->
@@ -402,18 +412,18 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
             onLinkClick(link.item)
             true
         }
-    }
+    } + pluginAccessibilityActions(text, onMentionClick, onHashtagClick)
     val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-        modifier = if (links.isEmpty() && onPlainTextTap == null) base else base
-            .then(if (links.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
-            .pointerInput(text, onPlainTextTap) {
+        modifier = if (actions.isEmpty() && onPlainTextTap == null) base else base
+            .then(if (actions.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
+            .pointerInput(text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        dispatchTextTap(text, offset, onLinkClick, onPlainTextTap)
+                        dispatchTextTap(text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick)
                     }
                 }
             },
@@ -435,6 +445,8 @@ private fun MarkdownInlineText(
 ) {
     val sheet = LocalMarkdownStyleSheet.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
+    val onMentionClick = LocalOnMentionClick.current
+    val onHashtagClick = LocalOnHashtagClick.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     if (render.images.isEmpty() && render.math.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
@@ -492,7 +504,7 @@ private fun MarkdownInlineText(
             onLinkClick(link.item)
             true
         }
-    } + render.images.values.map { image ->
+    } + pluginAccessibilityActions(render.text, onMentionClick, onHashtagClick) + render.images.values.map { image ->
         CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
             dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
             true
@@ -503,10 +515,10 @@ private fun MarkdownInlineText(
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
             modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-                .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap) {
+                .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        dispatchTextTap(render.text, offset, onLinkClick, onPlainTextTap)
+                        dispatchTextTap(render.text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick)
                     }
                 }
             },
@@ -729,6 +741,10 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                 if (presentation != null) {
                     append(presentation.text)
                     addStyle(presentation.style, start, length)
+                    when (current) {
+                        is MentionNode -> addStringAnnotation("mention", current.username, start, length)
+                        is HashtagNode -> addStringAnnotation("hashtag", current.tag, start, length)
+                    }
                 }
             }
             is Image -> appendImage(SafeHtml.ImageSpec(current.destination, current.plainText(), current.title, null, null))
@@ -784,14 +800,46 @@ internal fun isSafeLink(value: String): Boolean {
 internal fun safeLinkAt(text: AnnotatedString, offset: Int): String? =
     text.getStringAnnotations("url", offset, offset).firstOrNull()?.item?.takeIf(::isSafeLink)
 
+private fun pluginAccessibilityActions(
+    text: AnnotatedString,
+    onMentionClick: ((String) -> Unit)?,
+    onHashtagClick: ((String) -> Unit)?,
+): List<CustomAccessibilityAction> = buildList {
+    if (onMentionClick != null) {
+        text.getStringAnnotations("mention", 0, text.length).forEach { mention ->
+            if (safeLinkAt(text, mention.start) == null) add(CustomAccessibilityAction("Open mention @${mention.item}") {
+                onMentionClick(mention.item)
+                true
+            })
+        }
+    }
+    if (onHashtagClick != null) {
+        text.getStringAnnotations("hashtag", 0, text.length).forEach { hashtag ->
+            if (safeLinkAt(text, hashtag.start) == null) add(CustomAccessibilityAction("Open hashtag #${hashtag.item}") {
+                onHashtagClick(hashtag.item)
+                true
+            })
+        }
+    }
+}
+
 internal fun dispatchTextTap(
     text: AnnotatedString,
     offset: Int,
     onLinkClick: (String) -> Unit,
     onPlainTextTap: (() -> Unit)?,
+    onMentionClick: ((String) -> Unit)? = null,
+    onHashtagClick: ((String) -> Unit)? = null,
 ) {
     val link = safeLinkAt(text, offset)
-    if (link != null) onLinkClick(link) else onPlainTextTap?.invoke()
+    val mention = text.getStringAnnotations("mention", offset, offset).firstOrNull()?.item
+    val hashtag = text.getStringAnnotations("hashtag", offset, offset).firstOrNull()?.item
+    when {
+        link != null -> onLinkClick(link)
+        mention != null && onMentionClick != null -> onMentionClick(mention)
+        hashtag != null && onHashtagClick != null -> onHashtagClick(hashtag)
+        else -> onPlainTextTap?.invoke()
+    }
 }
 
 internal fun isSafeImage(value: String): Boolean =
