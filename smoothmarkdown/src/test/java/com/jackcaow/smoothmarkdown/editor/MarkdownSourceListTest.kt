@@ -135,8 +135,8 @@ class MarkdownSourceListTest {
     }
 
     @Test fun liftsRootItemWithContinuationAndNestedSubtreeAsOneUndoableEdit() {
-        val original = "- first\n- **parent**\n  continuation\n  - child\n    - grandchild\n- last"
-        val expected = "- first\n\n**parent**\ncontinuation\n- child\n  - grandchild\n\n- last"
+        val original = "- first\n- **parent**\n  continuation\n  1. child\n     - grandchild\n- last"
+        val expected = "- first\n\n**parent**\ncontinuation\n1. child\n   - grandchild\n\n- last"
         val controller = MarkdownEditorController(original)
         val id = controller.semanticDocument().blocks.single().id
         controller.setFormattedListSelection(id, listOf(1), 0, androidx.compose.ui.text.TextRange(3))
@@ -144,7 +144,7 @@ class MarkdownSourceListTest {
         assertEquals(expected, controller.text)
         assertEquals(4, controller.semanticDocument().blocks.size)
         assertEquals(MarkdownBlockKind.PARAGRAPH, controller.semanticDocument().blocks[1].kind)
-        assertEquals(MarkdownBlockKind.BULLET_LIST, controller.semanticDocument().blocks[2].kind)
+        assertEquals(MarkdownBlockKind.ORDERED_LIST, controller.semanticDocument().blocks[2].kind)
         assertEquals(androidx.compose.ui.text.TextRange(3), controller.formattedSelection)
         assertTrue(controller.undo())
         assertEquals(original, controller.text)
@@ -154,11 +154,22 @@ class MarkdownSourceListTest {
     }
 
     @Test fun liftsRootOrderedItemWithChildAndKeepsCrLfAndNeighborMarkers() {
-        val original = "7) first\r\n8) parent\r\n   1) child\r\n9) last"
+        val original = "7) first\r\n8) parent\r\n   - child\r\n9) last"
         val controller = MarkdownEditorController(original)
         val id = controller.semanticDocument().blocks.single().id
         assertTrue(controller.outdentFormattedListItem(id, listOf(1)))
-        assertEquals("7) first\r\n\r\nparent\r\n1) child\r\n\r\n9) last", controller.text)
+        assertEquals("7) first\r\n\r\nparent\r\n- child\r\n\r\n9) last", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+    }
+
+    @Test fun liftsLastRootItemEvenWhenItsChildUsesTheSameListKind() {
+        val original = "- first\n- parent\n  - child"
+        val controller = MarkdownEditorController(original)
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.outdentFormattedListItem(id, listOf(1)))
+        assertEquals("- first\n\nparent\n- child", controller.text)
+        assertEquals(3, controller.semanticDocument().blocks.size)
         assertTrue(controller.undo())
         assertEquals(original, controller.text)
     }
@@ -167,6 +178,7 @@ class MarkdownSourceListTest {
         listOf(
             "- parent\n\n  ```text\n  code\n  ```\n- last",
             "- parent\ncontinuation\n  - child\n- last",
+            "- parent\n  - child\n- last",
         ).forEach { original ->
             val controller = MarkdownEditorController(original)
             val id = controller.semanticDocument().blocks.single().id

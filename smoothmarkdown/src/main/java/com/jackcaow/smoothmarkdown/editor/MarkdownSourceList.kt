@@ -116,6 +116,12 @@ internal class MarkdownSourceList private constructor(
         val newline = if (source.contains("\r\n")) "\r\n" else "\n"
         val prefix = before + blockSeparator(before, body, newline)
         val replacement = prefix + body + blockSeparator(body, after, newline) + after
+        val expectedBlocks = listOf(before, body, after).flatMap { fragment ->
+            generateSequence(parseMarkdown(fragment).firstChild) { it.next }.map { it.javaClass }.toList()
+        }
+        val actualBlocks = generateSequence(parseMarkdown(replacement).firstChild) { it.next }
+            .map { it.javaClass }.toList()
+        if (actualBlocks != expectedBlocks) return null
         return LiftEdit(replacement, prefix.length)
     }
 
