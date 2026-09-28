@@ -144,6 +144,7 @@ fun SmoothMarkdown(
 ) {
     val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
+    val selectionGroups = remember(blocks) { groupSelectableBlocks(blocks) }
     CompositionLocalProvider(
         LocalCodeBlockOptions provides codeBlockOptions,
         LocalCodeBlockBuilder provides codeBlockBuilder,
@@ -155,11 +156,33 @@ fun SmoothMarkdown(
             modifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier,
             contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
         ) {
-            itemsIndexed(blocks) { _, block ->
-                MarkdownBlock(block, onLinkClick, onImageClick, enableHtml)
+            itemsIndexed(selectionGroups) { _, group ->
+                if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
+                    MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
+                } else {
+                    SelectionContainer {
+                        Column {
+                            group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+/** Adjacent prose shares one selection registrar; LazyColumn still recycles other blocks. */
+internal fun groupSelectableBlocks(blocks: List<Node>): List<List<Node>> {
+    val groups = mutableListOf<List<Node>>()
+    val pending = mutableListOf<Node>()
+    fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
+    for (block in blocks) {
+        val prose = block is Heading || block is Paragraph || block is BlockQuote ||
+            block is BulletList || block is OrderedList
+        if (prose) pending += block else { flush(); groups += listOf(block) }
+    }
+    flush()
+    return groups
 }
 
 @Composable
@@ -317,7 +340,6 @@ private fun MarkdownDetails(
 private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
-    SelectionContainer {
         ClickableText(
             text = text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -327,7 +349,6 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
                     ?.takeIf(::isSafeLink)?.let(onLinkClick)
             },
         )
-    }
 }
 
 @Composable
@@ -392,7 +413,6 @@ private fun MarkdownInlineText(
         )
         return
     }
-    SelectionContainer {
         Text(
             text = render.text,
             inlineContent = inline,
@@ -407,7 +427,6 @@ private fun MarkdownInlineText(
             },
             onTextLayout = { layout.value = it },
         )
-    }
 }
 
 @Composable
