@@ -30,27 +30,29 @@ fun StreamMarkdown(
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
-    val markdown by produceState(initialValue = "", key1 = chunks, key2 = throttleMillis, key3 = enableHtml) {
-        value = ""
-        val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis(), enableHtml)
+    // HTML is a rendering option, not a new stream. Keep collecting the same
+    // Flow when the switch changes and project the current prefix below.
+    val snapshot by produceState(initialValue = StreamSnapshot(), key1 = chunks, key2 = throttleMillis) {
+        value = StreamSnapshot()
+        val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis())
         var pending: Job? = null
         try {
             chunks.collect { chunk ->
                 val wait = buffer.append(chunk, SystemClock.uptimeMillis())
                 pending?.cancel()
                 if (wait == null) {
-                    value = buffer.visibleText
+                    value = StreamSnapshot(buffer.visibleText)
                 } else {
                     pending = launch {
                         delay(wait)
                         buffer.flush(SystemClock.uptimeMillis())
-                        value = buffer.visibleText
+                        value = StreamSnapshot(buffer.visibleText)
                     }
                 }
             }
             pending?.cancel()
             buffer.finish(SystemClock.uptimeMillis())
-            value = buffer.visibleText
+            value = StreamSnapshot(buffer.visibleText, complete = true)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -59,7 +61,12 @@ fun StreamMarkdown(
             pending?.cancel()
         }
     }
-    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml,
+    SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
         styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
         imageBuilder = imageBuilder)
+}
+
+internal data class StreamSnapshot(val text: String = "", val complete: Boolean = false) {
+    fun renderText(enableHtml: Boolean): String =
+        if (enableHtml && !complete) SafeHtml.safeRenderPrefix(text) else text
 }

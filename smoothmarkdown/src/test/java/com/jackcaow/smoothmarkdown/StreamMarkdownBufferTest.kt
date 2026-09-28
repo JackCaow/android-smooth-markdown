@@ -40,4 +40,24 @@ class StreamMarkdownBufferTest {
         buffer.finish(51)
         assertEquals("lead <font colo", buffer.visibleText)
     }
+
+    @Test fun splitHtmlTagStaysHiddenUntilItsClosingChunkAndSwitchDoesNotLoseSource() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0)
+        assertNull(buffer.append("lead <font colo", 50))
+        val incomplete = StreamSnapshot(buffer.visibleText)
+        assertEquals("lead ", incomplete.renderText(enableHtml = true))
+        assertEquals("lead <font colo", incomplete.renderText(enableHtml = false))
+
+        assertNull(buffer.append("r='red'>red</font> tail", 100))
+        val completeTag = StreamSnapshot(buffer.visibleText)
+        assertEquals("lead <font color='red'>red</font> tail", completeTag.renderText(enableHtml = true))
+        assertEquals(completeTag.text, completeTag.renderText(enableHtml = false))
+    }
+
+    @Test fun completedStreamRevealsUnfinishedTagAsLiteralSource() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0)
+        assertNull(buffer.append("lead <font colo", 50))
+        buffer.finish(51)
+        assertEquals("lead <font colo", StreamSnapshot(buffer.visibleText, complete = true).renderText(enableHtml = true))
+    }
 }
