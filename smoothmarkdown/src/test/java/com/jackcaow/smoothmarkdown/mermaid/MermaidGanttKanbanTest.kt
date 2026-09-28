@@ -49,6 +49,22 @@ class MermaidGanttKanbanTest {
         assertNull(MermaidParser.parse("gantt\n Task :x, 2024-01-01, 3d\n Unknown directive"))
     }
 
+    @Test fun ganttTodayMarkerUsesTheSameInclusiveCalendarRangeAsFlutter() {
+        val source = "gantt\nTask :a, 2024-01-01, 3d"
+        val on = MermaidParser.parse(source)!!.gantt!!
+        val placement = MermaidLayout.compute(MermaidParser.parse(source)!!).gantt!!
+        val firstDay = on.minDay
+        val dayWidth = placement.chartWidth / 3f
+        assertEquals(placement.chartX, placement.todayMarkerX(firstDay, on.todayMarker)!!, 0.001f)
+        assertEquals(placement.chartX + 2f * dayWidth,
+            placement.todayMarkerX(firstDay + 2, on.todayMarker)!!, 0.001f)
+        assertNull(placement.todayMarkerX(firstDay - 1, on.todayMarker))
+        assertNull(placement.todayMarkerX(firstDay + 3, on.todayMarker))
+
+        val off = MermaidParser.parse("gantt\ntodayMarker off\nTask :a, 2024-01-01, 3d")!!.gantt!!
+        assertNull(placement.todayMarkerX(firstDay, off.todayMarker))
+    }
+
     @Test fun kanbanMatchesFlutterMetadataWipAndFrontmatterFixtures() {
         val diagram = MermaidParser.parse("""
             ---

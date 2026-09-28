@@ -1,6 +1,7 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,13 +24,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
+import java.util.GregorianCalendar
 import java.util.Locale
 import java.util.TimeZone
 
 private fun formatDay(day: Long): String = SimpleDateFormat("MMM d, yyyy", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
 }.format(Date(day * 86_400_000L))
+
+private fun currentLocalDay(): Long {
+    val local = Calendar.getInstance()
+    val utc = GregorianCalendar(TimeZone.getTimeZone("UTC")).apply {
+        clear()
+        set(local.get(Calendar.YEAR), local.get(Calendar.MONTH), local.get(Calendar.DAY_OF_MONTH))
+    }
+    return utc.timeInMillis / 86_400_000L
+}
 
 @Composable
 internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
@@ -38,6 +50,7 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
     val foreground = MaterialTheme.colorScheme.onSurface
     val accent = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surfaceVariant
+    val todayX = placement.todayMarkerX(currentLocalDay(), data.todayMarker)
     Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
         Box(Modifier.size(layout.width.dp, layout.height.dp)) {
             Canvas(Modifier.fillMaxSize()) {
@@ -77,6 +90,10 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                             Size(bar.width.dp.toPx(), bar.height.dp.toPx()), CornerRadius(4.dp.toPx()))
                     }
                 }
+                todayX?.let { x ->
+                    val markerX = x.dp.toPx()
+                    drawLine(Color(0xFFE91E63), Offset(markerX, top), Offset(markerX, bottom), 2.dp.toPx())
+                }
             }
             data.title?.let {
                 Text(it, Modifier.offset(16.dp, 10.dp).width((layout.width - 32f).dp),
@@ -87,6 +104,12 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
             Text(formatDay(placement.maxDay),
                 Modifier.offset((placement.chartX + placement.chartWidth - 90f).dp, placement.headerY.dp),
                 color = foreground, style = MaterialTheme.typography.labelSmall)
+            todayX?.let { x ->
+                Text("Today", Modifier.offset((x - 18f).dp, (placement.headerY + 31f).dp)
+                    .background(Color(0xFFE91E63).copy(alpha = 0.1f)),
+                    color = Color(0xFFE91E63), style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold)
+            }
             placement.tasks.forEach { item ->
                 val label = item.task.section?.let { "$it · ${item.task.name}" } ?: item.task.name
                 Text(label, Modifier.offset(16.dp, (item.rowY + 12f).dp).width(164.dp),

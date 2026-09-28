@@ -23,6 +23,14 @@ data class MermaidGanttPlacement(
     val chartX: Float, val chartWidth: Float, val headerY: Float, val minDay: Long, val maxDay: Long,
     val tasks: List<MermaidGanttTaskPlacement>,
 )
+
+/** Flutter draws the marker only when today falls inside the chart's date range. */
+internal fun MermaidGanttPlacement.todayMarkerX(todayDay: Long, enabled: Boolean): Float? {
+    if (!enabled || todayDay !in minDay..maxDay) return null
+    val dayCount = (maxDay - minDay + 1).coerceAtLeast(1)
+    return chartX + (todayDay - minDay).toFloat() * chartWidth / dayCount.toFloat()
+}
+
 data class MermaidKanbanColumnPlacement(
     val column: MermaidKanbanColumn, val box: MermaidRect, val cards: List<MermaidRect>,
 )
