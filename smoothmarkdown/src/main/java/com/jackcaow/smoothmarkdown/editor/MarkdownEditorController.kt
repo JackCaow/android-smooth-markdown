@@ -93,6 +93,19 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         updateValue(TextFieldValue(updated, TextRange(nextStart, nextEnd)))
     }
 
+    /** A source-backed semantic snapshot for block-level editing. */
+    fun semanticDocument(): MarkdownDocument = MarkdownDocumentCodec.parse(text)
+
+    /** Replaces one complete semantic block through the existing source undo history. */
+    fun replaceSemanticBlock(blockId: String, markdown: String): Boolean {
+        val current = semanticDocument()
+        val block = current.blockById(blockId) ?: return false
+        val editor = MarkdownDocumentEditor(current.source)
+        if (!editor.replaceBlockSource(blockId, markdown)) return false
+        replaceRange(block.range.min, block.range.max, markdown)
+        return true
+    }
+
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
 
     fun insertMarkdownBlock(markdown: String) {
