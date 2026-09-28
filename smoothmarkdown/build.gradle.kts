@@ -26,6 +26,7 @@ dependencies {
     implementation("org.commonmark:commonmark-ext-task-list-items:0.30.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.30.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation("junit:junit:4.13.2")
 }

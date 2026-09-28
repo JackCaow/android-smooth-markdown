@@ -55,6 +55,12 @@ private val demoMarkdown = """
 
     <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="HTML GitHub logo" width="64" height="64">
 
+    SVG network: ![W3C SVG](https://www.w3.org/Icons/SVG/svg-logo-v.svg)
+
+    SVG asset: ![Bundled SVG](smooth-markdown-mark.svg)
+
+    Inline SVG ![mark](smooth-markdown-mark.svg) stays in this sentence.
+
     - [x] Render headings and emphasis
     - [ ] Complete formatted-block editing
 

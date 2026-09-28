@@ -53,7 +53,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
+import coil.decode.SvgDecoder
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -331,7 +334,7 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
     val model = imageModel(image.source) ?: return Text(image.alt)
     val modifier = Modifier.width(width.dp).height(height.dp)
     SubcomposeAsyncImage(
-        model = model,
+        model = imageRequest(image.source, model),
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
         modifier = if (onImageClick != null) modifier.clickable { onImageClick(image.source) } else modifier,
         contentScale = ContentScale.Fit,
@@ -368,13 +371,28 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
     SubcomposeAsyncImage(
-        model = model,
+        model = imageRequest(url, model),
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
         modifier = imageModifier.clickable { onImageClick(url) },
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
     )
 }
+
+@Composable
+private fun imageRequest(source: String, model: String): Any {
+    if (!isSvgImageSource(source)) return model
+    val context = LocalContext.current
+    return remember(context, model) {
+        ImageRequest.Builder(context)
+            .data(model)
+            .decoderFactory(SvgDecoder.Factory())
+            .build()
+    }
+}
+
+internal fun isSvgImageSource(source: String): Boolean =
+    source.substringBefore('#').substringBefore('?').endsWith(".svg", ignoreCase = true)
 
 private fun imageModel(url: String): String? {
     val local = url.isNotBlank() && !url.startsWith("//") && !url.contains("..") && !url.contains(':') && !url.contains('\\')
