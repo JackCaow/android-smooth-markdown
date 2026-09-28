@@ -86,6 +86,12 @@ private val qwenModels = listOf(
     "qwen-plus" to "Qwen Plus",
     "qwen-turbo" to "Qwen Turbo",
 )
+private val deepSeekModels = listOf(
+    "deepseek-flash" to "DeepSeek Flash",
+    "deepseek-v4-pro" to "DeepSeek V4 Pro",
+)
+
+private enum class AIProvider { QWEN, DEEPSEEK }
 
 private data class AIQuickPrompt(
     val id: String,
@@ -167,6 +173,7 @@ private fun AIChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val qwen = remember { QwenChatClient() }
+    val deepSeek = remember { DeepSeekChatClient() }
     val plugins = remember {
         ParserPluginRegistry().also {
             it.registerAll(listOf(ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
@@ -181,12 +188,18 @@ private fun AIChatScreen(
     var showSettings by remember { mutableStateOf(false) }
     var sourceMessage by remember { mutableStateOf<AIChatMessage?>(null) }
     // Match Flutter's in-memory settings; never bundle or persist a credential.
-    var apiKey by remember { mutableStateOf("") }
-    var selectedModel by remember { mutableStateOf(qwenModels.first().first) }
+    var provider by remember { mutableStateOf(AIProvider.QWEN) }
+    var qwenApiKey by remember { mutableStateOf("") }
+    var deepSeekApiKey by remember { mutableStateOf("") }
+    var qwenModel by remember { mutableStateOf(qwenModels.first().first) }
+    var deepSeekModel by remember { mutableStateOf(deepSeekModels.first().first) }
     var enableThinking by remember { mutableStateOf(true) }
     var useRealAPI by remember { mutableStateOf(true) }
 
-    DisposableEffect(Unit) { onDispose { qwen.cancel(); streamJob?.cancel() } }
+    val selectedModel = if (provider == AIProvider.QWEN) qwenModel else deepSeekModel
+    val apiKey = if (provider == AIProvider.QWEN) qwenApiKey else deepSeekApiKey
+
+    DisposableEffect(Unit) { onDispose { qwen.cancel(); deepSeek.cancel(); streamJob?.cancel() } }
 
     fun sendMessage(rawText: String) {
         val text = rawText.trim()
@@ -194,6 +207,7 @@ private fun AIChatScreen(
         messages += AIChatMessage(nextId++, text, true)
         input = ""
         val networkKey = apiKey.trim()
+        val networkProvider = provider
         val networkModel = selectedModel
         val networkThinking = enableThinking
         val useNetwork = useRealAPI && networkKey.isNotEmpty()
@@ -213,8 +227,12 @@ private fun AIChatScreen(
                     if (index >= 0) messages[index] = messages[index].copy(content = session.append(chunk))
                 }
                 if (useNetwork) {
-                    qwen.stream(text, networkKey, networkModel, networkThinking) { chunk ->
+                    val onChunk: suspend (String) -> Unit = { chunk ->
                         withContext(Dispatchers.Main) { append(chunk) }
+                    }
+                    when (networkProvider) {
+                        AIProvider.QWEN -> qwen.stream(text, networkKey, networkModel, networkThinking, onChunk)
+                        AIProvider.DEEPSEEK -> deepSeek.stream(text, networkKey, networkModel, networkThinking, onChunk)
                     }
                 } else {
                     // Kotlin String offsets, like Dart String offsets, count UTF-16 code units.
@@ -231,8 +249,11 @@ private fun AIChatScreen(
             } catch (error: Exception) {
                 if (epoch == conversationEpoch) {
                     session.cancel()
-                    val detail = if (error is QwenHttpException) "API Error: ${error.statusCode}"
-                        else "Network Error: ${error.javaClass.simpleName}"
+                    val detail = when (error) {
+                        is QwenHttpException -> "API Error: ${error.statusCode}"
+                        is DeepSeekHttpException -> "API Error: ${error.statusCode}"
+                        else -> "Network Error: ${error.javaClass.simpleName}"
+                    }
                     val index = messages.indexOfFirst { it.id == id }
                     if (index >= 0) messages[index] = messages[index].copy(
                         content = "⚠️ **错误**: $detail\n\n请检查 API Key 配置或网络连接。",
@@ -260,6 +281,7 @@ private fun AIChatScreen(
         conversationEpoch++
         messages.forEach { it.streamSession?.cancel() }
         qwen.cancel()
+        deepSeek.cancel()
         streamJob?.cancel()
         streamJob = null
         streaming = false
@@ -287,7 +309,8 @@ private fun AIChatScreen(
                     Column(Modifier.weight(1f)) {
                         Text("AI Chat Demo", style = MaterialTheme.typography.titleMedium)
                         Text(if (streaming) "正在输入..." else if (useRealAPI && apiKey.isNotBlank()) {
-                            selectedModel + if (enableThinking && selectedModel.startsWith("qwen3")) " (思考)" else ""
+                            selectedModel + if (enableThinking &&
+                                (provider == AIProvider.DEEPSEEK || selectedModel.startsWith("qwen3"))) " (思考)" else ""
                         } else "模拟模式",
                             color = if (streaming) aiBlue else if (useRealAPI && apiKey.isNotBlank())
                                 Color(0xFF34C759) else Color(0xFFFF9500),
@@ -358,10 +381,23 @@ private fun AIChatScreen(
             title = { Text("API 设置") },
             text = {
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                    Text("服务商", style = MaterialTheme.typography.titleSmall)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(AIProvider.QWEN to "Qwen", AIProvider.DEEPSEEK to "DeepSeek")
+                            .forEach { (choice, label) ->
+                                AssistChip(
+                                    onClick = { provider = choice },
+                                    label = { Text(if (provider == choice) "✓ $label" else label) },
+                                    modifier = Modifier.testTag("ai-provider-${choice.name.lowercase()}"),
+                                )
+                            }
+                    }
                     OutlinedTextField(
                         value = apiKey,
-                        onValueChange = { apiKey = it },
-                        label = { Text("Qwen API Key") },
+                        onValueChange = {
+                            if (provider == AIProvider.QWEN) qwenApiKey = it else deepSeekApiKey = it
+                        },
+                        label = { Text(if (provider == AIProvider.QWEN) "Qwen API Key" else "DeepSeek API Key") },
                         placeholder = { Text("sk-...") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -370,8 +406,10 @@ private fun AIChatScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text("选择模型", style = MaterialTheme.typography.titleSmall)
-                    qwenModels.forEach { (id, label) ->
-                        TextButton(onClick = { selectedModel = id },
+                    (if (provider == AIProvider.QWEN) qwenModels else deepSeekModels).forEach { (id, label) ->
+                        TextButton(onClick = {
+                            if (provider == AIProvider.QWEN) qwenModel = id else deepSeekModel = id
+                        },
                             modifier = Modifier.testTag("ai-model-$id")) {
                             Text(if (selectedModel == id) "✓ $label" else label)
                         }
@@ -379,12 +417,13 @@ private fun AIChatScreen(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("启用思考模式")
-                            Text(if (selectedModel.startsWith("qwen3")) "显示 AI 的推理过程"
-                                else "仅 Qwen3 系列模型支持", style = MaterialTheme.typography.labelSmall)
+                            Text(if (provider == AIProvider.DEEPSEEK || selectedModel.startsWith("qwen3"))
+                                "显示 AI 的推理过程" else "仅 Qwen3 系列模型支持",
+                                style = MaterialTheme.typography.labelSmall)
                         }
                         Switch(checked = enableThinking,
                             onCheckedChange = { enableThinking = it },
-                            enabled = selectedModel.startsWith("qwen3"),
+                            enabled = provider == AIProvider.DEEPSEEK || selectedModel.startsWith("qwen3"),
                             modifier = Modifier.testTag("ai-thinking"))
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
