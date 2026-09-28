@@ -106,6 +106,23 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         return true
     }
 
+    /** Changes the visible text of a supported formatted block using source history. */
+    fun replaceFormattedBlockText(blockId: String, visibleText: String): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val markdown = MarkdownFormattedBlock.markdown(block, visibleText) ?: return false
+        return replaceSemanticBlock(blockId, markdown)
+    }
+
+    /** Changes an ATX heading level while preserving its text and surrounding source. */
+    fun setSemanticHeadingLevel(blockId: String, level: Int): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val editor = MarkdownDocumentEditor(text)
+        if (!editor.setHeadingLevel(blockId, level)) return false
+        val replacement = editor.document.blocks.firstOrNull { it.id == blockId }?.source ?: return false
+        replaceRange(block.range.min, block.range.max, replacement)
+        return true
+    }
+
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
 
     fun insertMarkdownBlock(markdown: String) {
@@ -267,4 +284,4 @@ enum class MarkdownEditorCommand {
     LINK, IMAGE, TABLE, BLOCK_MATH, MERMAID_DIAGRAM, HORIZONTAL_RULE, WIKILINK,
 }
 
-enum class MarkdownEditorMode { SOURCE, PREVIEW, SPLIT }
+enum class MarkdownEditorMode { SOURCE, PREVIEW, SPLIT, FORMATTED }
