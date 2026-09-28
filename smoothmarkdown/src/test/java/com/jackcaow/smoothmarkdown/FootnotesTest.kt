@@ -45,6 +45,12 @@ class FootnotesTest {
         assertEquals("[^escaped] and [real]", inlineText(paragraph, enableHtml = false).text)
     }
 
+    @Test fun escapedReferenceInsideDefinitionStaysLiteral() {
+        val definition = parseMarkdown("[^note]: \\[^same] then [^same] and \\[^other] then [^other]").firstChild as FootnoteDefinitionNode
+        assertEquals(listOf("same", "other"), definition.children().filterIsInstance<FootnoteReferenceNode>().map { it.label }.toList())
+        assertEquals("[^same] then [same] and [^other] then [other]", inlineText(definition, enableHtml = false).text)
+    }
+
     @Test fun emptyDefinitionIsNotClaimedAsFootnote() {
         assertTrue(parseMarkdown("[^a]: ").firstChild is Paragraph)
     }

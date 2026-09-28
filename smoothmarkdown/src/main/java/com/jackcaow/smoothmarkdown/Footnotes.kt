@@ -19,11 +19,14 @@ import org.commonmark.parser.block.ParserState
 
 internal class FootnoteReferenceNode(val label: String) : CustomNode()
 
-internal class FootnoteDefinitionNode(val label: String) : CustomBlock()
+internal class FootnoteDefinitionNode(val label: String) : CustomBlock() {
+    internal var rawInlineSource: String = ""
+}
 
 /** CommonMark consumes unknown square brackets before custom inline parsers run. */
 internal class FootnoteReferencePostProcessor(private val source: String) : PostProcessor {
     private val reference = Regex("\\[\\^([^]]+)]")
+    private val definitionMatchCursors = java.util.IdentityHashMap<FootnoteDefinitionNode, Int>()
 
     override fun process(node: Node): Node {
         visit(node)
@@ -44,13 +47,15 @@ internal class FootnoteReferencePostProcessor(private val source: String) : Post
         val literal = text.literal
         val matches = reference.findAll(literal).toList()
         if (matches.isEmpty()) return
-        val raw = text.sourceSpans.joinToString("") { span ->
+        val definition = generateSequence(text.parent) { it.parent }.filterIsInstance<FootnoteDefinitionNode>().firstOrNull()
+        val hasSourceSpans = text.sourceSpans.isNotEmpty()
+        val raw = if (!hasSourceSpans && definition != null) definition.rawInlineSource else text.sourceSpans.joinToString("") { span ->
             source.substring(span.inputIndex, (span.inputIndex + span.length).coerceAtMost(source.length))
         }
         val sourceMatches = reference.findAll(raw).toList()
-        var sourceIndex = 0
+        var sourceIndex = if (!hasSourceSpans && definition != null) definitionMatchCursors[definition] ?: 0 else 0
         val accepted = matches.filter { rendered ->
-            if (text.sourceSpans.isEmpty()) return@filter true
+            if (!hasSourceSpans && definition == null) return@filter true
             while (sourceIndex < sourceMatches.size && sourceMatches[sourceIndex].groupValues[1] != rendered.groupValues[1]) {
                 sourceIndex++
             }
@@ -58,6 +63,7 @@ internal class FootnoteReferencePostProcessor(private val source: String) : Post
             val slashCount = raw.substring(0, original.range.first).takeLastWhile { it == '\\' }.length
             slashCount % 2 == 0
         }
+        if (!hasSourceSpans && definition != null) definitionMatchCursors[definition] = sourceIndex
         if (accepted.isEmpty()) return
         var cursor = 0
         accepted.forEach { match ->
@@ -105,6 +111,7 @@ private class FootnoteDefinitionParser(label: String, firstLine: String) : Abstr
     }
 
     override fun parseInlines(inlineParser: InlineParser) {
+        footnote.rawInlineSource = lines.joinToString("\n")
         val source = SourceLines.of(lines.map { SourceLine.of(it, null) })
         inlineParser.parse(source, footnote)
     }
