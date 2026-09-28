@@ -239,7 +239,7 @@ private fun DemoHome(
             if (isEditor) {
                 Text("Scratch-style editor preview", style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(horizontal = 16.dp).testTag("editor-intro"))
-                Text("Toolbar, slash-style note links, source and formatted modes, Markdown import/export, image selection, table editing, and search.",
+                Text("Toolbar, slash commands, wikilinks, source and formatted modes, Markdown import/export, image selection, table editing, search, and focus mode.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 exportedLength?.let {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -72,6 +74,12 @@ fun SmoothMarkdownEditor(
     val scope = rememberCoroutineScope()
     var hostActionBusy by remember { mutableStateOf(false) }
     var hostStatus by remember { mutableStateOf("") }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var focusMode by remember { mutableStateOf(false) }
+    val searchMatches = if (searchOpen) controller.findMatches(searchQuery) else emptyList()
+    val slashTrigger = if (controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
+    val slashSuggestions = slashTrigger?.let(MarkdownSlashCommands::suggestions).orEmpty()
     fun runHostAction(label: String, action: suspend () -> MarkdownEditorHostResult) {
         if (hostActionBusy) return
         hostActionBusy = true
@@ -87,14 +95,14 @@ fun SmoothMarkdownEditor(
         }
     }
     Column(modifier) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Row {
-                MarkdownEditorMode.entries.forEach { mode ->
-                    TextButton(onClick = { controller.mode = mode }) {
-                        Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
+        if (!focusMode) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row {
+                    MarkdownEditorMode.entries.forEach { mode ->
+                        TextButton(onClick = { controller.mode = mode }) {
+                            Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
+                        }
                     }
                 }
-            }
             if (onSave != null) {
                 Button(onClick = {
                     onSave(controller.text)
@@ -102,7 +110,45 @@ fun SmoothMarkdownEditor(
                 }, enabled = controller.isDirty) { Text("Save") }
             }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { focusMode = !focusMode }, modifier = Modifier.testTag(if (focusMode) "editor-exit-focus" else "editor-focus-mode")) {
+                Text(if (focusMode) "Exit focus" else "Focus mode")
+            }
+            TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
+                Text(if (searchOpen) "Close find" else "Find")
+            }
+        }
+        if (searchOpen) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Find in note") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("editor-search-query"),
+                )
+                Row {
+                    Text("${searchMatches.size} matches", modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
+                    TextButton(onClick = {
+                        if (controller.selectPreviousMatch(searchQuery) != null) controller.mode = MarkdownEditorMode.SOURCE
+                    }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-previous")) { Text("Previous") }
+                    TextButton(onClick = {
+                        if (controller.selectNextMatch(searchQuery) != null) controller.mode = MarkdownEditorMode.SOURCE
+                    }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-next")) { Text("Next") }
+                }
+            }
+        }
+        if (slashTrigger != null && slashSuggestions.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).testTag("editor-slash-suggestions")) {
+                slashSuggestions.take(6).forEachIndexed { index, (label, command) ->
+                    TextButton(
+                        onClick = { MarkdownSlashCommands.apply(controller, slashTrigger, command) },
+                        modifier = Modifier.testTag("editor-slash-suggestion-$index"),
+                    ) { Text(label) }
+                }
+            }
+        }
+        if (!focusMode) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text("Undo") }
             TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text("Redo") }
             listOf(

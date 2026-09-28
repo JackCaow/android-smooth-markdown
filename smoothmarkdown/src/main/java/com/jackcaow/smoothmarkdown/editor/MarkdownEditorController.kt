@@ -323,6 +323,14 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         return next
     }
 
+    fun selectPreviousMatch(query: String, caseSensitive: Boolean = false): TextRange? {
+        val matches = findMatches(query, caseSensitive)
+        if (matches.isEmpty()) return null
+        val previous = matches.lastOrNull { it.end <= selection.min } ?: matches.last()
+        setSelection(previous.start, previous.end)
+        return previous
+    }
+
     fun applyCommand(command: MarkdownEditorCommand, argument: String? = null) {
         if (mode == MarkdownEditorMode.FORMATTED && command in setOf(
                 MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,

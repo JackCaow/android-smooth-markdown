@@ -46,6 +46,9 @@ class MarkdownEditorControllerTest {
         assertEquals(listOf(TextRange(0, 5), TextRange(11, 16)), controller.findMatches("alpha"))
         controller.setSelection(0, 5)
         assertEquals(TextRange(11, 16), controller.selectNextMatch("alpha"))
+        assertEquals(TextRange(0, 5), controller.selectPreviousMatch("alpha"))
+        assertEquals("Alpha beta alpha", controller.text)
+        assertFalse(controller.canUndo)
     }
 
     @Test fun paragraphRemovesTaskMarker() {
