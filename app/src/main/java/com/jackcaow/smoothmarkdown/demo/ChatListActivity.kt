@@ -52,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.SmoothMarkdownCache
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -194,14 +195,27 @@ private fun ChatListScreen(
             }
         }
         }
-        if (showStats) AlertDialog(
-            onDismissRequest = { showStats = false },
-            title = { Text("Cache Statistics") },
-            text = { Text("Cache statistics are not available in the Android renderer yet.") },
-            confirmButton = {
-                TextButton(onClick = { showStats = false }) { Text("Close") }
-            },
-        )
+        if (showStats) {
+            val stats = SmoothMarkdownCache.statistics
+            AlertDialog(
+                onDismissRequest = { showStats = false },
+                title = { Text("Cache Statistics") },
+                text = { Column {
+                    Text("Cached Entries: ${stats.size}")
+                    Text("Max Capacity: ${stats.maxSize}")
+                    Text("Utilization: ${"%.1f".format(stats.utilization * 100)}%")
+                } },
+                confirmButton = {
+                    TextButton(onClick = { showStats = false }) { Text("Close") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        SmoothMarkdownCache.clear()
+                        showStats = false
+                    }) { Text("Clear Cache") }
+                },
+            )
+        }
     }
 }
 

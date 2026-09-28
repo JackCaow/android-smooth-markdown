@@ -116,6 +116,7 @@ private val baseParser = Parser.builder().extensions(
     .build()
 
 internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null): Node {
+    if (plugins == null) SmoothMarkdownCache.get(markdown)?.let { return it }
     val parser = if (plugins == null || (plugins.blockPlugins.isEmpty() && plugins.inlinePlugins.isEmpty())) baseParser else {
         val builder = Parser.builder().extensions(listOf(
             StrikethroughExtension.create(), TablesExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create(),
@@ -131,7 +132,9 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     }
     val document = parser.parse(markdown)
     plugins?.transformFencedBlocks(document)
-    return FootnoteReferencePostProcessor(markdown).process(document)
+    val result = FootnoteReferencePostProcessor(markdown).process(document)
+    if (plugins == null) SmoothMarkdownCache.put(markdown, result)
+    return result
 }
 
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }

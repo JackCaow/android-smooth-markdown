@@ -57,6 +57,7 @@ fun SmoothMarkdownEditor(
     onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Unit)? = null,
     onImportMarkdown: (suspend () -> String?)? = null,
     onExportMarkdown: (suspend (String) -> Unit)? = null,
+    onExportPdf: (suspend (String, String) -> Unit)? = null,
     onHostActionError: ((MarkdownEditorHostAction, Throwable) -> Unit)? = null,
     enableWikilinks: Boolean = true,
     wikilinkSuggestions: List<String> = emptyList(),
@@ -137,6 +138,13 @@ fun SmoothMarkdownEditor(
                         MarkdownEditorHostActions.exportMarkdown(controller, onExportMarkdown, onHostActionError)
                     }
                 }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text("Export") }
+            }
+            if (onExportPdf != null) {
+                TextButton(onClick = {
+                    runHostAction("PDF export") {
+                        MarkdownEditorHostActions.exportPdf(controller, onExportPdf, onHostActionError)
+                    }
+                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-pdf")) { Text("Export PDF") }
             }
         }
         if (hostStatus.isNotEmpty()) Text(hostStatus, modifier = Modifier.testTag("editor-host-status"))

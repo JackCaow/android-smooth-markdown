@@ -87,6 +87,21 @@ class MarkdownEditorHostActionsTest {
         assertFalse(controller.canUndo)
     }
 
+    @Test fun pdfExportReceivesMarkdownAndHtmlWithoutChangingDocument() = runBlocking {
+        val controller = MarkdownEditorController("# Exact\n\nA **bold** note")
+        var markdown = ""
+        var html = ""
+        assertEquals(MarkdownEditorHostResult.SUCCESS,
+            MarkdownEditorHostActions.exportPdf(controller, { source, rendered ->
+                markdown = source
+                html = rendered
+            }))
+        assertEquals(controller.text, markdown)
+        assertTrue(html.contains("<h1>Exact</h1>"))
+        assertTrue(html.contains("<strong>bold</strong>"))
+        assertFalse(controller.canUndo)
+    }
+
     @Test fun imageMarkdownEscapesAltTitleAndDestination() {
         assertEquals("![a\\[b\\]](assets/a\\(1\\).png \"A \\\"title\\\"\")",
             MarkdownEditorHostActions.imageMarkdown(

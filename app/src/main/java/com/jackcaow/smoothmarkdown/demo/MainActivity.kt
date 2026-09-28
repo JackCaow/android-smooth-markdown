@@ -128,6 +128,7 @@ private fun DemoHome(
     var themeMenu by remember { mutableStateOf(false) }
     var showSource by remember { mutableStateOf(false) }
     var exportedLength by remember { mutableStateOf<Int?>(null) }
+    var pdfExportLength by remember { mutableStateOf<Int?>(null) }
     var tappedWikilink by remember { mutableStateOf<String?>(null) }
     val example = examples.first { it.id == exampleId }
     val specialPage = dedicatedPages.firstOrNull { it.id == pageId }
@@ -245,6 +246,10 @@ private fun DemoHome(
                     Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
                 }
+                pdfExportLength?.let {
+                    Text("PDF export requested for $it characters",
+                        modifier = Modifier.testTag("pdf-export-status"))
+                }
                 tappedWikilink?.let { Text("Wikilink: $it", modifier = Modifier.testTag("wikilink-tap-status")) }
                 SmoothMarkdownEditor(
                     controller = controller,
@@ -252,6 +257,7 @@ private fun DemoHome(
                     onPickImage = { MarkdownEditorImageSelection("https://picsum.photos/640/360", "Sample image", "Demo image") },
                     onImportMarkdown = { "## Imported markdown\n\nThis came from the host callback." },
                     onExportMarkdown = { exportedLength = it.length },
+                    onExportPdf = { markdown, _ -> pdfExportLength = markdown.length },
                     wikilinkSuggestions = listOf("Daily Notes", "Project Plan", "Research Index", "Scratch Reference"),
                     onTapWikilink = { tappedWikilink = it },
                 )

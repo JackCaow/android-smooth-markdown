@@ -2,6 +2,12 @@ package com.jackcaow.smoothmarkdown.editor
 
 import com.jackcaow.smoothmarkdown.SafeHtml
 import kotlinx.coroutines.CancellationException
+import org.commonmark.ext.autolink.AutolinkExtension
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.ext.gfm.tables.TablesExtension
+import org.commonmark.ext.task.list.items.TaskListItemsExtension
+import org.commonmark.parser.Parser
+import org.commonmark.renderer.html.HtmlRenderer
 
 /** Image data supplied by an app picker or uploader. */
 data class MarkdownEditorImageSelection(val url: String, val alt: String = "", val title: String? = null)
@@ -14,11 +20,34 @@ data class MarkdownEditorImagePickEvent(
     val error: Throwable? = null,
 )
 
-enum class MarkdownEditorHostAction { IMAGE, IMPORT_MARKDOWN, EXPORT_MARKDOWN }
+enum class MarkdownEditorHostAction { IMAGE, IMPORT_MARKDOWN, EXPORT_MARKDOWN, EXPORT_PDF }
 enum class MarkdownEditorHostResult { SUCCESS, CANCELLED, STALE, FAILED }
 
 /** Source-backed host operations shared by the Compose editor and focused JVM tests. */
 object MarkdownEditorHostActions {
+    private val htmlExtensions = listOf(
+        TablesExtension.create(), StrikethroughExtension.create(),
+        TaskListItemsExtension.create(), AutolinkExtension.create(),
+    )
+
+    /** Flutter's PDF action asks the host to create a PDF from Markdown and rendered HTML. */
+    suspend fun exportPdf(
+        controller: MarkdownEditorController,
+        exporter: suspend (String, String) -> Unit,
+        onError: ((MarkdownEditorHostAction, Throwable) -> Unit)? = null,
+    ): MarkdownEditorHostResult = try {
+        val markdown = controller.text
+        val document = Parser.builder().extensions(htmlExtensions).build().parse(markdown)
+        val html = HtmlRenderer.builder().extensions(htmlExtensions).escapeHtml(true).build().render(document)
+        exporter(markdown, html)
+        MarkdownEditorHostResult.SUCCESS
+    } catch (cancelled: CancellationException) {
+        MarkdownEditorHostResult.CANCELLED
+    } catch (error: Throwable) {
+        onError?.invoke(MarkdownEditorHostAction.EXPORT_PDF, error)
+        MarkdownEditorHostResult.FAILED
+    }
+
     suspend fun pickAndInsertImage(
         controller: MarkdownEditorController,
         picker: suspend () -> MarkdownEditorImageSelection?,
