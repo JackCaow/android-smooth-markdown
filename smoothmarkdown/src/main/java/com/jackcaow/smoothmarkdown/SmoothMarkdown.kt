@@ -346,7 +346,8 @@ private fun MarkdownDetails(
                 if (summary is Paragraph) {
                     MarkdownInlineText(
                         inlineRender(summary, enableHtml, sheet, LocalParserPlugins.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
-                        onLinkClick, onImageClick, bottomPadding = 0.dp, interactive = false,
+                        onLinkClick, onImageClick, bottomPadding = 0.dp,
+                        onPlainTextTap = { expanded.value = !expanded.value },
                     )
                 } else {
                     Column {
@@ -365,7 +366,7 @@ private fun MarkdownDetails(
 }
 
 @Composable
-private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier) {
+private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier, onPlainTextTap: (() -> Unit)? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     val links = text.getStringAnnotations("url", 0, text.length).filter { isSafeLink(it.item) }
@@ -380,13 +381,12 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-        modifier = if (links.isEmpty()) base else base
-            .semantics { customActions = actions }
-            .pointerInput(text) {
+        modifier = if (links.isEmpty() && onPlainTextTap == null) base else base
+            .then(if (links.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
+            .pointerInput(text, onPlainTextTap) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
-                            ?.takeIf(::isSafeLink)?.let(onLinkClick)
+                        dispatchTextTap(text, offset, onLinkClick, onPlainTextTap)
                     }
                 }
             },
@@ -404,12 +404,13 @@ private fun MarkdownInlineText(
     bottomPadding: androidx.compose.ui.unit.Dp? = null,
     interactive: Boolean = true,
     modifier: Modifier = Modifier,
+    onPlainTextTap: (() -> Unit)? = null,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     if (render.images.isEmpty() && render.math.isEmpty()) {
-        if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier)
+        if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -475,11 +476,10 @@ private fun MarkdownInlineText(
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
             modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-                .semantics { customActions = actions }.pointerInput(render.text) {
+                .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        render.text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
-                            ?.takeIf(::isSafeLink)?.let(onLinkClick)
+                        dispatchTextTap(render.text, offset, onLinkClick, onPlainTextTap)
                     }
                 }
             },
@@ -744,6 +744,19 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
 internal fun isSafeLink(value: String): Boolean {
     val scheme = runCatching { URI(value).scheme?.lowercase() }.getOrElse { return false }
     return scheme == null || scheme in setOf("http", "https", "mailto", "tel")
+}
+
+internal fun safeLinkAt(text: AnnotatedString, offset: Int): String? =
+    text.getStringAnnotations("url", offset, offset).firstOrNull()?.item?.takeIf(::isSafeLink)
+
+internal fun dispatchTextTap(
+    text: AnnotatedString,
+    offset: Int,
+    onLinkClick: (String) -> Unit,
+    onPlainTextTap: (() -> Unit)?,
+) {
+    val link = safeLinkAt(text, offset)
+    if (link != null) onLinkClick(link) else onPlainTextTap?.invoke()
 }
 
 internal fun isSafeImage(value: String): Boolean =

@@ -52,4 +52,38 @@ class DetailsTest {
         val summary = details.summary.single() as Paragraph
         assertEquals("# Title", inlineText(summary, false).text)
     }
+
+    @Test fun summaryKeepsSafeLinksAndInlineImageActions() {
+        val details = parseMarkdown(
+            "<details>\n<summary>Read [guide](https://example.com/guide) " +
+                "![icon](https://example.com/icon.png \"Icon title\") " +
+                "[unsafe](javascript:alert(1))</summary>\nBody\n</details>",
+        ).firstChild as DetailsNode
+        val render = inlineRender(details.summary.single() as Paragraph, enableHtml = false)
+        assertEquals("https://example.com/guide", safeLinkAt(render.text, render.text.text.indexOf("guide")))
+        assertEquals(null, safeLinkAt(render.text, render.text.text.indexOf("unsafe")))
+        assertEquals("icon", render.images.values.single().alt)
+        assertEquals("Icon title", render.images.values.single().title)
+
+        val links = mutableListOf<String>()
+        var expansions = 0
+        dispatchTextTap(render.text, render.text.text.indexOf("guide"), { links += it }, { expansions++ })
+        assertEquals(listOf("https://example.com/guide"), links)
+        assertEquals(0, expansions)
+        dispatchTextTap(render.text, render.text.text.indexOf("Read"), { links += it }, { expansions++ })
+        dispatchTextTap(render.text, render.text.text.indexOf("unsafe"), { links += it }, { expansions++ })
+        assertEquals(2, expansions)
+        assertEquals(1, links.size)
+    }
+
+    @Test fun summaryHtmlImageRequiresOptInAndSafeSource() {
+        val details = parseMarkdown(
+            "<details>\n<summary><img src='https://example.com/icon.png' alt='Icon'> " +
+                "<img src='javascript:alert(1)' alt='Unsafe'></summary>\nBody\n</details>",
+        ).firstChild as DetailsNode
+        val paragraph = details.summary.single() as Paragraph
+        assertTrue(inlineRender(paragraph, enableHtml = false).images.isEmpty())
+        val images = inlineRender(paragraph, enableHtml = true).images.values
+        assertEquals(listOf("Icon"), images.map { it.alt })
+    }
 }
