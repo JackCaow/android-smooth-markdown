@@ -55,6 +55,7 @@ import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
@@ -130,7 +131,9 @@ private fun DemoHome(
         localizations.page(language, it)
     } ?: localizations.example(language, example)
     val controller = remember(exampleId, isEditor) {
-        MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown)
+        MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown).also {
+            if (isEditor) it.mode = MarkdownEditorMode.FORMATTED
+        }
     }
     val plugins = remember { ParserPluginRegistry().also {
         it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(),
