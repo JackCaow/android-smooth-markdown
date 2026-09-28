@@ -30,6 +30,8 @@ SmoothMarkdown(
 
 The demo's Theme button cycles through all presets. This first native style API covers common reader elements; Flutter's full stylesheet includes additional properties such as alternating table rows and separate inline-format styles.
 
+Code blocks accept `codeBlockDecoration = MarkdownCodeBlockDecoration(backgroundColor, borderColor, borderWidth, cornerRadius)` and `codeBlockPadding = PaddingValues(...)`. These match Flutter's actively rendered code block decoration and per-edge padding. Existing `codeBackground` and uniform `codePadding` remain supported; a decoration fill takes precedence over `codeBackground`.
+
 Math uses the native [RaTeX Android renderer](https://github.com/erweixin/RaTeX) for formulas including fractions, roots, and scripts. Unsupported TeX shows its source text. `CodeBlockOptions` controls copying, language labels, and preliminary highlighting for Kotlin, Swift, Dart, Java, JavaScript/TypeScript, Python, JSON, Bash, and SQL. The public `codeBlockBuilder` and `onCodeCopied` parameters allow custom code rendering and copy handling.
 
 ## Parser and renderer plugins

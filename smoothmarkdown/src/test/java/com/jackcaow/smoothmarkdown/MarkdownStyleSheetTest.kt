@@ -49,6 +49,48 @@ class MarkdownStyleSheetTest {
         assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(horizontalRuleThickness = (-1).dp) }
         assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(headingStyles = listOf(TextStyle.Default)) }
         assertThrows(IllegalArgumentException::class.java) { MarkdownBlockquoteDecoration(borderWidth = (-1).dp) }
+        assertThrows(IllegalArgumentException::class.java) { MarkdownCodeBlockDecoration(borderWidth = (-1).dp) }
+        assertThrows(IllegalArgumentException::class.java) { MarkdownCodeBlockDecoration(cornerRadius = (-1).dp) }
+    }
+
+    @Test fun codeBlockDecorationOverridesLegacyFillAndUsesPerEdgePadding() {
+        val sheet = MarkdownStyleSheet(
+            codeBackground = Color.Red,
+            codePadding = 8.dp,
+            codeBlockDecoration = MarkdownCodeBlockDecoration(
+                backgroundColor = Color.Cyan,
+                borderColor = Color.Blue,
+                borderWidth = 2.dp,
+                cornerRadius = 9.dp,
+            ),
+            codeBlockPadding = androidx.compose.foundation.layout.PaddingValues(
+                start = 21.dp, top = 5.dp, end = 13.dp, bottom = 9.dp,
+            ),
+        )
+        val resolved = resolveCodeBlockDecoration(sheet, Color.Green)
+        assertEquals(Color.Cyan, resolved.backgroundColor)
+        assertEquals(Color.Blue, resolved.borderColor)
+        assertEquals(2.dp, resolved.borderWidth)
+        assertEquals(9.dp, resolved.cornerRadius)
+        assertEquals(21.dp, resolved.padding.calculateLeftPadding(LayoutDirection.Ltr))
+        assertEquals(13.dp, resolved.padding.calculateRightPadding(LayoutDirection.Ltr))
+        assertEquals(5.dp, resolved.padding.calculateTopPadding())
+        assertEquals(9.dp, resolved.padding.calculateBottomPadding())
+    }
+
+    @Test fun codeBlockLegacyAndPresetDecorationResolution() {
+        val legacy = resolveCodeBlockDecoration(MarkdownStyleSheet(codeBackground = Color.Red, codePadding = 7.dp), Color.Green)
+        assertEquals(Color.Red, legacy.backgroundColor)
+        assertEquals(null, legacy.borderColor)
+        assertEquals(7.dp, legacy.padding.calculateTopPadding())
+
+        val light = resolveCodeBlockDecoration(MarkdownStyleSheet.light(), Color.Green)
+        assertEquals(Color(0xFFF5F5F5), light.backgroundColor)
+        assertEquals(Color(0xFFE0E0E0), light.borderColor)
+        assertEquals(4.dp, light.cornerRadius)
+        val githubOverride = resolveCodeBlockDecoration(MarkdownStyleSheet.github().copy(codeBackground = Color.Magenta), Color.Green)
+        assertEquals(Color.Magenta, githubOverride.backgroundColor)
+        assertEquals(0.dp, githubOverride.borderWidth)
     }
 
     @Test fun blockquoteDecorationOverridesLegacyColorsAndKeepsConfigurableInsets() {

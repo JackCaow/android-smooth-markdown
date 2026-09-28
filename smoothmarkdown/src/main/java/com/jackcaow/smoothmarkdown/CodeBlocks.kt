@@ -1,8 +1,10 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.delay
 
 data class CodeBlockOptions(
@@ -148,6 +151,25 @@ internal fun highlightedCode(code: String, language: String?, dark: Boolean): An
     }
 }
 
+internal data class ResolvedCodeBlockDecoration(
+    val backgroundColor: Color,
+    val borderColor: Color?,
+    val borderWidth: Dp,
+    val cornerRadius: Dp,
+    val padding: PaddingValues,
+)
+
+internal fun resolveCodeBlockDecoration(sheet: MarkdownStyleSheet, fallback: Color): ResolvedCodeBlockDecoration {
+    val decoration = sheet.codeBlockDecoration
+    return ResolvedCodeBlockDecoration(
+        backgroundColor = decoration?.backgroundColor ?: sheet.codeBackground ?: fallback,
+        borderColor = decoration?.borderColor,
+        borderWidth = decoration?.borderWidth ?: 0.dp,
+        cornerRadius = decoration?.cornerRadius ?: 6.dp,
+        padding = sheet.codeBlockPadding ?: PaddingValues(sheet.codePadding),
+    )
+}
+
 @Composable
 internal fun EnhancedCodeBlock(code: String, info: String?) {
     val sheet = LocalMarkdownStyleSheet.current
@@ -168,15 +190,20 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             copied = false
         }
     }
-    val background = sheet.codeBackground ?: MaterialTheme.colorScheme.surfaceVariant
-    val dark = background.luminance() < 0.5f
+    val decoration = resolveCodeBlockDecoration(sheet, MaterialTheme.colorScheme.surfaceVariant)
+    val dark = decoration.backgroundColor.luminance() < 0.5f
     val codeText = androidx.compose.runtime.remember(code, language, dark, options.enableSyntaxHighlighting) {
         if (options.enableSyntaxHighlighting) highlightedCode(code, language, dark) else AnnotatedString(code)
     }
-    Column(
-        Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)
-            .background(background, RoundedCornerShape(6.dp)),
-    ) {
+    val shape = RoundedCornerShape(decoration.cornerRadius)
+    val codeContainer = Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)
+        .background(decoration.backgroundColor, shape)
+        .let { base ->
+            if (decoration.borderColor != null && decoration.borderWidth > 0.dp)
+                base.border(decoration.borderWidth, decoration.borderColor, shape)
+            else base
+        }
+    Column(codeContainer) {
         if ((options.showLanguageTag && language != null) || options.showCopyButton) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp)) {
                 Spacer(Modifier.weight(1f))
@@ -203,7 +230,7 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(sheet.codePadding)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(decoration.padding)) {
             val selectionOptions = LocalMarkdownSelectionOptions.current
             val selectionKey = androidx.compose.runtime.remember { Any() }
             val codeLayout = androidx.compose.runtime.remember(codeText) { mutableStateOf<TextLayoutResult?>(null) }
