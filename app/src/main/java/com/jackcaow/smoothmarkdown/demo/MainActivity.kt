@@ -262,6 +262,13 @@ private fun DemoHome(
                     onLinkClick = openLink,
                     modifier = Modifier.weight(1f),
                 )
+            } else if (pageId == "plugin") {
+                PluginDemo(
+                    markdown = currentMarkdown,
+                    styleSheet = themeOptions[themeIndex].second,
+                    plugins = plugins,
+                    modifier = Modifier.weight(1f),
+                )
             } else {
                 SmoothMarkdown(currentMarkdown, Modifier.weight(1f), onLinkClick = openLink,
                     enableHtml = pageId == "html" || pageId == "details-summary",
