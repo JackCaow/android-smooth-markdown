@@ -32,6 +32,8 @@ private val demoMarkdown = """
 
     <div align="center">Centered **Markdown**</div>
 
+    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="HTML GitHub logo" width="64" height="64">
+
     - [x] Render headings and emphasis
     - [ ] Complete formatted-block editing
 

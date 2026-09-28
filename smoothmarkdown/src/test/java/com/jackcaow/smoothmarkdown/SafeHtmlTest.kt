@@ -64,4 +64,15 @@ class SafeHtmlTest {
         assertEquals(SafeHtml.Block.Rule, SafeHtml.parseBlock("<hr>"))
         assertNull(SafeHtml.parseBlock("<script>alert(1)</script>"))
     }
+
+    @Test fun htmlImageValidatesSourceAndDimensions() {
+        val image = SafeHtml.imageTag("<img src='https://x/a.png' alt='pic' width='64' height='32px'>")!!
+        assertEquals("pic", image.alt)
+        assertEquals(64f, image.width)
+        assertEquals(32f, image.height)
+        assertNull(SafeHtml.imageTag("<img src='javascript:alert(1)' alt='unsafe'>"))
+        assertEquals("unsafe", SafeHtml.imageAlt("<img src='javascript:alert(1)' alt='unsafe'>"))
+        assertNull(SafeHtml.dimension("100%"))
+        assertNull(SafeHtml.dimension("10001"))
+    }
 }

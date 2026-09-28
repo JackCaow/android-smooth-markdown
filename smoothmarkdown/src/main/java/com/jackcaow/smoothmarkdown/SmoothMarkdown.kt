@@ -36,7 +36,7 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -65,6 +65,7 @@ import org.commonmark.node.Paragraph
 import org.commonmark.node.SoftLineBreak
 import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.ThematicBreak
+import org.commonmark.node.Text as MarkdownTextNode
 import org.commonmark.parser.Parser
 
 private val parser = Parser.builder().extensions(
@@ -109,11 +110,15 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             textAlign,
         )
         is Paragraph -> {
-            val image = node.firstChild as? Image
-            if (image != null && image.next == null) {
-                MarkdownImage(image, onImageClick)
-            } else {
-                MarkdownText(inlineText(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+            val meaningful = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.toList()
+            val sole = meaningful.singleOrNull()
+            val htmlImage = if (enableHtml && sole is HtmlInline) SafeHtml.imageTag(sole.literal) else null
+            when {
+                sole is Image -> MarkdownImage(
+                    SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
+                )
+                htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
+                else -> MarkdownText(inlineText(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
             }
         }
         is FencedCodeBlock -> CodeBlock(node.literal, node.info)
@@ -129,10 +134,14 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         is TableBlock -> MarkdownTable(node, onLinkClick, enableHtml)
         is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
         is HtmlBlock -> {
+            val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
+            val imageAlt = if (enableHtml) SafeHtml.imageAlt(node.literal) else null
             val html = if (enableHtml) SafeHtml.parseBlock(node.literal) else null
-            when (html) {
-                is SafeHtml.Block.Rule -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
-                is SafeHtml.Block.Container -> {
+            when {
+                htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
+                imageAlt != null -> MarkdownText(AnnotatedString(imageAlt), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+                html is SafeHtml.Block.Rule -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
+                html is SafeHtml.Block.Container -> {
                     val alignment = when (html.alignment) {
                         "left" -> TextAlign.Left
                         "center" -> TextAlign.Center
@@ -152,7 +161,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         parseMarkdown(html.trailing).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
                     }
                 }
-                null -> MarkdownText(AnnotatedString(node.literal), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+                else -> MarkdownText(AnnotatedString(node.literal), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
             }
         }
         else -> MarkdownText(AnnotatedString(node.plainText()), MaterialTheme.typography.bodyLarge, onLinkClick)
@@ -191,16 +200,23 @@ private fun CodeBlock(code: String, info: String?) {
 }
 
 @Composable
-private fun MarkdownImage(image: Image, onImageClick: (String) -> Unit) {
-    val url = image.destination
-    if (!isSafeImage(url)) {
-        Text(image.plainText(), modifier = Modifier.padding(bottom = 12.dp))
+private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> Unit) {
+    val url = image.source
+    val local = url.isNotBlank() && !url.startsWith("//") && !url.contains("..") && !url.contains(':') && !url.contains('\\')
+    if (!isSafeImage(url) && !local) {
+        Text(image.alt, modifier = Modifier.padding(bottom = 12.dp))
         return
     }
-    AsyncImage(
-        model = url,
-        contentDescription = image.plainText(),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).clickable { onImageClick(url) },
+    val model = if (local) "file:///android_asset/${url.trimStart('/')}" else url
+    var imageModifier: Modifier = Modifier.padding(bottom = 12.dp)
+    imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
+    if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
+    SubcomposeAsyncImage(
+        model = model,
+        contentDescription = image.alt.ifBlank { image.title ?: "Image" },
+        modifier = imageModifier.clickable { onImageClick(url) },
+        loading = { androidx.compose.material3.CircularProgressIndicator() },
+        error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
     )
 }
 

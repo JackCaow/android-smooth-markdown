@@ -14,6 +14,40 @@ internal object SafeHtml {
         val end: Int,
     )
 
+    data class ImageSpec(
+        val source: String,
+        val alt: String,
+        val title: String?,
+        val width: Float?,
+        val height: Float?,
+    )
+
+    fun imageTag(source: String): ImageSpec? {
+        val tag = lexTag(source.trim()) ?: return null
+        if (tag.name != "img" || tag.isClosing || tag.end != source.trim().length) return null
+        val imageSource = tag.attributes["src"] ?: return null
+        if (!isSafeImageSource(imageSource)) return null
+        return ImageSpec(
+            source = imageSource,
+            alt = tag.attributes["alt"] ?: "",
+            title = tag.attributes["title"],
+            width = tag.attributes["width"]?.let(::dimension),
+            height = tag.attributes["height"]?.let(::dimension),
+        )
+    }
+
+    fun imageAlt(source: String): String? {
+        val trimmed = source.trim()
+        val tag = lexTag(trimmed) ?: return null
+        if (tag.name != "img" || tag.isClosing || tag.end != trimmed.length) return null
+        return tag.attributes["alt"] ?: ""
+    }
+
+    fun dimension(value: String): Float? {
+        val normalized = value.trim().lowercase().removeSuffix("px").trim()
+        return normalized.toFloatOrNull()?.takeIf { it > 0f && it <= 10000f }
+    }
+
     sealed interface Block {
         data object Rule : Block
         data class Container(val name: String, val content: String, val alignment: String?, val trailing: String) : Block
