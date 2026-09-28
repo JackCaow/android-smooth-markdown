@@ -160,13 +160,19 @@ private fun DemoHome(
     val example = examples.first { it.id == exampleId }
     val specialPage = dedicatedPages.firstOrNull { it.id == pageId }
     val isEditor = pageId == "editor"
+    val isHome = pageId == exampleId
     val currentMarkdown = if (pageId == exampleId) example.markdown
         else staticPages[pageId] ?: dedicatedMarkdown(pageId)
-    val currentTitle = if (isEditor) "Markdown Editor" else if (pageId == "stream") {
-        localizations.text(language, "streaming_demo_title")
-    } else specialPage?.let {
-        localizations.page(language, it)
-    } ?: localizations.example(language, example)
+    val currentTitle = when (pageId) {
+        "editor" -> "Markdown Editor"
+        "math" -> "Math Formula Demo"
+        "stream" -> "Streaming Markdown Demo"
+        "footnote" -> "Footnotes Demo"
+        "html" -> "HTML Tags Demo"
+        "plugin" -> "Plugin System Demo"
+        else -> specialPage?.let { localizations.page(language, it) }
+            ?: localizations.example(language, example)
+    }
     val controller = remember(exampleId, isEditor) {
         MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown).also {
             if (isEditor) it.mode = MarkdownEditorMode.FORMATTED
@@ -176,7 +182,7 @@ private fun DemoHome(
         it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(),
             MermaidPlugin(), ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
     } }
-    BackHandler(enabled = pageId != exampleId && drawerState.isClosed) { pageId = exampleId }
+    BackHandler(enabled = !isHome && drawerState.isClosed) { pageId = exampleId }
     fun select(id: String) {
         if (examples.any { it.id == id }) exampleId = id
         pageId = id
@@ -184,6 +190,7 @@ private fun DemoHome(
     }
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = isHome,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -235,34 +242,44 @@ private fun DemoHome(
         Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = { scope.launch { drawerState.open() } },
-                    modifier = Modifier.testTag("open-navigation")) {
-                    Text("☰ ${localizations.chrome(language, "examples")}")
-                }
-                TextButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
-                    Text(localizations.chrome(language, "edit"))
-                }
-                Column {
-                    TextButton(onClick = { themeMenu = true }, modifier = Modifier.testTag("open-theme")) {
-                        Text(localizations.text(language, "drawer_theme"))
+            if (isHome) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = { scope.launch { drawerState.open() } },
+                        modifier = Modifier.testTag("open-navigation")) {
+                        Text("☰ ${localizations.chrome(language, "examples")}")
                     }
-                    DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
-                        themeOptions.forEachIndexed { index, item ->
-                            DropdownMenuItem(text = { Text(localizations.theme(language, index)) }, onClick = {
-                                onThemeChange(index)
-                                themeMenu = false
-                            }, modifier = Modifier.testTag("theme-$index"))
+                    TextButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
+                        Text(localizations.chrome(language, "edit"))
+                    }
+                    Column {
+                        TextButton(onClick = { themeMenu = true }, modifier = Modifier.testTag("open-theme")) {
+                            Text(localizations.text(language, "drawer_theme"))
+                        }
+                        DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
+                            themeOptions.forEachIndexed { index, item ->
+                                DropdownMenuItem(text = { Text(localizations.theme(language, index)) }, onClick = {
+                                    onThemeChange(index)
+                                    themeMenu = false
+                                }, modifier = Modifier.testTag("theme-$index"))
+                            }
                         }
                     }
                 }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(currentTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)
-                    .testTag("current-title"))
-                Text(localizations.theme(language, themeIndex), style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.testTag("current-theme"))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(currentTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)
+                        .testTag("current-title"))
+                    Text(localizations.theme(language, themeIndex), style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.testTag("current-theme"))
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back")) {
+                        Text("‹ ${localizations.chrome(language, "examples")}")
+                    }
+                    Text(currentTitle, style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.testTag("current-title"))
+                }
             }
             if (isEditor) {
                 Text("Scratch-style editor preview", style = MaterialTheme.typography.titleLarge,
@@ -318,7 +335,7 @@ private fun DemoHome(
                     styleSheet = themeOptions[themeIndex].second, plugins = plugins)
             }
         }
-        if (!isEditor && pageId != "stream") FloatingActionButton(onClick = { showSource = true },
+        if (isHome) FloatingActionButton(onClick = { showSource = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("open-source")) {
             Text(localizations.chrome(language, "source"), modifier = Modifier.padding(horizontal = 12.dp))
         }
