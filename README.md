@@ -8,7 +8,7 @@ Reader and editor work in progress. The library renders headings, paragraphs, in
 
 Open this folder in Android Studio or run `./gradlew :app:assembleDebug`. Run `./gradlew :smoothmarkdown:testDebugUnitTest` for parser and URL-policy tests.
 
-The public components include `SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet)`, `StreamMarkdown(chunks, ..., enableHtml, styleSheet)`, `MarkdownEditorController`, and `SmoothMarkdownEditor(controller, modifier, onSave)`. HTML is disabled by default. CommonMark Java parses Markdown to an AST; Compose renders each block directly. The [Flutter source and tests](https://github.com/JackCaow/flutter-smooth-markdown) remain the behavior reference.
+The public components include `SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet)`, `StreamMarkdown(chunks, ..., enableHtml, styleSheet)`, `MarkdownEditorController`, and `SmoothMarkdownEditor(controller, modifier, onSave)`. For image metadata, both reader APIs also accept `onImageClickWithMetadata = { source, alt, title -> ... }`; if both image callbacks are supplied, both run. This applies to standalone, inline, and enabled HTML images. HTML is disabled by default. CommonMark Java parses Markdown to an AST; Compose renders each block directly. The [Flutter source and tests](https://github.com/JackCaow/flutter-smooth-markdown) remain the behavior reference.
 
 `MarkdownStyleSheet` supports MaterialTheme-backed defaults plus `light()`, `dark()`, `github(dark)`, and `vscode(dark)` presets. Use `copy` to override colors, text styles, or spacing:
 

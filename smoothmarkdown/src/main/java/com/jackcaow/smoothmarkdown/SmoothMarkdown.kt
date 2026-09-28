@@ -134,8 +134,23 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
 }
 
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }
+private val LocalOnImageClickWithMetadata = compositionLocalOf<((String, String?, String?) -> Unit)?> { null }
 
-/** Renders CommonMark and the currently supported GFM extensions with Compose. */
+/** Sends the original image source and metadata to both registered callbacks. */
+internal fun dispatchImageClick(
+    image: SafeHtml.ImageSpec,
+    onImageClick: (String) -> Unit,
+    onImageClickWithMetadata: ((String, String?, String?) -> Unit)?,
+) {
+    onImageClick(image.source)
+    onImageClickWithMetadata?.invoke(image.source, image.alt, image.title)
+}
+
+/**
+ * Renders CommonMark and the currently supported GFM extensions with Compose.
+ * Image taps call [onImageClick] and, when supplied, [onImageClickWithMetadata]
+ * with the original source, alternative text, and title.
+ */
 @Composable
 fun SmoothMarkdown(
     markdown: String,
@@ -148,6 +163,7 @@ fun SmoothMarkdown(
     onCodeCopied: ((String) -> Unit)? = null,
     styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
     plugins: ParserPluginRegistry? = null,
+    onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
 ) {
     val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
@@ -158,6 +174,7 @@ fun SmoothMarkdown(
         LocalOnCodeCopied provides onCodeCopied,
         LocalMarkdownStyleSheet provides styleSheet,
         LocalParserPlugins provides plugins,
+        LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
     ) {
         LazyColumn(
             modifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier,
@@ -389,6 +406,7 @@ private fun MarkdownInlineText(
     modifier: Modifier = Modifier,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
+    val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     if (render.images.isEmpty() && render.math.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier)
@@ -448,7 +466,7 @@ private fun MarkdownInlineText(
         }
     } + render.images.values.map { image ->
         CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
-            onImageClick(image.source)
+            dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
             true
         }
     }
@@ -472,6 +490,7 @@ private fun MarkdownInlineText(
 @Composable
 private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: ((String) -> Unit)?) {
     val sheet = LocalMarkdownStyleSheet.current
+    val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val model = imageModel(image.source) ?: return Text(image.alt, color = sheet.textColor ?: Color.Unspecified)
     val modifier = Modifier.width(width.dp).height(height.dp)
     SubcomposeAsyncImage(
@@ -479,7 +498,7 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
         modifier = if (onImageClick != null) modifier.clickable(
             role = Role.Button, onClickLabel = "Open image",
-        ) { onImageClick(image.source) } else modifier,
+        ) { dispatchImageClick(image, onImageClick, onImageClickWithMetadata) } else modifier,
         contentScale = ContentScale.Fit,
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
@@ -489,6 +508,7 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
 @Composable
 private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> Unit) {
     val sheet = LocalMarkdownStyleSheet.current
+    val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val url = image.source
     val model = imageModel(url)
     if (model == null) {
@@ -499,7 +519,9 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
     Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-        .clickable(role = Role.Button, onClickLabel = "Open image") { onImageClick(url) }) {
+        .clickable(role = Role.Button, onClickLabel = "Open image") {
+            dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
+        }) {
         SubcomposeAsyncImage(
             model = imageRequest(url, model),
             contentDescription = image.alt.ifBlank { image.title ?: "Image" },

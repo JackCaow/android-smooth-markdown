@@ -24,6 +24,7 @@ fun StreamMarkdown(
     enableHtml: Boolean = false,
     styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
     plugins: ParserPluginRegistry? = null,
+    onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val markdown by produceState(initialValue = "", key1 = chunks, key2 = throttleMillis, key3 = enableHtml) {
@@ -55,5 +56,6 @@ fun StreamMarkdown(
             pending?.cancel()
         }
     }
-    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet = styleSheet, plugins = plugins)
+    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml,
+        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata)
 }
