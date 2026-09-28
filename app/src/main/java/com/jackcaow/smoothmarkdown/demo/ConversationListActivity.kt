@@ -12,7 +12,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +65,8 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -284,6 +285,7 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
     val menuGapPx = with(LocalDensity.current) { 28.dp.roundToPx() }
     val menuEdgePx = with(LocalDensity.current) { 8.dp.roundToPx() }
     val selectionState = rememberSelectionState()
+    val selectedText = selectionState.selectedTexts.joinToString("") { it.text }
     val textTargets = remember(message.content) { mutableMapOf<Any, MarkdownSelectionTarget>() }
     val bubbleCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
     var menuPress by remember { mutableStateOf<Offset?>(null) }
@@ -291,6 +293,9 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
     var pendingSelection by remember { mutableStateOf<TextRange?>(null) }
     LaunchedEffect(pendingSelection) {
         val range = pendingSelection ?: return@LaunchedEffect
+        // withFrameNanos resumes at the start of a frame. Let the newly
+        // mounted SelectionContainer finish its layout before selecting.
+        withFrameNanos { }
         withFrameNanos { }
         selectionState.select(range)
         pendingSelection = null
@@ -301,29 +306,37 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
         if (!own) { Avatar(conversation.avatar, conversation.avatarColor, 32); Spacer(Modifier.width(8.dp)) }
         Surface(color = bubble, shape = RoundedCornerShape(16.dp), shadowElevation = 2.dp,
             modifier = Modifier.fillMaxWidth(.70f).widthIn(max = 460.dp)
+                .then(if (selectedText.isNotEmpty()) Modifier.semantics {
+                    stateDescription = "已选择：$selectedText"
+                } else Modifier)
                 .onGloballyPositioned { bubbleCoordinates.value = it }
                 .pointerInput(message.content) {
-                    awaitEachGesture {
-                        awaitPointerEventScope {
-                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                            val start = down.position
-                            val pointerId = down.id
-                            val keptPressed = withTimeoutOrNull(350L) {
-                                while (true) {
+                    while (true) {
+                        val down = awaitPointerEventScope {
+                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        }
+                        val start = down.position
+                        val pointerId = down.id
+                        val keptPressed: Boolean = withTimeoutOrNull(350L) {
+                            awaitPointerEventScope {
+                                var active = true
+                                while (active) {
                                     val change = awaitPointerEvent(PointerEventPass.Initial).changes
-                                        .firstOrNull { it.id == pointerId } ?: return@withTimeoutOrNull false
-                                    if (!change.pressed || change.isConsumed ||
-                                        (change.position - start).getDistance() > viewConfiguration.touchSlop
-                                    ) return@withTimeoutOrNull false
+                                        .firstOrNull { it.id == pointerId }
+                                    active = change != null && change.pressed && !change.isConsumed &&
+                                        (change.position - start).getDistance() <= viewConfiguration.touchSlop
                                 }
-                            } ?: true
-                            if (keptPressed) {
-                                bubbleCoordinates.value?.localToWindow(start)?.let { press ->
-                                    menuSelectionRange = paragraphSelectionRange(press, textTargets.values,
-                                        selectionState.getSelectableTexts())
-                                    selectionState.clear()
-                                    menuPress = press
-                                }
+                                false
+                            }
+                        } ?: true
+                        if (keptPressed) {
+                            bubbleCoordinates.value?.localToWindow(start)?.let { press ->
+                                menuSelectionRange = paragraphSelectionRange(press, textTargets.values,
+                                    selectionState.getSelectableTexts())
+                                selectionState.clear()
+                                menuPress = press
+                            }
+                            awaitPointerEventScope {
                                 do {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
                                     event.changes.forEach { it.consume() }
