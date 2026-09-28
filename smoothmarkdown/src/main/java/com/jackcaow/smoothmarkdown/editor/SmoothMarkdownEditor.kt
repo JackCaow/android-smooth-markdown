@@ -381,14 +381,33 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
 
 @Composable
 private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList) {
+    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0)
+}
+
+@Composable
+private fun FormattedListItems(
+    controller: MarkdownEditorController,
+    blockId: String,
+    list: MarkdownSourceList,
+    items: List<MarkdownSourceList.Item>,
+    pathPrefix: List<Int>,
+    depth: Int,
+    indexBase: Int,
+) {
     Column {
-        list.items.forEachIndexed { index, item ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        items.forEachIndexed { index, item ->
+            val path = pathPrefix + (indexBase + index)
+            val pathTag = path.joinToString("-")
+            val firstLine = item.lines.firstOrNull { it.start == item.contentStart } ?: item.lines.firstOrNull()
+            Row(
+                Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(8) * 20).dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
                 if (item.taskStateOffset != null) {
                     Checkbox(
                         checked = item.checked,
-                        onCheckedChange = { controller.setFormattedTaskChecked(blockId, index, it) },
-                        modifier = Modifier.testTag("formatted-task-$blockId-$index"),
+                        onCheckedChange = { controller.setFormattedTaskChecked(blockId, path, it) },
+                        modifier = Modifier.testTag("formatted-task-$blockId-$pathTag"),
                     )
                 } else {
                     Text(
@@ -397,14 +416,43 @@ private fun FormattedList(controller: MarkdownEditorController, blockId: String,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                val visible = MarkdownInlineEditing.parse(list.content(index).orEmpty()).visible
-                BasicTextField(
-                    value = visible,
-                    onValueChange = { controller.replaceFormattedListItemText(blockId, index, it) },
-                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                )
+                if (firstLine != null) {
+                    val lineIndex = item.lines.indexOf(firstLine)
+                    val visible = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks).visible
+                    BasicTextField(
+                        value = visible,
+                        onValueChange = { controller.replaceFormattedListLineText(blockId, path, lineIndex, it) },
+                        modifier = Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    )
+                }
+            }
+            var nestedBase = 0
+            item.parts.forEach { part ->
+                when (part) {
+                    is MarkdownSourceList.Line -> if (part != firstLine) {
+                        val lineIndex = item.lines.indexOf(part)
+                        val visible = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks).visible
+                        BasicTextField(
+                            value = visible,
+                            onValueChange = { controller.replaceFormattedListLineText(blockId, path, lineIndex, it) },
+                            modifier = Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp)
+                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    is MarkdownSourceList.NestedList -> {
+                        FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase)
+                        nestedBase += part.items.size
+                    }
+                    is MarkdownSourceList.Raw -> Text(
+                        text = list.rawContent(part),
+                        modifier = Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    )
+                }
             }
         }
     }

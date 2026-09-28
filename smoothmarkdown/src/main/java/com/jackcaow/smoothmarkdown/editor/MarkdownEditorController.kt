@@ -207,18 +207,27 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
 
     /** Edits one list item's visible primary text while retaining its marker and neighboring source. */
     fun replaceFormattedListItemText(blockId: String, itemIndex: Int, visibleText: String): Boolean {
+        return replaceFormattedListLineText(blockId, listOf(itemIndex), 0, visibleText)
+    }
+
+    /** Edits a direct paragraph line of a list item, including nested items and continuations. */
+    fun replaceFormattedListLineText(blockId: String, itemPath: List<Int>, lineIndex: Int, visibleText: String): Boolean {
         val block = semanticDocument().blockById(blockId) ?: return false
         val list = MarkdownSourceList.parse(block) ?: return false
-        val raw = list.content(itemIndex) ?: return false
-        val updated = MarkdownInlineEditing.parse(raw).replaceVisible(visibleText) ?: return false
-        val markdown = list.replaceContent(itemIndex, updated) ?: return false
+        val raw = list.lineContent(itemPath, lineIndex) ?: return false
+        val updated = MarkdownInlineEditing.parse(raw, enableWikilinks).replaceVisible(visibleText) ?: return false
+        val markdown = list.replaceLine(itemPath, lineIndex, updated) ?: return false
         return markdown != block.source && replaceSemanticBlock(blockId, markdown)
     }
 
     /** Toggles a task marker in one list item using the source undo history. */
     fun setFormattedTaskChecked(blockId: String, itemIndex: Int, checked: Boolean): Boolean {
+        return setFormattedTaskChecked(blockId, listOf(itemIndex), checked)
+    }
+
+    fun setFormattedTaskChecked(blockId: String, itemPath: List<Int>, checked: Boolean): Boolean {
         val list = semanticDocument().blockById(blockId)?.let(MarkdownSourceList::parse) ?: return false
-        val markdown = list.setChecked(itemIndex, checked) ?: return false
+        val markdown = list.setChecked(itemPath, checked) ?: return false
         return replaceSemanticBlock(blockId, markdown)
     }
 

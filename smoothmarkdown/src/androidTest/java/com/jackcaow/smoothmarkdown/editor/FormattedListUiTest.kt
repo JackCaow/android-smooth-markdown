@@ -34,4 +34,24 @@ class FormattedListUiTest {
         compose.onNodeWithText("Undo").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(original, controller.text) }
     }
+
+    @Test fun editsNestedItemAndItsContinuationInFormattedMode() {
+        val original = "- parent\n  continuation\n  - child\n    detail\n- sibling"
+        val controller = MarkdownEditorController(original)
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithText("Formatted").performClick()
+        compose.onNodeWithTag("formatted-list-item-block-0-0-0").performTextReplacement("renamed")
+        compose.onNodeWithTag("formatted-list-continuation-block-0-0-0-1").performTextReplacement("more detail")
+        val expected = "- parent\n  continuation\n  - renamed\n    more detail\n- sibling"
+        compose.runOnIdle {
+            assertEquals(expected, controller.text)
+            assertEquals(true, controller.undo())
+            assertEquals(true, controller.undo())
+            assertEquals(original, controller.text)
+            assertEquals(true, controller.redo())
+            assertEquals(true, controller.redo())
+            assertEquals(expected, controller.text)
+        }
+    }
 }

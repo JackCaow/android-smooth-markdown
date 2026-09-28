@@ -54,4 +54,45 @@ class MarkdownSourceListTest {
         assertFalse(controller.setFormattedTaskChecked(id, 0, true))
         assertEquals("- alpha\n- beta", controller.text)
     }
+
+    @Test fun editsNestedItemsAndContinuationLinesWithoutChangingUntouchedSource() {
+        val original = "- parent\r\n  continuation\r\n  - **child**\r\n    child continued\r\n  - [ ] task child\r\n- sibling"
+        val controller = MarkdownEditorController(original)
+        val blockId = controller.semanticDocument().blocks.single().id
+        val list = MarkdownSourceList.parse(controller.semanticDocument().blocks.single())!!
+        assertEquals(2, list.items.size)
+        assertEquals("continuation", list.lineContent(listOf(0), 1))
+        assertEquals("**child**", list.lineContent(listOf(0, 0), 0))
+        assertEquals("child continued", list.lineContent(listOf(0, 0), 1))
+        assertEquals("task child", list.lineContent(listOf(0, 1), 0))
+
+        assertTrue(controller.replaceFormattedListLineText(blockId, listOf(0, 0), 0, "child!"))
+        assertEquals(original.replace("**child**", "**child!**"), controller.text)
+        assertTrue(controller.replaceFormattedListLineText(blockId, listOf(0, 0), 1, "child continues"))
+        assertEquals(original.replace("**child**", "**child!**").replace("child continued", "child continues"), controller.text)
+        assertTrue(controller.replaceFormattedListLineText(blockId, listOf(0), 1, "parent continues"))
+        assertTrue(controller.setFormattedTaskChecked(blockId, listOf(0, 1), true))
+        val final = original.replace("continuation", "parent continues")
+            .replace("**child**", "**child!**")
+            .replace("child continued", "child continues")
+            .replace("- [ ] task child", "- [x] task child")
+        assertEquals(final, controller.text)
+        repeat(4) { assertTrue(controller.undo()) }
+        assertEquals(original, controller.text)
+        repeat(4) { assertTrue(controller.redo()) }
+        assertEquals(final, controller.text)
+    }
+
+    @Test fun nestedListInsideFencedCodeIsNotEditableAsListItem() {
+        val original = "- parent\n\n  ```text\n  - literal code\n  ```\n\n  - child"
+        val controller = MarkdownEditorController(original)
+        val blockId = controller.semanticDocument().blocks.single().id
+        val list = MarkdownSourceList.parse(controller.semanticDocument().blocks.single())!!
+        assertEquals("child", list.lineContent(listOf(0, 0), 0))
+        assertEquals(null, list.lineContent(listOf(0, 1), 0))
+        assertTrue(list.items.first().parts.filterIsInstance<MarkdownSourceList.Raw>().any {
+            list.rawContent(it).contains("- literal code")
+        })
+        assertEquals(original, controller.text)
+    }
 }
