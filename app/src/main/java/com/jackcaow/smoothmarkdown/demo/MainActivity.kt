@@ -50,15 +50,12 @@ import com.jackcaow.smoothmarkdown.MentionPlugin
 import com.jackcaow.smoothmarkdown.MermaidPlugin
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
-import com.jackcaow.smoothmarkdown.StreamMarkdown
 import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -76,12 +73,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val examples = runCatching { loadExamples(assets) }
         val staticPages = runCatching { loadDemoPageMarkdown(assets) }
+        val streamingFixture = runCatching { loadStreamingDemoFixture(assets) }
         val localizations = runCatching { DemoLocalizations.load(assets) }
         val preferences = getSharedPreferences("smooth-markdown-demo", MODE_PRIVATE)
         setContent {
             MaterialTheme {
-                if (examples.isFailure || staticPages.isFailure) {
-                    Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message ?: staticPages.exceptionOrNull()?.message}",
+                if (examples.isFailure || staticPages.isFailure || streamingFixture.isFailure) {
+                    Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message ?: staticPages.exceptionOrNull()?.message ?: streamingFixture.exceptionOrNull()?.message}",
                         modifier = Modifier.safeDrawingPadding().testTag("example-load-error"))
                 } else if (localizations.isFailure) {
                     Text("Unable to load demo languages: ${localizations.exceptionOrNull()?.message}",
@@ -89,6 +87,7 @@ class MainActivity : ComponentActivity() {
                 } else DemoHome(
                     examples = examples.getOrThrow(),
                     staticPages = staticPages.getOrThrow(),
+                    streamingFixture = streamingFixture.getOrThrow(),
                     localizations = localizations.getOrThrow(),
                     initialLanguage = DemoLanguage.fromCode(preferences.getString("language", null)),
                     onLanguageChange = { preferences.edit().putString("language", it.code).apply() },
@@ -105,6 +104,7 @@ class MainActivity : ComponentActivity() {
 private fun DemoHome(
     examples: List<DemoExample>,
     staticPages: Map<String, String>,
+    streamingFixture: StreamingDemoFixture,
     localizations: DemoLocalizations,
     initialLanguage: DemoLanguage,
     onLanguageChange: (DemoLanguage) -> Unit,
@@ -127,7 +127,7 @@ private fun DemoHome(
     val isEditor = pageId == "editor"
     val currentMarkdown = if (pageId == exampleId) example.markdown
         else staticPages[pageId] ?: dedicatedMarkdown(pageId)
-    val currentTitle = if (isEditor) "Markdown Editor" else specialPage?.let {
+    val currentTitle = if (isEditor) "Markdown Editor" else if (pageId == "stream") "Streaming Markdown Demo" else specialPage?.let {
         localizations.page(language, it)
     } ?: localizations.example(language, example)
     val controller = remember(exampleId, isEditor) {
@@ -236,18 +236,20 @@ private fun DemoHome(
                     onExportMarkdown = { exportedLength = it.length },
                 )
             } else if (pageId == "stream") {
-                val chunks = remember(pageId) { flow {
-                    currentMarkdown.chunked(16).forEach { chunk -> emit(chunk); delay(55) }
-                } }
-                StreamMarkdown(chunks, Modifier.weight(1f), onLinkClick = openLink,
-                    styleSheet = themeOptions[themeIndex].second, plugins = plugins)
+                StreamingDemo(
+                    fixture = streamingFixture,
+                    styleSheet = themeOptions[themeIndex].second,
+                    plugins = plugins,
+                    onLinkClick = openLink,
+                    modifier = Modifier.weight(1f),
+                )
             } else {
                 SmoothMarkdown(currentMarkdown, Modifier.weight(1f), onLinkClick = openLink,
                     enableHtml = pageId == "html" || pageId == "details-summary",
                     styleSheet = themeOptions[themeIndex].second, plugins = plugins)
             }
         }
-        if (!isEditor) FloatingActionButton(onClick = { showSource = true },
+        if (!isEditor && pageId != "stream") FloatingActionButton(onClick = { showSource = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("open-source")) {
             Text(localizations.chrome(language, "source"), modifier = Modifier.padding(horizontal = 12.dp))
         }
