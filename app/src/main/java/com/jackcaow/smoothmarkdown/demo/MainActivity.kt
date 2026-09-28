@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                     openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
                     openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
                     openChatList = { startActivity(Intent(this, ChatListActivity::class.java)) },
+                    openAIChat = { startActivity(Intent(this, AIChatActivity::class.java)) },
                     openConversationList = { startActivity(Intent(this, ConversationListActivity::class.java)) },
                     openLink = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                 )
@@ -113,6 +114,7 @@ private fun DemoHome(
     openMermaid: () -> Unit,
     openPerformance: () -> Unit,
     openChatList: () -> Unit,
+    openAIChat: () -> Unit,
     openConversationList: () -> Unit,
     openLink: (String) -> Unit,
 ) {
@@ -179,6 +181,7 @@ private fun DemoHome(
                                 if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
                                 else if (item.id == "performance") scope.launch { drawerState.close(); openPerformance() }
                                 else if (item.id == "chat-list") scope.launch { drawerState.close(); openChatList() }
+                                else if (item.id == "ai") scope.launch { drawerState.close(); openAIChat() }
                                 else if (item.id == "conversation-list") scope.launch { drawerState.close(); openConversationList() }
                                 else select(item.id)
                             }, modifier = Modifier.testTag("nav-${item.id}"))
