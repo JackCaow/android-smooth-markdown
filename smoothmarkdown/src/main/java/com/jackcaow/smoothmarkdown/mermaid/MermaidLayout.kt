@@ -37,6 +37,12 @@ data class MermaidXYPlacement(
     val lines: List<Pair<Int, List<MermaidPoint>>>, val categoryCenters: List<Float>,
     val baseline: Float,
 )
+data class MermaidERPlacedRelationship(
+    val relationship: MermaidERRelationship, val points: List<MermaidPoint>, val labelAt: MermaidPoint,
+)
+data class MermaidERPlacement(
+    val entities: Map<String, MermaidRect>, val relationships: List<MermaidERPlacedRelationship>,
+)
 data class MermaidLayoutResult(
     val width: Float,
     val height: Float,
@@ -49,6 +55,7 @@ data class MermaidLayoutResult(
     val kanban: MermaidKanbanPlacement? = null,
     val radar: MermaidRadarPlacement? = null,
     val xyChart: MermaidXYPlacement? = null,
+    val er: MermaidERPlacement? = null,
 )
 
 /** Deterministic layered layout for the supported flowchart and sequence subset. Units are dp. */
@@ -63,6 +70,60 @@ object MermaidLayout {
         MermaidKind.Radar -> radar(diagram)
         MermaidKind.XYChart -> xyChart(diagram)
         MermaidKind.ClassDiagram, MermaidKind.StateDiagram -> flowchart(diagram)
+        MermaidKind.ERDiagram -> erDiagram(diagram)
+    }
+
+    private fun erDiagram(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.er)
+        val horizontal = data.direction == MermaidDirection.LR || data.direction == MermaidDirection.RL
+        val reverse = data.direction == MermaidDirection.RL || data.direction == MermaidDirection.BT
+        val ordered = if (reverse) data.entities.reversed() else data.entities
+        val boxes = linkedMapOf<String, MermaidRect>()
+        var cursor = 24f
+        ordered.forEach { entity ->
+            val height = 42f + entity.attributes.size * 25f + if (entity.attributes.isEmpty()) 0f else 8f
+            boxes[entity.id] = if (horizontal) MermaidRect(cursor, 80f, 190f, height)
+                else MermaidRect(108f, cursor, 204f, height)
+            cursor += if (horizontal) 270f else height + 106f
+        }
+        val width = if (horizontal) cursor - 270f + 214f else 420f
+        val height = if (horizontal) (boxes.values.maxOf { it.y + it.height } + 110f) else cursor - 106f + 24f
+        val indices = ordered.mapIndexed { index, entity -> entity.id to index }.toMap()
+        val relations = data.relationships.mapIndexed { edgeIndex, edge ->
+            val from = boxes.getValue(edge.from)
+            val to = boxes.getValue(edge.to)
+            val distance = kotlin.math.abs(indices.getValue(edge.from) - indices.getValue(edge.to))
+            val points = if (from == to) {
+                val x = from.x + from.width
+                val y = from.y + from.height / 2
+                listOf(MermaidPoint(x, y - 14f), MermaidPoint(x + 42f, y - 14f),
+                    MermaidPoint(x + 42f, y + 14f), MermaidPoint(x, y + 14f))
+            } else if (horizontal) {
+                val rightward = to.x > from.x
+                val start = MermaidPoint(if (rightward) from.x + from.width else from.x, from.centerY)
+                val end = MermaidPoint(if (rightward) to.x else to.x + to.width, to.centerY)
+                if (distance <= 1) listOf(start, end) else {
+                    val viaY = 38f - edgeIndex * 12f
+                    listOf(start, MermaidPoint(start.x + if (rightward) 18f else -18f, viaY),
+                        MermaidPoint(end.x + if (rightward) -18f else 18f, viaY), end)
+                }
+            } else {
+                val downward = to.y > from.y
+                val start = MermaidPoint(from.centerX, if (downward) from.y + from.height else from.y)
+                val end = MermaidPoint(to.centerX, if (downward) to.y else to.y + to.height)
+                if (distance <= 1) listOf(start, end) else {
+                    val viaX = 354f + edgeIndex * 12f
+                    listOf(start, MermaidPoint(viaX, start.y + if (downward) 18f else -18f),
+                        MermaidPoint(viaX, end.y + if (downward) -18f else 18f), end)
+                }
+            }
+            val mid = points[points.size / 2]
+            val labelAt = if (points.size == 2) MermaidPoint((points[0].x + points[1].x) / 2,
+                (points[0].y + points[1].y) / 2) else mid
+            MermaidERPlacedRelationship(edge, points, labelAt)
+        }
+        return MermaidLayoutResult(width, height, emptyMap(), emptyList(), emptyMap(),
+            er = MermaidERPlacement(boxes, relations))
     }
 
     private fun radar(diagram: MermaidDiagram): MermaidLayoutResult {

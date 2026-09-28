@@ -25,6 +25,7 @@ object MermaidParser {
                 MermaidStructuredParser(MermaidKind.StateDiagram).parse(lines)
             Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidXYChartParser().parse(lines)
+            header.equals("erDiagram", ignoreCase = true) -> MermaidERParser().parse(lines)
             else -> null
         }
     }

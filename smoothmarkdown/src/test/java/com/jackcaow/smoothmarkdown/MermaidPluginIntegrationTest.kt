@@ -70,6 +70,14 @@ class MermaidPluginIntegrationTest {
             .firstChild is FencedCodeBlock)
     }
 
+    @Test fun erFenceUsesOptInPluginAndIncompleteERStaysCode() {
+        val valid = "```mermaid\nerDiagram\nA ||--o{ B : has\nA {\n int id PK\n}\n```"
+        assertTrue(parseMarkdown(valid).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(valid, plugins).firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown("```mermaid\nerDiagram\nA {\n int id PK\n```", plugins)
+            .firstChild is FencedCodeBlock)
+    }
+
     @Test fun nestedFenceInQuoteIsTransformed() {
         val document = parseMarkdown("> ```mermaid\n> graph TB\n> A --> B\n> ```", plugins)
         assertTrue(document.firstChild.firstChild is MermaidDiagramNode)

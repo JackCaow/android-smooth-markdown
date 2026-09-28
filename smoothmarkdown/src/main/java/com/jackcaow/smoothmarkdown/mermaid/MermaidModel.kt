@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 /** Parsed subset of Mermaid supported by the native Compose prototype. */
-enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart, ClassDiagram, StateDiagram }
+enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart, ClassDiagram, StateDiagram, ERDiagram }
 enum class MermaidDirection { TB, BT, LR, RL }
 enum class MermaidShape {
     Rectangle, Rounded, Stadium, Diamond, Hexagon, Circle, Subroutine,
@@ -113,6 +113,20 @@ data class MermaidXYData(
     val effectiveMax: Double get() = yAxisMax ?: maxOf(0.0, series.flatMap { it.values }.maxOrNull() ?: 0.0)
 }
 
+enum class MermaidERCardinality { ExactlyOne, ZeroOrOne, OneOrMore, ZeroOrMore }
+data class MermaidEREntity(val id: String, val label: String, val attributes: List<String>)
+data class MermaidERRelationship(
+    val from: String, val to: String, val label: String,
+    val sourceCardinality: MermaidERCardinality, val targetCardinality: MermaidERCardinality,
+    val dotted: Boolean,
+)
+data class MermaidERData(
+    val entities: List<MermaidEREntity>, val relationships: List<MermaidERRelationship>,
+    val direction: MermaidDirection,
+) {
+    fun entity(id: String): MermaidEREntity? = entities.firstOrNull { it.id == id }
+}
+
 data class MermaidDiagram(
     val kind: MermaidKind,
     val direction: MermaidDirection,
@@ -125,6 +139,7 @@ data class MermaidDiagram(
     val kanban: MermaidKanbanData? = null,
     val radar: MermaidRadarData? = null,
     val xyChart: MermaidXYData? = null,
+    val er: MermaidERData? = null,
 ) {
     fun node(id: String): MermaidNode? = nodes.firstOrNull { it.id == id }
 }

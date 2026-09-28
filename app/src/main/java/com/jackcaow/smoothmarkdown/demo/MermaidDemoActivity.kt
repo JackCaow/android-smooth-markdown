@@ -33,6 +33,7 @@ class MermaidDemoActivity : ComponentActivity() {
                 "XY Chart" to xyChartExample,
                 "Class" to classExample,
                 "State" to stateExample,
+                "ER Diagram" to erExample,
             )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -152,4 +153,23 @@ private val stateExample = """
     已完成 --> [*]
     待支付 --> 已取消: 超时/取消
     已取消 --> [*]
+""".trimIndent()
+
+private val erExample = """
+    erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE_ITEM : contains
+    CUSTOMER {
+        int id PK
+        string name
+    }
+    ORDER {
+        int id PK
+        int customer_id FK
+    }
+    LINE_ITEM {
+        int id PK
+        int order_id FK
+        string product
+    }
 """.trimIndent()
