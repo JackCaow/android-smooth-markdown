@@ -54,5 +54,5 @@ fun StreamMarkdown(
             pending?.cancel()
         }
     }
-    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet)
+    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet = styleSheet)
 }
