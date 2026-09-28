@@ -21,6 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.focus.onFocusChanged
@@ -31,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import kotlinx.coroutines.launch
 
 /** Source editor, preview, split view, and a focused formatted-block editing surface. */
 @Composable
@@ -38,7 +44,29 @@ fun SmoothMarkdownEditor(
     controller: MarkdownEditorController,
     modifier: Modifier = Modifier,
     onSave: ((String) -> Unit)? = null,
+    onPickImage: (suspend () -> MarkdownEditorImageSelection?)? = null,
+    onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Unit)? = null,
+    onImportMarkdown: (suspend () -> String?)? = null,
+    onExportMarkdown: (suspend (String) -> Unit)? = null,
+    onHostActionError: ((MarkdownEditorHostAction, Throwable) -> Unit)? = null,
 ) {
+    val scope = rememberCoroutineScope()
+    var hostActionBusy by remember { mutableStateOf(false) }
+    var hostStatus by remember { mutableStateOf("") }
+    fun runHostAction(label: String, action: suspend () -> MarkdownEditorHostResult) {
+        if (hostActionBusy) return
+        hostActionBusy = true
+        scope.launch {
+            try {
+                hostStatus = when (action()) {
+                    MarkdownEditorHostResult.SUCCESS -> "$label complete"
+                    MarkdownEditorHostResult.CANCELLED -> "$label cancelled"
+                    MarkdownEditorHostResult.STALE -> "$label cancelled: document changed"
+                    MarkdownEditorHostResult.FAILED -> "$label failed"
+                }
+            } finally { hostActionBusy = false }
+        }
+    }
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row {
@@ -71,7 +99,29 @@ fun SmoothMarkdownEditor(
             ).forEach { (label, command) ->
                 TextButton(onClick = { controller.applyCommand(command) }) { Text(label) }
             }
+            if (onPickImage != null) {
+                TextButton(onClick = {
+                    runHostAction("Image") {
+                        MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
+                    }
+                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-pick-image")) { Text("Image") }
+            }
+            if (onImportMarkdown != null) {
+                TextButton(onClick = {
+                    runHostAction("Import") {
+                        MarkdownEditorHostActions.importMarkdown(controller, onImportMarkdown, onHostActionError)
+                    }
+                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-import-markdown")) { Text("Import") }
+            }
+            if (onExportMarkdown != null) {
+                TextButton(onClick = {
+                    runHostAction("Export") {
+                        MarkdownEditorHostActions.exportMarkdown(controller, onExportMarkdown, onHostActionError)
+                    }
+                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text("Export") }
+            }
         }
+        if (hostStatus.isNotEmpty()) Text(hostStatus, modifier = Modifier.testTag("editor-host-status"))
         Spacer(Modifier.height(8.dp))
         when (controller.mode) {
             MarkdownEditorMode.SOURCE -> SourcePane(controller, Modifier.weight(1f))

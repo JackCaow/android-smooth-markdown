@@ -29,6 +29,7 @@ import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 
 private val demoMarkdown = """
@@ -133,6 +134,7 @@ class MainActivity : ComponentActivity() {
             var showEditor by remember { mutableStateOf(false) }
             var enableHtml by remember { mutableStateOf(false) }
             var themeIndex by remember { mutableStateOf(0) }
+            var lastExport by remember { mutableStateOf("") }
             val themes = listOf(
                 "System" to MarkdownStyleSheet.default(),
                 "Light" to MarkdownStyleSheet.light(),
@@ -159,7 +161,13 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     if (showEditor) {
-                        SmoothMarkdownEditor(controller, Modifier.weight(1f))
+                        if (lastExport.isNotEmpty()) Text("Exported ${lastExport.length} characters")
+                        SmoothMarkdownEditor(
+                            controller, Modifier.weight(1f),
+                            onPickImage = { MarkdownEditorImageSelection("smooth-markdown-mark.svg", "Demo mark", "Bundled SVG") },
+                            onImportMarkdown = { "# Imported sample\n\nA host supplied this Markdown." },
+                            onExportMarkdown = { lastExport = it },
+                        )
                     } else {
                         SmoothMarkdown(
                             markdown = controller.text,

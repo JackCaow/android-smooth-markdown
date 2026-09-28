@@ -10,6 +10,8 @@ Open this folder in Android Studio or run `./gradlew :app:assembleDebug`. Run `.
 
 The public components include `SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml, styleSheet)`, `StreamMarkdown(chunks, ..., enableHtml, styleSheet)`, `MarkdownEditorController`, and `SmoothMarkdownEditor(controller, modifier, onSave)`. For image metadata, both reader APIs also accept `onImageClickWithMetadata = { source, alt, title -> ... }`; if both image callbacks are supplied, both run. This applies to standalone, inline, and enabled HTML images. HTML is disabled by default. CommonMark Java parses Markdown to an AST; Compose renders each block directly. The [Flutter source and tests](https://github.com/JackCaow/flutter-smooth-markdown) remain the behavior reference.
 
+The editor optionally accepts suspend host callbacks `onPickImage`, `onImportMarkdown`, and `onExportMarkdown`, plus `onImagePickEvent` and `onHostActionError`. Supply them to show Image, Import, and Export toolbar actions. The host owns Android picker, upload, and storage UI; `onPickImage` returns `MarkdownEditorImageSelection(url, alt, title)` and `onImportMarkdown` returns Markdown text. A null or blank result, callback failure, or a document changed while a picker was open leaves the source untouched. Successful image and import insertion each create one undo step. Export receives the exact source snapshot and never edits it. The demo uses bundled sample callbacks; replace them with your app's picker and storage implementation.
+
 `MarkdownStyleSheet` supports MaterialTheme-backed defaults plus `light()`, `dark()`, `github(dark)`, and `vscode(dark)` presets. Use `copy` to override colors, text styles, or spacing:
 
 ```kotlin
