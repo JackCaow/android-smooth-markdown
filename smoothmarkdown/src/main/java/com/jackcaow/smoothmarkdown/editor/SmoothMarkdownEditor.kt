@@ -41,6 +41,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.onFocusChanged
@@ -48,6 +49,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -258,7 +260,37 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
 private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier, wikilinkSuggestions: List<String>) {
     val blocks = controller.semanticDocument().blocks
     val pendingExit = controller.pendingListExit
+    val clipboard = LocalClipboardManager.current
+    val blockSelection = controller.formattedBlockSelection?.takeIf { it.source == controller.text }
+    var blockReplacement by remember(controller) { mutableStateOf("") }
+    var blockSelectionError by remember(controller) { mutableStateOf(false) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+        if (blockSelection != null) {
+            Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-block-copy")) { Text("Copy Markdown") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.deleteFormattedBlockSelection()
+                }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.replaceFormattedBlockSelectionWithMarkdown(blockReplacement)
+                    if (!blockSelectionError) blockReplacement = ""
+                }, modifier = Modifier.testTag("formatted-block-replace")) { Text("Replace blocks") }
+                TextButton(onClick = {
+                    controller.clearFormattedBlockSelection()
+                    blockSelectionError = false
+                }, modifier = Modifier.testTag("formatted-block-clear")) { Text("Clear") }
+            }
+            OutlinedTextField(
+                value = blockReplacement,
+                onValueChange = { blockReplacement = it; blockSelectionError = false },
+                label = { Text("Replacement Markdown") },
+                modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
+            )
+            if (blockSelectionError) Text("This edit would change neighboring blocks", modifier = Modifier.testTag("formatted-block-edit-error"))
+        }
         var pendingRendered = false
         blocks.forEach { block ->
             if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
@@ -284,6 +316,12 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        TextButton(onClick = {
+                            controller.selectFormattedBlock(block.id)
+                            blockSelectionError = false
+                        }, modifier = Modifier.testTag("formatted-block-select-${block.id}").semantics {
+                            selected = blockSelection?.let { blocks.indexOf(block) in it.firstIndex..it.lastIndex } == true
+                        }) { Text(if (blockSelection == null) "Select" else "Extend") }
                         if (block.kind == MarkdownBlockKind.HEADING && editableText != null) {
                             Row {
                                 (1..3).forEach { level ->

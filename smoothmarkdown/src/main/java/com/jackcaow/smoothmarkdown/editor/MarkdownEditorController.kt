@@ -7,6 +7,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 
+data class MarkdownDocumentBlockSelection(
+    val source: String,
+    val anchorIndex: Int,
+    val extentIndex: Int,
+) {
+    val firstIndex: Int get() = minOf(anchorIndex, extentIndex)
+    val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
+}
+
 /** Source-backed editing commands. Offsets use UTF-16, matching Compose selections. */
 class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100) {
     var mode by mutableStateOf(MarkdownEditorMode.SOURCE)
@@ -37,6 +46,9 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     internal data class PendingListExit(val offset: Int, val beforeItemCount: Int)
     internal var pendingListExit by mutableStateOf<PendingListExit?>(null)
         private set
+    /** A contiguous range of top-level formatted blocks, tied to one source revision. */
+    var formattedBlockSelection by mutableStateOf<MarkdownDocumentBlockSelection?>(null)
+        private set
 
     private val limit = historyLimit.coerceAtLeast(0)
     private data class EditorSnapshot(
@@ -49,6 +61,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val listSelection: TextRange,
         val listComposition: TextRange?,
         val pendingListExit: PendingListExit?,
+        val blockSelection: MarkdownDocumentBlockSelection?,
     )
 
     private val undoStack = ArrayDeque<EditorSnapshot>()
@@ -76,6 +89,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         if (next.text != value.text) {
             recordUndo(value)
             pendingListExit = null
+            formattedBlockSelection = null
         }
         value = next
     }
@@ -156,6 +170,60 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
 
     /** A source-backed semantic snapshot for block-level editing. */
     fun semanticDocument(): MarkdownDocument = MarkdownDocumentCodec.parse(text)
+
+    /** Tap one block to anchor; tap another to extend the inclusive range. */
+    fun selectFormattedBlock(blockId: String): Boolean {
+        val document = semanticDocument()
+        val index = document.blocks.indexOfFirst { it.id == blockId }
+        if (index < 0) return false
+        val old = formattedBlockSelection?.takeIf { it.source == text }
+        formattedBlockSelection = if (old == null) MarkdownDocumentBlockSelection(text, index, index)
+            else old.copy(extentIndex = index)
+        return true
+    }
+
+    fun clearFormattedBlockSelection() { formattedBlockSelection = null }
+
+    /** Includes the exact source between the first and last selected blocks. */
+    fun copyFormattedBlockSelectionAsMarkdown(): String? {
+        val document = selectedFormattedDocument() ?: return null
+        val selection = formattedBlockSelection ?: return null
+        val first = document.blocks[selection.firstIndex]
+        val last = document.blocks[selection.lastIndex]
+        return text.substring(first.range.min, last.range.max)
+    }
+
+    fun deleteFormattedBlockSelection(): Boolean = replaceFormattedBlockSelectionWithMarkdown("")
+
+    /** One source edit and one undo step. Refuses replacements that change untouched block parsing. */
+    fun replaceFormattedBlockSelectionWithMarkdown(markdown: String): Boolean {
+        val document = selectedFormattedDocument() ?: return false
+        val selection = formattedBlockSelection ?: return false
+        val replacementBlocks = if (markdown.isEmpty()) emptyList() else {
+            val parsed = MarkdownDocumentCodec.parse(markdown).blocks
+            if (parsed.isEmpty() || parsed.first().range.min != 0 || parsed.last().range.max != markdown.length) return false
+            parsed
+        }
+        val first = document.blocks[selection.firstIndex]
+        val last = document.blocks[selection.lastIndex]
+        val candidate = text.replaceRange(first.range.min, last.range.max, markdown)
+        val reparsed = MarkdownDocumentCodec.parse(candidate).blocks
+        val before = document.blocks.take(selection.firstIndex)
+        val after = document.blocks.drop(selection.lastIndex + 1)
+        if (reparsed.size != before.size + replacementBlocks.size + after.size) return false
+        if (before.zip(reparsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (replacementBlocks.zip(reparsed.drop(before.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (after.zip(reparsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        replaceRange(first.range.min, last.range.max, markdown)
+        return true
+    }
+
+    private fun selectedFormattedDocument(): MarkdownDocument? {
+        val selection = formattedBlockSelection ?: return null
+        if (selection.source != text) return null
+        val document = semanticDocument()
+        return document.takeIf { selection.firstIndex >= 0 && selection.lastIndex < it.blocks.size }
+    }
 
     /** Replaces one complete semantic block through the existing source undo history. */
     fun replaceSemanticBlock(blockId: String, markdown: String): Boolean {
@@ -560,12 +628,14 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         if (next.text != value.text) recordUndo(value)
         value = next
         pendingListExit = null
+        if (next.text != formattedBlockSelection?.source) formattedBlockSelection = null
     }
 
     private fun snapshot(): EditorSnapshot = EditorSnapshot(
         value, activeFormattedBlockId, formattedSelection, formattedComposition,
         activeFormattedListPath, activeFormattedListLine, formattedListSelection, formattedListComposition,
         pendingListExit,
+        formattedBlockSelection,
     )
 
     private fun restore(snapshot: EditorSnapshot) {
@@ -578,6 +648,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         formattedListSelection = snapshot.listSelection
         formattedListComposition = snapshot.listComposition
         pendingListExit = snapshot.pendingListExit
+        formattedBlockSelection = snapshot.blockSelection
         formattedListFocusTarget = snapshot.listPath?.let { it to snapshot.listLine }
         formattedBlockFocusTarget = if (snapshot.listPath == null) snapshot.blockId else null
     }
