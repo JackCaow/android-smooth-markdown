@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
@@ -92,7 +93,7 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
     )
 }
 
-/** Paragraphs, ATX headings, and fenced code expose their content; other blocks stay source-visible. */
+/** Paragraphs, ATX headings, fenced code, and GFM tables expose source-backed content. */
 @Composable
 private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier) {
     val blocks = controller.semanticDocument().blocks
@@ -125,7 +126,11 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                             }
                         }
                     }
-                    if (editableText != null) {
+                    if (block.kind == MarkdownBlockKind.TABLE) {
+                        val table = controller.semanticTable(block.id)
+                        if (table != null) FormattedTable(controller, block.id, table)
+                        else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                    } else if (editableText != null) {
                         BasicTextField(
                             value = editableText,
                             onValueChange = { controller.replaceFormattedBlockText(block.id, it) },
@@ -152,6 +157,39 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FormattedTable(controller: MarkdownEditorController, blockId: String, table: MarkdownSourceTable) {
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        fun displayCell(raw: String) = raw.replace("\\|", "|")
+        @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
+            BasicTextField(
+                value = displayCell(raw),
+                onValueChange = { next ->
+                    controller.editSemanticTable(blockId) { it.replaceCell(rowIndex, columnIndex, next, header) }
+                },
+                modifier = Modifier.width(140.dp).padding(4.dp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            )
+        }
+        Row {
+            table.headers.forEachIndexed { column, raw -> cell(raw, true, 0, column) }
+        }
+        table.rows.forEachIndexed { row, cells ->
+            Row { cells.forEachIndexed { column, raw -> cell(raw, false, row, column) } }
+        }
+        Row {
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertRowAfter(it.rows.lastIndex) } }) { Text("+ Row") }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertColumnAfter(it.columnCount - 1) } }) { Text("+ Column") }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteRow(it.rows.lastIndex) } }, enabled = table.rows.isNotEmpty()) { Text("− Row") }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteColumn(it.columnCount - 1) } }, enabled = table.columnCount > 1) { Text("− Column") }
         }
     }
 }

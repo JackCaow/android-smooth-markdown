@@ -123,6 +123,20 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         return true
     }
 
+    /** Edits a table by semantic block ID, without depending on the source cursor position. */
+    fun semanticTable(blockId: String): MarkdownSourceTable? {
+        val block = semanticDocument().blockById(blockId) ?: return null
+        if (block.kind != MarkdownBlockKind.TABLE) return null
+        return MarkdownSourceTable.parse(block.source)
+    }
+
+    fun editSemanticTable(blockId: String, transform: (MarkdownSourceTable) -> MarkdownSourceTable): Boolean {
+        val table = semanticTable(blockId) ?: return false
+        val updated = transform(table)
+        if (updated == table) return false
+        return replaceSemanticBlock(blockId, updated.toMarkdown())
+    }
+
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
 
     fun insertMarkdownBlock(markdown: String) {
