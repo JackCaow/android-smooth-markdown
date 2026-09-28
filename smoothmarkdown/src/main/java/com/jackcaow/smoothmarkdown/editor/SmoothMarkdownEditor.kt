@@ -90,7 +90,7 @@ fun SmoothMarkdownEditor(
     }
     val searchMatches = if (searchOpen) controller.findMatches(searchQuery) else emptyList()
     val slashTrigger = if (controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
-    val slashSuggestions = slashTrigger?.let(MarkdownSlashCommands::suggestions).orEmpty()
+    val slashSuggestions = slashTrigger?.let { MarkdownSlashCommands.suggestions(it, enableWikilinks) }.orEmpty()
     fun runHostAction(label: String, action: suspend () -> MarkdownEditorHostResult) {
         if (hostActionBusy) return
         hostActionBusy = true
@@ -168,11 +168,11 @@ fun SmoothMarkdownEditor(
         }
         if (slashTrigger != null && slashSuggestions.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).testTag("editor-slash-suggestions")) {
-                slashSuggestions.take(6).forEachIndexed { index, (label, command) ->
+                slashSuggestions.forEachIndexed { index, item ->
                     TextButton(
-                        onClick = { MarkdownSlashCommands.apply(controller, slashTrigger, command) },
+                        onClick = { MarkdownSlashCommands.apply(controller, slashTrigger, item.command) },
                         modifier = Modifier.testTag("editor-slash-suggestion-$index"),
-                    ) { Text(label) }
+                    ) { Text(item.title) }
                 }
             }
         }
