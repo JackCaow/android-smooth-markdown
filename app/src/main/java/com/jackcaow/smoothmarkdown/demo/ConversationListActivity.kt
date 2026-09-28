@@ -12,6 +12,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,8 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,16 +42,32 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,10 +76,12 @@ import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.MermaidPlugin
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.MarkdownSelectionTarget
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.withTimeoutOrNull
 
 private val conversationBlue = Color(0xFF007AFF)
 
@@ -180,9 +202,9 @@ private fun ConversationListScreen(
                         contentPadding = PaddingValues(vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        items(conversation.messages.size) { index ->
+                        items(conversation.messages.size, key = { index -> "${conversation.id}:$index" }) { index ->
                             ConversationBubble(conversation, conversation.messages[index], dark, openedAt,
-                                onLinkClick) { menuMessage = conversation.messages[index] }
+                                onLinkClick, onCopy) { menuMessage = conversation.messages[index] }
                         }
                     }
                 }
@@ -245,6 +267,7 @@ private fun ConversationRow(conversation: ConversationSample, dark: Boolean, ope
 @Composable
 private fun ConversationBubble(conversation: ConversationSample, message: ConversationMessage,
                                dark: Boolean, openedAt: Long, onLinkClick: (String) -> Unit,
+                               onCopy: (String) -> Unit,
                                onMenuClick: () -> Unit) {
     val own = message.isMe
     val bubble = if (own) if (dark) Color(0xFF0A84FF) else conversationBlue
@@ -258,16 +281,69 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
         paragraphStyle = TextStyle(color = textColor),
     )
     val plugins = remember { ParserPluginRegistry().also { it.register(MermaidPlugin()) } }
+    val menuGapPx = with(LocalDensity.current) { 28.dp.roundToPx() }
+    val menuEdgePx = with(LocalDensity.current) { 8.dp.roundToPx() }
+    val selectionState = rememberSelectionState()
+    val textTargets = remember(message.content) { mutableMapOf<Any, MarkdownSelectionTarget>() }
+    val bubbleCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var menuPress by remember { mutableStateOf<Offset?>(null) }
+    var menuSelectionRange by remember { mutableStateOf<TextRange?>(null) }
+    var pendingSelection by remember { mutableStateOf<TextRange?>(null) }
+    LaunchedEffect(pendingSelection) {
+        val range = pendingSelection ?: return@LaunchedEffect
+        withFrameNanos { }
+        selectionState.select(range)
+        pendingSelection = null
+    }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         horizontalArrangement = if (own) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top) {
         if (!own) { Avatar(conversation.avatar, conversation.avatarColor, 32); Spacer(Modifier.width(8.dp)) }
         Surface(color = bubble, shape = RoundedCornerShape(16.dp), shadowElevation = 2.dp,
             modifier = Modifier.fillMaxWidth(.70f).widthIn(max = 460.dp)
+                .onGloballyPositioned { bubbleCoordinates.value = it }
+                .pointerInput(message.content) {
+                    awaitEachGesture {
+                        awaitPointerEventScope {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            val start = down.position
+                            val pointerId = down.id
+                            val keptPressed = withTimeoutOrNull(350L) {
+                                while (true) {
+                                    val change = awaitPointerEvent(PointerEventPass.Initial).changes
+                                        .firstOrNull { it.id == pointerId } ?: return@withTimeoutOrNull false
+                                    if (!change.pressed || change.isConsumed ||
+                                        (change.position - start).getDistance() > viewConfiguration.touchSlop
+                                    ) return@withTimeoutOrNull false
+                                }
+                            } ?: true
+                            if (keptPressed) {
+                                bubbleCoordinates.value?.localToWindow(start)?.let { press ->
+                                    menuSelectionRange = paragraphSelectionRange(press, textTargets.values,
+                                        selectionState.getSelectableTexts())
+                                    selectionState.clear()
+                                    menuPress = press
+                                }
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        }
+                    }
+                }
                 .testTag("conversation-bubble-${conversation.id}-${conversation.messages.indexOf(message)}")) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
-                    enableHtml = true, plugins = plugins, onLinkClick = onLinkClick)
+                val content: @Composable () -> Unit = {
+                    SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
+                        enableHtml = true, plugins = plugins, onLinkClick = onLinkClick,
+                        selectableAsSingleRegion = true,
+                        onTextPositioned = { textTargets[it.key] = it })
+                }
+                // Remove the native recognizer while the 350ms menu is open, so its
+                // later long-press deadline cannot replace the custom first step.
+                if (menuPress == null) SelectionContainer(state = selectionState) { content() }
+                else content()
                 Text(formatClockTime(message.secondsAgo, openedAt), fontSize = 11.sp,
                     color = if (own) Color.White.copy(alpha = .6f) else Color.Gray,
                     modifier = Modifier.padding(top = 4.dp))
@@ -278,6 +354,52 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
             Text("⋯")
         }
         if (own) { Spacer(Modifier.width(8.dp)); Avatar(conversation.avatar, conversation.avatarColor, 32) }
+    }
+    menuPress?.let { press ->
+        Popup(
+            popupPositionProvider = remember(press, menuGapPx, menuEdgePx) {
+                ConversationMenuPosition(press, menuGapPx, menuEdgePx)
+            },
+            onDismissRequest = {
+                textTargets.clear()
+                menuPress = null
+                menuSelectionRange = null
+            },
+            properties = PopupProperties(focusable = true),
+        ) {
+            Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 8.dp,
+                color = if (dark) Color(0xFF38383A) else Color.White) {
+                Row(Modifier.padding(horizontal = 4.dp)) {
+                    TextButton(onClick = {
+                        onCopy(message.content)
+                        textTargets.clear()
+                        menuPress = null
+                        menuSelectionRange = null
+                    },
+                        modifier = Modifier.testTag("conversation-longpress-copy")) { Text("复制") }
+                    TextButton(onClick = {
+                        val range = menuSelectionRange
+                        textTargets.clear()
+                        menuPress = null
+                        menuSelectionRange = null
+                        pendingSelection = range
+                    }, modifier = Modifier.testTag("conversation-longpress-select")) { Text("选择文字") }
+                }
+            }
+        }
+    }
+}
+
+private class ConversationMenuPosition(private val press: Offset, private val gap: Int,
+                                       private val edge: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
+                                   layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val x = (press.x.toInt() - popupContentSize.width / 2)
+            .coerceIn(edge, (windowSize.width - popupContentSize.width - edge).coerceAtLeast(edge))
+        val above = press.y.toInt() - popupContentSize.height - gap
+        val y = (if (above >= edge) above else press.y.toInt() + gap)
+            .coerceIn(edge, (windowSize.height - popupContentSize.height - edge).coerceAtLeast(edge))
+        return IntOffset(x, y)
     }
 }
 

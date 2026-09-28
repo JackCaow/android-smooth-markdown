@@ -24,6 +24,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -201,9 +204,22 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(sheet.codePadding)) {
-            SelectionContainer {
+            val selectionOptions = LocalMarkdownSelectionOptions.current
+            val selectionKey = androidx.compose.runtime.remember { Any() }
+            val codeLayout = androidx.compose.runtime.remember(codeText) { mutableStateOf<TextLayoutResult?>(null) }
+            val tracking = selectionOptions.onTextPositioned?.let { callback ->
+                Modifier.onGloballyPositioned { coordinates ->
+                    val bounds = coordinates.boundsInWindow()
+                    callback(MarkdownSelectionTarget(selectionKey, bounds, codeText) { windowPoint ->
+                        codeLayout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+                    })
+                }
+            } ?: Modifier
+            val content: @Composable () -> Unit = {
                 Text(
                     codeText,
+                    modifier = tracking,
+                    onTextLayout = { codeLayout.value = it },
                     softWrap = false,
                     style = (sheet.codeStyle ?: MaterialTheme.typography.bodyMedium).copy(
                         fontFamily = FontFamily.Monospace,
@@ -211,6 +227,7 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                     ),
                 )
             }
+            if (LocalMarkdownSelectionOptions.current.outerRegion) content() else SelectionContainer { content() }
         }
     }
 }

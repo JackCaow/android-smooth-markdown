@@ -35,6 +35,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
@@ -186,6 +188,10 @@ fun SmoothMarkdown(
     onHashtagClick: ((String) -> Unit)? = null,
     /** Receives the complete title inside a parsed `[[wikilink]]`. */
     onWikilinkClick: ((String) -> Unit)? = null,
+    /** Set when an outer SelectionContainer owns one selection across all Markdown blocks. */
+    selectableAsSingleRegion: Boolean = false,
+    /** Reports rendered text bounds for programmatic selection by touch position. */
+    onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
 ) {
     val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
     val blocks = remember(document) { document.children().toList() }
@@ -201,6 +207,7 @@ fun SmoothMarkdown(
         LocalOnMentionClick provides onMentionClick,
         LocalOnHashtagClick provides onHashtagClick,
         LocalOnWikilinkClick provides onWikilinkClick,
+        LocalMarkdownSelectionOptions provides MarkdownSelectionOptions(selectableAsSingleRegion, onTextPositioned),
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
         if (scrollable) {
@@ -229,8 +236,11 @@ private fun MarkdownSelectionGroup(
     onImageClick: (String) -> Unit,
     enableHtml: Boolean,
 ) {
+    val outerRegion = LocalMarkdownSelectionOptions.current.outerRegion
     if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
         MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
+    } else if (outerRegion) {
+        Column { group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) } }
     } else {
         SelectionContainer {
             Column {
@@ -425,7 +435,17 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
         }
     } + pluginAccessibilityActions(text, onMentionClick, onHashtagClick, onWikilinkClick)
     val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
-    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+    val selectionOptions = LocalMarkdownSelectionOptions.current
+    val selectionKey = remember { Any() }
+    val tracking = selectionOptions.onTextPositioned?.let { callback ->
+        Modifier.onGloballyPositioned { coordinates ->
+            val bounds = coordinates.boundsInWindow()
+            callback(MarkdownSelectionTarget(selectionKey, bounds, text) { windowPoint ->
+                layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+            })
+        }
+    } ?: Modifier
+    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -460,17 +480,27 @@ private fun MarkdownInlineText(
     val onHashtagClick = LocalOnHashtagClick.current
     val onWikilinkClick = LocalOnWikilinkClick.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
+    val selectionOptions = LocalMarkdownSelectionOptions.current
+    val selectionKey = remember { Any() }
+    val layout = remember(render.text) { mutableStateOf<TextLayoutResult?>(null) }
+    val tracking = selectionOptions.onTextPositioned?.let { callback ->
+        Modifier.onGloballyPositioned { coordinates ->
+            val bounds = coordinates.boundsInWindow()
+            callback(MarkdownSelectionTarget(selectionKey, bounds, render.text) { windowPoint ->
+                layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+            })
+        }
+    } ?: Modifier
     if (render.images.isEmpty() && render.math.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
         )
         return
     }
     val density = LocalDensity.current
-    val layout = remember(render.text) { mutableStateOf<TextLayoutResult?>(null) }
     val inline = render.images.mapValues { (_, image) ->
         val width = image.width ?: 32f
         val height = image.height ?: 32f
@@ -506,7 +536,7 @@ private fun MarkdownInlineText(
             text = render.text,
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
         )
         return
     }
@@ -526,7 +556,7 @@ private fun MarkdownInlineText(
             text = render.text,
             inlineContent = inline,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
                 .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
