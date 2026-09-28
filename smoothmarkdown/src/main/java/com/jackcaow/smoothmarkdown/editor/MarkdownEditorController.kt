@@ -179,9 +179,24 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     fun editSemanticTable(blockId: String, transform: (MarkdownSourceTable) -> MarkdownSourceTable): Boolean {
-        val table = semanticTable(blockId) ?: return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        if (block.kind != MarkdownBlockKind.TABLE) return false
+        val table = MarkdownSourceTable.parse(block.source) ?: return false
         val updated = transform(table)
         if (updated == table) return false
+        val patch = table.sourcePatchForCell(block.source, updated)
+        if (patch != null) {
+            val replacement = block.source.replaceRange(patch.start, patch.end, patch.replacement)
+            val priorSelection = selection
+            if (!replaceSemanticBlock(blockId, replacement)) return false
+            val absoluteStart = block.range.min + patch.start
+            val absoluteEnd = block.range.min + patch.end
+            setSelection(
+                mappedPosition(priorSelection.start, absoluteStart, absoluteEnd, patch.replacement.length),
+                mappedPosition(priorSelection.end, absoluteStart, absoluteEnd, patch.replacement.length),
+            )
+            return true
+        }
         return replaceSemanticBlock(blockId, updated.toMarkdown())
     }
 
@@ -243,11 +258,30 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val located = findSourceTable(text, selection.min) ?: return false
         val updated = transform(located.table)
         if (updated != located.table) {
+            val original = text.substring(located.range.min, located.range.max)
+            val patch = located.table.sourcePatchForCell(original, updated)
+            if (patch != null) {
+                val absoluteStart = located.range.min + patch.start
+                val absoluteEnd = located.range.min + patch.end
+                val priorSelection = selection
+                replaceRange(absoluteStart, absoluteEnd, patch.replacement)
+                setSelection(
+                    mappedPosition(priorSelection.start, absoluteStart, absoluteEnd, patch.replacement.length),
+                    mappedPosition(priorSelection.end, absoluteStart, absoluteEnd, patch.replacement.length),
+                )
+                return true
+            }
             val replacement = updated.toMarkdown()
             val relativeCaret = (selection.min - located.range.min).coerceIn(0, replacement.length)
             replaceRange(located.range.min, located.range.max, replacement, relativeCaret)
         }
         return true
+    }
+
+    private fun mappedPosition(position: Int, start: Int, end: Int, replacementLength: Int): Int = when {
+        position <= start -> position
+        position >= end -> position + replacementLength - (end - start)
+        else -> start + (position - start).coerceAtMost(replacementLength)
     }
 
     fun findMatches(query: String, caseSensitive: Boolean = false): List<TextRange> {

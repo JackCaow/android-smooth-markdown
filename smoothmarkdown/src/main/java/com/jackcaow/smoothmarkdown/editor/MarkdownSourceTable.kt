@@ -10,6 +10,36 @@ data class MarkdownSourceTable(
 ) {
     val columnCount: Int get() = headers.size
 
+    /** Keeps the untouched table source when a formatted edit changes just one cell. */
+    internal fun sourcePatchForCell(source: String, updated: MarkdownSourceTable): MarkdownSourceCellPatch? {
+        if (headers.size != updated.headers.size || rows.size != updated.rows.size ||
+            alignments != updated.alignments || rows.indices.any { rows[it].size != updated.rows[it].size }) return null
+
+        val changes = mutableListOf<Triple<Int, Int, String>>()
+        headers.indices.forEach { column ->
+            if (headers[column] != updated.headers[column]) changes += Triple(0, column, updated.headers[column])
+        }
+        rows.indices.forEach { row ->
+            rows[row].indices.forEach { column ->
+                if (rows[row][column] != updated.rows[row][column]) changes += Triple(row + 2, column, updated.rows[row][column])
+            }
+        }
+        val (lineIndex, columnIndex, replacement) = changes.singleOrNull() ?: return null
+        if ('\n' in replacement || '\r' in replacement) return null
+
+        val lines = source.split('\n')
+        val line = lines.getOrNull(lineIndex) ?: return null
+        val cell = sourceCellRanges(line).getOrNull(columnIndex) ?: return null
+        val raw = line.substring(cell.start, cell.end)
+        val old = if (lineIndex == 0) headers[columnIndex] else rows[lineIndex - 2][columnIndex]
+        if (raw.trim() != old) return null
+        val contentStart = raw.indexOfFirst { !it.isWhitespace() }.let { if (it < 0) raw.length / 2 else it }
+        val contentEnd = raw.indexOfLast { !it.isWhitespace() }.let { if (it < 0) contentStart else it + 1 }
+        val lineStart = lines.take(lineIndex).sumOf { it.length + 1 }
+        val patch = MarkdownSourceCellPatch(lineStart + cell.start + contentStart, lineStart + cell.start + contentEnd, replacement)
+        return patch.takeIf { parse(source.replaceRange(it.start, it.end, replacement)) == updated }
+    }
+
     fun toMarkdown(): String {
         fun line(cells: List<String>) = "| ${cells.joinToString(" | ")} |"
         val markers = headers.indices.map { index ->
@@ -96,6 +126,26 @@ data class MarkdownSourceTable(
             return parts
         }
     }
+}
+
+internal data class MarkdownSourceCellPatch(val start: Int, val end: Int, val replacement: String)
+
+/** Ranges between unescaped pipes, in the original line rather than normalized table text. */
+private fun sourceCellRanges(line: String): List<TextRange> {
+    val cells = mutableListOf<TextRange>()
+    var start = 0
+    var slashes = 0
+    line.forEachIndexed { index, char ->
+        if (char == '|' && slashes % 2 == 0) {
+            cells += TextRange(start, index)
+            start = index + 1
+        }
+        slashes = if (char == '\\') slashes + 1 else 0
+    }
+    cells += TextRange(start, line.length)
+    if (line.trimStart().startsWith('|') && cells.firstOrNull()?.let { line.substring(it.start, it.end).isBlank() } == true) cells.removeAt(0)
+    if (line.trimEnd().endsWith('|') && cells.lastOrNull()?.let { line.substring(it.start, it.end).isBlank() } == true) cells.removeAt(cells.lastIndex)
+    return cells
 }
 
 enum class MarkdownTableAlignment { LEFT, CENTER, RIGHT }
