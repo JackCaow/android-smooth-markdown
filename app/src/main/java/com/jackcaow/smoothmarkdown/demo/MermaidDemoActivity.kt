@@ -116,6 +116,7 @@ private val categoryNames = mapOf(
 
 @Composable
 private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
+    val context = LocalContext.current
     var selectedIndex by remember { mutableIntStateOf(0) }
     var darkMode by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -179,7 +180,13 @@ private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     ) {
-                        if (supported) MermaidDiagramView(example.code, Modifier.fillMaxSize())
+                        if (supported) MermaidDiagramView(
+                            example.code,
+                            Modifier.fillMaxSize(),
+                            onNodeTap = { nodeId ->
+                                Toast.makeText(context, "点击了节点: $nodeId", Toast.LENGTH_SHORT).show()
+                            },
+                        )
                         else Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
                             Text("此图表暂不支持原生预览，请查看下方 Mermaid 源码。")
                         }

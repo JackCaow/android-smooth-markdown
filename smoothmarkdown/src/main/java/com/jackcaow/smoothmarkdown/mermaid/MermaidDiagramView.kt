@@ -32,9 +32,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.hypot
 
-/** Standalone native Mermaid prototype. Embed this view for a Mermaid fenced block. */
+/** Native Mermaid diagram. [onNodeTap] receives the source node ID, never its display label. */
 @Composable
-fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
+fun MermaidDiagramView(
+    source: String,
+    modifier: Modifier = Modifier,
+    onNodeTap: ((String) -> Unit)? = null,
+) {
     val diagram = remember(source) { MermaidParser.parse(source) }
     if (diagram == null) {
         Text(source, modifier = modifier)
@@ -68,7 +72,7 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
         return
     }
     if (diagram.kind == MermaidKind.ERDiagram) {
-        MermaidERView(diagram, layout, accessibleModifier)
+        MermaidERView(diagram, layout, accessibleModifier, onNodeTap)
         return
     }
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -86,7 +90,8 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
     }
     val groupsForDrawing = diagram.subgraphs.sortedBy(::depth)
     Box(accessibleModifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.coerceAtLeast(1f).dp, layout.height.coerceAtLeast(1f).dp)) {
+        Box(Modifier.size(layout.width.coerceAtLeast(1f).dp, layout.height.coerceAtLeast(1f).dp)
+            .mermaidNodeTaps(diagram, layout, onNodeTap)) {
             Canvas(Modifier.fillMaxSize()) {
                 groupsForDrawing.forEach { group ->
                     val rect = layout.subgraphs[group.id] ?: return@forEach

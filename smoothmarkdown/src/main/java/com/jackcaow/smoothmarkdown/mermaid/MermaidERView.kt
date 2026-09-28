@@ -29,14 +29,19 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.hypot
 
 @Composable
-internal fun MermaidERView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidERView(
+    diagram: MermaidDiagram,
+    layout: MermaidLayoutResult,
+    modifier: Modifier,
+    onNodeTap: ((String) -> Unit)?,
+) {
     val data = requireNotNull(diagram.er)
     val place = requireNotNull(layout.er)
     val foreground = MaterialTheme.colorScheme.onSurface
     val surface = MaterialTheme.colorScheme.surface
     val header = MaterialTheme.colorScheme.surfaceVariant
     Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+        Box(Modifier.size(layout.width.dp, layout.height.dp).mermaidNodeTaps(diagram, layout, onNodeTap)) {
             Canvas(Modifier.fillMaxSize()) {
                 place.relationships.forEach { placed ->
                     val points = placed.points

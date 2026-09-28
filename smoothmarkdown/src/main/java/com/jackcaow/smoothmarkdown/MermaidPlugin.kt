@@ -12,7 +12,7 @@ import org.commonmark.node.FencedCodeBlock
 import org.commonmark.node.Node
 
 /** Opt-in native renderer for supported Mermaid diagrams; unsupported fences stay code blocks. */
-class MermaidPlugin : BlockParserPlugin {
+class MermaidPlugin(val onNodeTap: ((String) -> Unit)? = null) : BlockParserPlugin {
     override val id = "mermaid"
     override val name = "Mermaid Diagram Plugin"
     override val priority = 10
@@ -30,7 +30,7 @@ class MermaidPlugin : BlockParserPlugin {
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         MermaidDiagramView((node as MermaidDiagramNode).code,
-            Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(vertical = 8.dp))
+            Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(vertical = 8.dp), onNodeTap)
     }
 }
 
