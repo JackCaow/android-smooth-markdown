@@ -1,175 +1,225 @@
 package com.jackcaow.smoothmarkdown.demo
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.res.AssetManager
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.mermaid.MermaidDiagramView
+import com.jackcaow.smoothmarkdown.mermaid.MermaidParser
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
-/** Directly launchable prototype: adb shell am start -n com.jackcaow.smoothmarkdown.demo/.MermaidDemoActivity */
+/** Flutter example's Mermaid gallery, backed by its synchronized source fixtures. */
 class MermaidDemoActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val examples = runCatching { loadMermaidGallery(assets) }
         setContent {
-            var exampleIndex by remember { mutableStateOf(0) }
-            val examples = listOf(
-                "Flowchart" to flowExample,
-                "Sequence" to sequenceExample,
-                "Pie" to pieExample,
-                "Timeline" to timelineExample,
-                "Gantt" to ganttExample,
-                "Kanban" to kanbanExample,
-                "Radar" to radarExample,
-                "XY Chart" to xyChartExample,
-                "Class" to classExample,
-                "State" to stateExample,
-                "ER Diagram" to erExample,
-            )
-            MaterialTheme {
-                Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                    TextButton(onClick = { exampleIndex = (exampleIndex + 1) % examples.size }) {
-                        Text("${examples[exampleIndex].first} · Next diagram")
-                    }
-                    MermaidDiagramView(examples[exampleIndex].second, Modifier.weight(1f))
+            if (examples.isSuccess) MermaidGallery(examples.getOrThrow())
+            else MaterialTheme {
+                Box(Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp)) {
+                    Text("无法加载 Mermaid 示例：${examples.exceptionOrNull()?.message ?: "未知错误"}")
                 }
             }
         }
     }
 }
 
-private val flowExample = """
-    flowchart TD
-    A[开始] --> B{判断}
-    B -->|是| C[处理]
-    B -->|否| D[跳过]
-    C --> E[结束]
-    D --> E
-    classDef done fill:#d9f7be,stroke:#389e0d
-    class E done
-""".trimIndent()
+internal data class MermaidGalleryExample(
+    val index: Int,
+    val category: String,
+    val title: String,
+    val description: String,
+    val code: String,
+)
 
-private val sequenceExample = """
-    sequenceDiagram
-    participant A as Alice
-    actor B as Bob
-    A->>B: Hello
-    B-->>A: Hi
-    A-)B: Async work
-""".trimIndent()
-
-private val pieExample = """
-    pie showData
-    title Favorite Pets
-    "Dogs" : 386
-    "Cats" : 85
-    "Rats" : 15
-""".trimIndent()
-
-private val timelineExample = """
-    timeline
-    title Product Releases
-    Q1 2024 : First preview
-            : Feedback
-    Q2 2024 : Public beta
-    Q3 2024 : Launch
-""".trimIndent()
-
-private val ganttExample = """
-    gantt
-    title Development Timeline
-    dateFormat YYYY-MM-DD
-    section Planning
-    Requirements :done, req, 2024-01-01, 12d
-    Design :active, design, after req, 10d
-    section Build
-    API :crit, api, 2024-01-19, 18d
-    Release :milestone, rel, after api, 0d
-""".trimIndent()
-
-private val kanbanExample = """
-    kanban
-      title Product Board
-      backlog[Backlog] wip:2
-        task1[User authentication] @{ assigned: "Alice", ticket: "APP-101", priority: "High" }
-        task2[Database design] @{ assigned: "Bob" }
-      doing[In Progress] wip:1
-        task3[Dashboard] @{ assigned: "Charlie", priority: "Very High" }
-        task4[API integration] @{ ticket: "APP-104" }
-      done[Done]
-        task5[CI pipeline] @{ assigned: "Alice", priority: "Low" }
-""".trimIndent()
-
-private val radarExample = """
-    radar-beta
-    title 技能评估
-    axis 编程, 设计, 沟通, 管理, 创新
-    curve 张三["张三"]{5, 3, 4, 2, 4}
-    curve 李四["李四"]{3, 5, 3, 4, 3}
-    max 5
-    min 0
-    ticks 5
-    graticule polygon
-""".trimIndent()
-
-private val xyChartExample = """
-    xychart-beta
-    title "Quarterly Revenue"
-    x-axis [Q1, Q2, Q3, Q4]
-    y-axis "Revenue" 0 --> 100
-    bar [23, 45, 67, 89]
-    line [20, 50, 60, 85]
-""".trimIndent()
-
-private val classExample = """
-    classDiagram
-    Animal <|-- Duck
-    Animal : +int age
-    Animal : +isMammal() bool
-    class Duck {
-        +String beakColor
-        +swim()
-        +quack()
+internal fun loadMermaidGallery(assets: AssetManager): List<MermaidGalleryExample> {
+    val directory = "examples/mermaid"
+    val manifest = JSONObject(assets.open("$directory/gallery.json").bufferedReader().use { it.readText() })
+    val entries = manifest.getJSONArray("examples")
+    require(entries.length() == 40) { "预期 40 个示例，实际 ${entries.length()} 个" }
+    return List(entries.length()) { position ->
+        val entry = entries.getJSONObject(position)
+        val index = entry.getInt("index")
+        require(index == position + 1) { "示例顺序错误：$index" }
+        val file = entry.getString("file")
+        require(Regex("mermaid-\\d{2}\\.mmd").matches(file)) { "无效的示例文件：$file" }
+        MermaidGalleryExample(
+            index = index,
+            category = entry.getString("category"),
+            title = entry.getString("title"),
+            description = entry.getString("description"),
+            code = assets.open("$directory/$file").bufferedReader().use { it.readText() },
+        )
     }
-    Pond o-- Duck : contains
-    Duck ..> Food : eats
-""".trimIndent()
+}
 
-private val stateExample = """
-    stateDiagram-v2
-    [*] --> 待支付
-    待支付 --> 已支付: 支付成功
-    已支付 --> 已发货: 发货
-    已发货 --> 已完成: 确认收货
-    已完成 --> [*]
-    待支付 --> 已取消: 超时/取消
-    已取消 --> [*]
-""".trimIndent()
+private val categoryNames = mapOf(
+    "flowchart" to "流程图 (Flowchart)",
+    "sequence" to "时序图 (Sequence)",
+    "pie" to "饼图 (Pie Chart)",
+    "gantt" to "甘特图 (Gantt Chart)",
+    "timeline" to "时间线 (Timeline)",
+    "kanban" to "看板 (Kanban)",
+    "complex" to "复杂示例",
+    "radar" to "雷达图 (Radar Chart)",
+    "xy" to "XY 图 (XY Chart)",
+)
 
-private val erExample = """
-    erDiagram
-    CUSTOMER ||--o{ ORDER : places
-    ORDER ||--|{ LINE_ITEM : contains
-    CUSTOMER {
-        int id PK
-        string name
+@Composable
+private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
+    var selectedIndex by remember { mutableIntStateOf(0) }
+    var darkMode by remember { mutableStateOf(false) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val example = examples[selectedIndex]
+    MaterialTheme(colorScheme = if (darkMode) darkColorScheme() else lightColorScheme()) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Text("Mermaid 图表", modifier = Modifier.padding(20.dp), style = MaterialTheme.typography.headlineSmall)
+                    Text("${examples.size} 个示例", modifier = Modifier.padding(start = 20.dp, bottom = 12.dp))
+                    HorizontalDivider()
+                    LazyColumn {
+                        itemsIndexed(examples) { index, item ->
+                            // Manifest categories correct the Flutter drawer's stale hardcoded offsets.
+                            if (index == 0 || examples[index - 1].category != item.category) {
+                                Text(
+                                    categoryNames[item.category] ?: item.category,
+                                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, top = 16.dp, bottom = 8.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Text(
+                                item.title,
+                                modifier = Modifier.fillMaxWidth().selectable(
+                                    selected = selectedIndex == index,
+                                    onClick = { selectedIndex = index; scope.launch { drawerState.close() } },
+                                ).padding(horizontal = 20.dp, vertical = 12.dp),
+                                fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+            },
+        ) {
+            Column(Modifier.fillMaxSize().safeDrawingPadding().background(MaterialTheme.colorScheme.background)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { scope.launch { drawerState.open() } }) { Text("☰ 目录") }
+                    Text("Mermaid 图表测试", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    TextButton(onClick = { darkMode = !darkMode }) { Text(if (darkMode) "☀ 浅色" else "☾ 深色") }
+                }
+                HorizontalDivider()
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(example.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(example.description, style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("${example.index}/${examples.size}", color = MaterialTheme.colorScheme.primary)
+                    }
+                    val supported = remember(example.code) {
+                        runCatching { MermaidParser.parse(example.code) != null }.getOrDefault(false)
+                    }
+                    Card(
+                        modifier = Modifier.fillMaxWidth().height(600.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    ) {
+                        if (supported) MermaidDiagramView(example.code, Modifier.fillMaxSize())
+                        else Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                            Text("此图表暂不支持原生预览，请查看下方 Mermaid 源码。")
+                        }
+                    }
+                    SourceCard(example.code, darkMode)
+                }
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = { selectedIndex-- }, enabled = selectedIndex > 0) { Text("← 上一个") }
+                    Text("${selectedIndex + 1} / ${examples.size}", style = MaterialTheme.typography.labelLarge)
+                    Button(onClick = { selectedIndex++ }, enabled = selectedIndex < examples.lastIndex) { Text("下一个 →") }
+                }
+            }
+        }
     }
-    ORDER {
-        int id PK
-        int customer_id FK
+}
+
+@Composable
+private fun SourceCard(code: String, darkMode: Boolean) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier.fillMaxWidth().height(250.dp).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = if (darkMode) MaterialTheme.colorScheme.surfaceVariant
+            else MaterialTheme.colorScheme.inverseSurface),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Mermaid 代码", modifier = Modifier.weight(1f),
+                color = if (darkMode) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.inverseOnSurface)
+            TextButton(onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Mermaid 代码", code))
+                Toast.makeText(context, "代码已复制", Toast.LENGTH_SHORT).show()
+            }) { Text("复制代码") }
+        }
+        SelectionContainer {
+            Text(code, modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+                fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall,
+                color = if (darkMode) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.inverseOnSurface)
+        }
     }
-    LINE_ITEM {
-        int id PK
-        int order_id FK
-        string product
-    }
-""".trimIndent()
+}
