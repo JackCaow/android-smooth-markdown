@@ -21,9 +21,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
 
@@ -59,7 +62,8 @@ fun SmoothMarkdownEditor(
                 "H1" to MarkdownEditorCommand.HEADING1,
                 "List" to MarkdownEditorCommand.UNORDERED_LIST,
                 "Task" to MarkdownEditorCommand.TASK_LIST,
-                "Code" to MarkdownEditorCommand.CODE_BLOCK,
+                (if (controller.mode == MarkdownEditorMode.FORMATTED) "Inline code" else "Code") to
+                    (if (controller.mode == MarkdownEditorMode.FORMATTED) MarkdownEditorCommand.INLINE_CODE else MarkdownEditorCommand.CODE_BLOCK),
                 "Link" to MarkdownEditorCommand.LINK,
                 "Table" to MarkdownEditorCommand.TABLE,
             ).forEach { (label, command) ->
@@ -131,10 +135,27 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         if (table != null) FormattedTable(controller, block.id, table)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
+                        val inline = MarkdownFormattedBlock.inline(block)
+                        val rawSelection = if (controller.activeFormattedBlockId == block.id) controller.formattedSelection else TextRange.Zero
+                        val visibleLength = inline?.visible?.length ?: editableText.length
+                        val fieldSelection = TextRange(rawSelection.start.coerceIn(0, visibleLength), rawSelection.end.coerceIn(0, visibleLength))
+                        val rawComposition = if (controller.activeFormattedBlockId == block.id) controller.formattedComposition else null
+                        val fieldComposition = rawComposition?.let {
+                            TextRange(it.start.coerceIn(0, visibleLength), it.end.coerceIn(0, visibleLength))
+                        }
                         BasicTextField(
-                            value = editableText,
-                            onValueChange = { controller.replaceFormattedBlockText(block.id, it) },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            value = TextFieldValue(inline?.annotated(MaterialTheme.colorScheme.primary) ?: androidx.compose.ui.text.AnnotatedString(editableText), fieldSelection, fieldComposition),
+                            onValueChange = { next ->
+                                if (inline != null) {
+                                    controller.setFormattedSelection(block.id, next.selection, next.composition)
+                                    if (next.text != inline.visible) controller.replaceFormattedInlineText(block.id, next.text, next.selection, next.composition)
+                                } else {
+                                    controller.replaceFormattedBlockText(block.id, next.text)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).onFocusChanged {
+                                if (it.isFocused) controller.setFormattedSelection(block.id, fieldSelection)
+                            },
                             textStyle = when (block.kind) {
                                 MarkdownBlockKind.HEADING -> MaterialTheme.typography.headlineSmall.copy(
                                     color = MaterialTheme.colorScheme.onSurface,

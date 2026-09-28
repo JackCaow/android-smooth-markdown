@@ -2,6 +2,11 @@ package com.jackcaow.smoothmarkdown.editor
 
 /** Editable display text for the first source-backed formatted block types. */
 internal object MarkdownFormattedBlock {
+    fun inline(block: MarkdownDocumentBlock): MarkdownInlineEditing? = when (block.kind) {
+        MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING -> text(block)?.let(MarkdownInlineEditing::parse)
+        else -> null
+    }
+
     fun text(block: MarkdownDocumentBlock): String? = when (block.kind) {
         MarkdownBlockKind.PARAGRAPH -> block.source
         MarkdownBlockKind.HEADING -> headingMatch(block.source)?.let { match ->

@@ -14,6 +14,12 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         private set
     var savedText by mutableStateOf(initialText)
         private set
+    internal var activeFormattedBlockId by mutableStateOf<String?>(null)
+        private set
+    internal var formattedSelection by mutableStateOf(TextRange.Zero)
+        private set
+    internal var formattedComposition by mutableStateOf<TextRange?>(null)
+        private set
 
     private val limit = historyLimit.coerceAtLeast(0)
     private val undoStack = ArrayDeque<TextFieldValue>()
@@ -44,6 +50,12 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
 
     fun setSelection(start: Int, end: Int = start) {
         value = value.copy(selection = TextRange(start.coerceIn(0, text.length), end.coerceIn(0, text.length)))
+    }
+
+    internal fun setFormattedSelection(blockId: String, selection: TextRange, composition: TextRange? = null) {
+        activeFormattedBlockId = blockId
+        formattedSelection = selection
+        formattedComposition = composition
     }
 
     fun undo(): Boolean {
@@ -111,6 +123,42 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val block = semanticDocument().blockById(blockId) ?: return false
         val markdown = MarkdownFormattedBlock.markdown(block, visibleText) ?: return false
         return replaceSemanticBlock(blockId, markdown)
+    }
+
+    /** Applies a visible inline edit without rewriting untouched Markdown delimiters. */
+    internal fun replaceFormattedInlineText(blockId: String, visibleText: String, selection: TextRange, composition: TextRange? = null): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val model = MarkdownFormattedBlock.inline(block) ?: return false
+        val body = model.replaceVisible(visibleText) ?: return false
+        val markdown = MarkdownFormattedBlock.markdown(block, body) ?: return false
+        if (markdown != block.source && !replaceSemanticBlock(blockId, markdown)) return false
+        setFormattedSelection(blockId, selection, composition)
+        return true
+    }
+
+    internal fun applyFormattedInlineMark(command: MarkdownEditorCommand, destination: String? = null): Boolean {
+        val blockId = activeFormattedBlockId ?: return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val model = MarkdownFormattedBlock.inline(block) ?: return false
+        val kind = when (command) {
+            MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
+            MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+            MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
+            MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
+            else -> return false
+        }
+        val body = model.wrap(formattedSelection, kind, destination) ?: return false
+        val markdown = MarkdownFormattedBlock.markdown(block, body) ?: return false
+        if (!replaceSemanticBlock(blockId, markdown)) return false
+        val placeholderLength = if (formattedSelection.collapsed) when (kind) {
+            InlineMarkKind.BOLD -> 4
+            InlineMarkKind.ITALIC -> 6
+            InlineMarkKind.LINK -> 4
+            InlineMarkKind.CODE -> 4
+        } else formattedSelection.max - formattedSelection.min
+        formattedSelection = TextRange(formattedSelection.min, formattedSelection.min + placeholderLength)
+        formattedComposition = null
+        return true
     }
 
     /** Changes an ATX heading level while preserving its text and surrounding source. */
@@ -207,6 +255,13 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     fun applyCommand(command: MarkdownEditorCommand, argument: String? = null) {
+        if (mode == MarkdownEditorMode.FORMATTED && command in setOf(
+                MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                MarkdownEditorCommand.LINK, MarkdownEditorCommand.INLINE_CODE,
+            )) {
+            applyFormattedInlineMark(command, argument)
+            return
+        }
         when (command) {
             MarkdownEditorCommand.PARAGRAPH -> transformLines { line ->
                 listOf(
