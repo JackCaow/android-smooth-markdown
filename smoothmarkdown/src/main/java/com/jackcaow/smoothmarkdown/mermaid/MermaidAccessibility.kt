@@ -16,6 +16,9 @@ internal fun MermaidDiagram.accessibilitySummary(): String {
                 else -> "State diagram"
             }
             "$title. ${nodes.size} nodes, ${edges.size} connections. " +
+                (if (subgraphs.isEmpty()) "" else "Subgraphs: ${describe(subgraphs) { group ->
+                    "${group.label}, ${group.nodeIds.size} nodes${group.parentId?.let { ", inside ${subgraphs.firstOrNull { it.id == group.parentId }?.label ?: it}" }.orEmpty()}"
+                }}. ") +
                 "Nodes: ${describe(nodes) { it.label.ifBlank { it.id } }}. " +
                 "Connections: ${describe(edges) { edge ->
                     "${edge.from} to ${edge.to}${edge.label?.let { ", $it" }.orEmpty()}"

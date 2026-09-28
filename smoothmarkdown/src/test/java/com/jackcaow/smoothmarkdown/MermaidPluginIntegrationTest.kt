@@ -83,6 +83,13 @@ class MermaidPluginIntegrationTest {
         assertTrue(document.firstChild.firstChild is MermaidDiagramNode)
     }
 
+    @Test fun unclosedSubgraphFenceStaysSourceCode() {
+        val invalid = "```mermaid\nflowchart LR\nsubgraph Group\nA[Inside]\n```"
+        val valid = "```mermaid\nflowchart LR\nsubgraph Group\nA[Inside]\nend\n```"
+        assertTrue(parseMarkdown(invalid, plugins).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(valid, plugins).firstChild is MermaidDiagramNode)
+    }
+
     @Test fun classAndStateFencesRequireOptInAndUnsupportedSyntaxStaysCode() {
         val klass = "```mermaid\nclassDiagram\nAnimal <|-- Duck\n```"
         val state = "```mermaid\nstateDiagram-v2\n[*] --> 待支付\n```"

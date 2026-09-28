@@ -42,7 +42,13 @@ data class MermaidEdge(
     val targetLabel: String? = null,
 )
 
-data class MermaidSubgraph(val id: String, val label: String, val nodeIds: List<String>)
+data class MermaidSubgraph(
+    val id: String,
+    val label: String,
+    val nodeIds: List<String>,
+    val parentId: String? = null,
+    val directNodeIds: List<String> = nodeIds,
+)
 
 data class MermaidPieSlice(val label: String, val value: Double)
 data class MermaidPieData(

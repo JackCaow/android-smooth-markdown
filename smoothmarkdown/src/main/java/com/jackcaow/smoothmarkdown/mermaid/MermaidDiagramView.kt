@@ -74,10 +74,22 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
     val foreground = MaterialTheme.colorScheme.onSurface
     val nodeFill = MaterialTheme.colorScheme.surfaceVariant
     val surface = MaterialTheme.colorScheme.surface
+    val groupById = diagram.subgraphs.associateBy { it.id }
+    fun depth(group: MermaidSubgraph): Int {
+        var level = 0
+        var parent = group.parentId
+        while (parent != null && level < diagram.subgraphs.size) {
+            level++
+            parent = groupById[parent]?.parentId
+        }
+        return level
+    }
+    val groupsForDrawing = diagram.subgraphs.sortedBy(::depth)
     Box(accessibleModifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
         Box(Modifier.size(layout.width.coerceAtLeast(1f).dp, layout.height.coerceAtLeast(1f).dp)) {
             Canvas(Modifier.fillMaxSize()) {
-                layout.subgraphs.forEach { (_, rect) ->
+                groupsForDrawing.forEach { group ->
+                    val rect = layout.subgraphs[group.id] ?: return@forEach
                     drawRoundRect(surface, Offset(rect.x * density, rect.y * density),
                         Size(rect.width * density, rect.height * density),
                         CornerRadius(8.dp.toPx()))

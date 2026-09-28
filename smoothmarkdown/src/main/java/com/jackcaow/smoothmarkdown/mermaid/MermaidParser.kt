@@ -41,21 +41,25 @@ class MermaidFlowchartParser {
     private val classDefs = mutableMapOf<String, MermaidNodeStyle>()
     private val assignments = mutableMapOf<String, String>()
     private val inlineStyles = mutableMapOf<String, MermaidNodeStyle>()
+    private var invalid = false
 
     fun parse(lines: List<String>): MermaidDiagram? {
         val header = lines.firstOrNull()?.trim() ?: return null
         val match = Regex("^(?:graph|flowchart)\\s+(TD|TB|BT|LR|RL)$", RegexOption.IGNORE_CASE).matchEntire(header)
             ?: return null
         nodes.clear(); edges.clear(); subgraphs.clear(); groups.clear(); groupIds.clear()
-        classDefs.clear(); assignments.clear(); inlineStyles.clear()
+        classDefs.clear(); assignments.clear(); inlineStyles.clear(); invalid = false
         val direction = MermaidDirection.valueOf(match.groupValues[1].uppercase().replace("TD", "TB"))
         lines.drop(1).forEach { parseLine(it.trim()) }
-        while (groups.isNotEmpty()) closeGroup()
+        if (invalid || groups.isNotEmpty()) return null
         val styledNodes = nodes.values.map { node ->
             val className = assignments[node.id]
             node.copy(className = className, style = className?.let(classDefs::get) ?: inlineStyles[node.id])
         }
-        return MermaidDiagram(MermaidKind.Flowchart, direction, styledNodes, edges.toList(), subgraphs.toList())
+        val knownGroups = subgraphs.mapTo(mutableSetOf()) { it.id }
+        val finalNodes = styledNodes.filterNot { it.id in knownGroups }
+        val finalEdges = edges.map { it.copy(subgraphEdge = it.from in knownGroups || it.to in knownGroups) }
+        return MermaidDiagram(MermaidKind.Flowchart, direction, finalNodes, finalEdges, subgraphs.toList())
     }
 
     private fun parseLine(line: String) {
@@ -76,24 +80,27 @@ class MermaidFlowchartParser {
                     inlineStyles[it.groupValues[1]] = parseStyle(it.groupValues[2])
                 }
             }
-            line.startsWith("subgraph ") -> openGroup(line.removePrefix("subgraph ").trim())
+            line == "subgraph" || line.startsWith("subgraph ") -> openGroup(line.removePrefix("subgraph").trim())
             line == "end" -> closeGroup()
             else -> parseNodeOrEdge(line)
         }
     }
 
     private fun openGroup(value: String) {
-        val idAndLabel = Regex("^(\\w+)\\s*\\[(.+)]$").matchEntire(value)
-        val id = idAndLabel?.groupValues?.get(1) ?: value.substringBefore(' ').ifBlank { "subgraph_${subgraphs.size}" }
+        if (value.isBlank()) { invalid = true; return }
+        val idAndLabel = Regex("^([\\p{L}_][\\p{L}\\p{N}_-]*)\\s*\\[(.+)]$").matchEntire(value)
+        val id = idAndLabel?.groupValues?.get(1) ?: value.substringBefore(' ')
         val label = idAndLabel?.groupValues?.get(2) ?: value
+        if (id in groupIds || id.isBlank()) { invalid = true; return }
         groups += GroupState(id, label)
         groupIds += id
     }
 
     private fun closeGroup() {
-        if (groups.isEmpty()) return
+        if (groups.isEmpty()) { invalid = true; return }
         val closed = groups.removeAt(groups.lastIndex)
-        subgraphs += MermaidSubgraph(closed.id, closed.label, closed.nodeIds.toList())
+        subgraphs += MermaidSubgraph(closed.id, closed.label, closed.nodeIds.toList(),
+            parentId = groups.lastOrNull()?.id, directNodeIds = closed.directNodeIds.toList())
         groups.lastOrNull()?.nodeIds?.addAll(closed.nodeIds)
     }
 
@@ -141,6 +148,7 @@ class MermaidFlowchartParser {
         if (previous == null || (previous.label == previous.id && node.label != node.id) ||
             (previous.shape == MermaidShape.Rectangle && node.shape != MermaidShape.Rectangle)) nodes[node.id] = node
         groups.lastOrNull()?.nodeIds?.add(node.id)
+        groups.lastOrNull()?.directNodeIds?.add(node.id)
     }
 
     private fun parseNode(value: String): MermaidNode? {
@@ -151,10 +159,10 @@ class MermaidFlowchartParser {
                 return MermaidNode(match.groupValues[1], unescape(match.groupValues[2]), shape)
             }
         }
-        return if (Regex("^\\w+$").matches(text)) MermaidNode(text) else null
+        return if (Regex("^[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*$").matches(text)) MermaidNode(text) else null
     }
 
-    private fun extractId(value: String): String? = Regex("^\\w+").find(value)?.value
+    private fun extractId(value: String): String? = Regex("^[\\p{L}\\p{N}_][\\p{L}\\p{N}_-]*").find(value)?.value
 
     private fun parseStyle(value: String): MermaidNodeStyle {
         val properties = value.split(',').mapNotNull {
@@ -184,7 +192,11 @@ class MermaidFlowchartParser {
 
     private fun unescape(value: String) = value.replace("\\\"", "\"").replace("\\'", "'")
 
-    private data class GroupState(val id: String, val label: String, val nodeIds: LinkedHashSet<String> = linkedSetOf())
+    private data class GroupState(
+        val id: String, val label: String,
+        val nodeIds: LinkedHashSet<String> = linkedSetOf(),
+        val directNodeIds: LinkedHashSet<String> = linkedSetOf(),
+    )
 
     private companion object {
         val arrowPattern = Regex("""\s*(====|---->|==>|===|-\.->|-->|---)\s*(\|[^|]*\|)?\s*""")

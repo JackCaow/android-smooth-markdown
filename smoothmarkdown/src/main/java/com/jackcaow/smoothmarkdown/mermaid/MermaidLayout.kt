@@ -262,6 +262,7 @@ object MermaidLayout {
 
     private fun flowchart(diagram: MermaidDiagram): MermaidLayoutResult {
         if (diagram.nodes.isEmpty()) return MermaidLayoutResult(0f, 0f, emptyMap(), emptyList(), emptyMap())
+        if (diagram.kind == MermaidKind.Flowchart && diagram.subgraphs.isNotEmpty()) return groupedFlowchart(diagram)
         val nodeIds = diagram.nodes.mapTo(mutableSetOf()) { it.id }
         val outgoing = diagram.nodes.associate { it.id to mutableListOf<String>() }
         val indegree = diagram.nodes.associate { it.id to 0 }.toMutableMap()
@@ -341,6 +342,114 @@ object MermaidLayout {
                     start = MermaidPoint(from.x, from.centerY)
                     end = MermaidPoint(to.x + to.width, to.centerY)
                 }
+            }
+            MermaidPlacedEdge(edge, start, end)
+        }
+        return MermaidLayoutResult(width, height, positions, placedEdges, groupBoxes)
+    }
+
+    /** Treats each subgraph as a layout unit so unrelated nodes cannot land inside its border. */
+    private fun groupedFlowchart(diagram: MermaidDiagram): MermaidLayoutResult {
+        data class UnitBox(val id: String, val group: Boolean, val width: Float, val height: Float)
+        val horizontal = diagram.direction == MermaidDirection.LR || diagram.direction == MermaidDirection.RL
+        val groups = diagram.subgraphs.associateBy { it.id }
+        val nodes = diagram.nodes.associateBy { it.id }
+        val nodeOrder = diagram.nodes.mapIndexed { index, node -> node.id to index }.toMap()
+        val directOwner = diagram.subgraphs.flatMap { group -> group.directNodeIds.map { it to group.id } }.toMap()
+        fun children(parentId: String?): List<UnitBox> {
+            val direct = if (parentId == null) diagram.nodes.filter { it.id !in directOwner }
+                else diagram.nodes.filter { directOwner[it.id] == parentId }
+            val childGroups = diagram.subgraphs.filter { it.parentId == parentId }
+            val entries = direct.map { UnitBox(it.id, false, nodeWidth(it), nodeHeight(it)) } +
+                childGroups.map { group ->
+                    val nested = children(group.id)
+                    val width = if (horizontal) nested.sumOf { it.width.toDouble() }.toFloat() +
+                        (nested.size - 1).coerceAtLeast(0) * 30f + 36f
+                    else (nested.maxOfOrNull { it.width } ?: 88f) + 36f
+                    val height = if (horizontal) (nested.maxOfOrNull { it.height } ?: 48f) + 54f
+                    else nested.sumOf { it.height.toDouble() }.toFloat() +
+                        (nested.size - 1).coerceAtLeast(0) * 30f + 52f
+                    UnitBox(group.id, true, max(width, group.label.length * 8f + 36f), max(height, 76f))
+                }
+            return entries.sortedWith(compareBy<UnitBox> {
+                if (it.group) groups.getValue(it.id).nodeIds.mapNotNull(nodeOrder::get).minOrNull() ?: Int.MAX_VALUE
+                else nodeOrder[it.id] ?: Int.MAX_VALUE
+            }.thenBy { it.id })
+        }
+        val positions = linkedMapOf<String, MermaidRect>()
+        val groupBoxes = linkedMapOf<String, MermaidRect>()
+        fun place(unit: UnitBox, x: Float, y: Float) {
+            val rect = MermaidRect(x, y, unit.width, unit.height)
+            if (!unit.group) { positions[unit.id] = rect; return }
+            groupBoxes[unit.id] = rect
+            var cursor = if (horizontal) x + 18f else y + 34f
+            children(unit.id).forEach { child ->
+                if (horizontal) {
+                    place(child, cursor, y + 34f)
+                    cursor += child.width + 30f
+                } else {
+                    place(child, x + 18f, cursor)
+                    cursor += child.height + 30f
+                }
+            }
+        }
+        fun rootOf(id: String): String? {
+            var owner = if (id in groups) id else directOwner[id] ?: return id.takeIf { it in nodes }
+            while (groups[owner]?.parentId != null) owner = groups.getValue(owner).parentId!!
+            return owner
+        }
+        val roots = children(null)
+        val rootIds = roots.mapTo(mutableSetOf()) { it.id }
+        val outgoing = roots.associate { it.id to mutableListOf<String>() }
+        val indegree = roots.associate { it.id to 0 }.toMutableMap()
+        diagram.edges.forEach { edge ->
+            val from = rootOf(edge.from)
+            val to = rootOf(edge.to)
+            if (from != null && to != null && from != to && from in rootIds && to in rootIds) {
+                outgoing.getValue(from) += to
+                indegree[to] = indegree.getValue(to) + 1
+            }
+        }
+        val rank = roots.associate { it.id to 0 }.toMutableMap()
+        val queue = ArrayDeque(roots.filter { indegree.getValue(it.id) == 0 }.map { it.id })
+        while (queue.isNotEmpty()) {
+            val from = queue.removeFirst()
+            outgoing.getValue(from).forEach { to ->
+                rank[to] = max(rank.getValue(to), rank.getValue(from) + 1)
+                indegree[to] = indegree.getValue(to) - 1
+                if (indegree.getValue(to) == 0) queue.addLast(to)
+            }
+        }
+        var main = 24f
+        roots.groupBy { rank.getValue(it.id) }.toSortedMap().values.forEach { layer ->
+            val mainSize = layer.maxOf { if (horizontal) it.width else it.height }
+            var cross = 24f
+            layer.forEach { unit ->
+                if (horizontal) place(unit, main + (mainSize - unit.width) / 2, cross)
+                else place(unit, cross, main + (mainSize - unit.height) / 2)
+                cross += (if (horizontal) unit.height else unit.width) + 40f
+            }
+            main += mainSize + 64f
+        }
+        val allBoxes = positions.values + groupBoxes.values
+        val width = (allBoxes.maxOfOrNull { it.x + it.width } ?: 0f) + 24f
+        val height = (allBoxes.maxOfOrNull { it.y + it.height } ?: 0f) + 24f
+        if (diagram.direction == MermaidDirection.RL || diagram.direction == MermaidDirection.BT) {
+            positions.replaceAll { _, box -> if (horizontal) box.copy(x = width - box.x - box.width)
+                else box.copy(y = height - box.y - box.height) }
+            groupBoxes.replaceAll { _, box -> if (horizontal) box.copy(x = width - box.x - box.width)
+                else box.copy(y = height - box.y - box.height) }
+        }
+        val placedEdges = diagram.edges.mapNotNull { edge ->
+            val from = positions[edge.from] ?: groupBoxes[edge.from] ?: return@mapNotNull null
+            val to = positions[edge.to] ?: groupBoxes[edge.to] ?: return@mapNotNull null
+            val start: MermaidPoint
+            val end: MermaidPoint
+            when (diagram.direction) {
+                MermaidDirection.TB -> { start = MermaidPoint(from.centerX, from.y + from.height); end = MermaidPoint(to.centerX, to.y) }
+                MermaidDirection.BT -> { start = MermaidPoint(from.centerX, from.y); end = MermaidPoint(to.centerX, to.y + to.height) }
+                MermaidDirection.LR -> { start = MermaidPoint(from.x + from.width, from.centerY); end = MermaidPoint(to.x, to.centerY) }
+                MermaidDirection.RL -> { start = MermaidPoint(from.x, from.centerY); end = MermaidPoint(to.x + to.width, to.centerY) }
             }
             MermaidPlacedEdge(edge, start, end)
         }
