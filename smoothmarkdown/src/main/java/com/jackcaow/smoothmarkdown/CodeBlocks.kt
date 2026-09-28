@@ -147,6 +147,7 @@ internal fun highlightedCode(code: String, language: String?, dark: Boolean): An
 
 @Composable
 internal fun EnhancedCodeBlock(code: String, info: String?) {
+    val sheet = LocalMarkdownStyleSheet.current
     val language = codeLanguage(info)
     val custom = LocalCodeBlockBuilder.current
     if (custom != null) {
@@ -164,13 +165,14 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             copied = false
         }
     }
-    val dark = MaterialTheme.colorScheme.surfaceVariant.luminance() < 0.5f
+    val background = sheet.codeBackground ?: MaterialTheme.colorScheme.surfaceVariant
+    val dark = background.luminance() < 0.5f
     val codeText = androidx.compose.runtime.remember(code, language, dark, options.enableSyntaxHighlighting) {
         if (options.enableSyntaxHighlighting) highlightedCode(code, language, dark) else AnnotatedString(code)
     }
     Column(
-        Modifier.fillMaxWidth().padding(bottom = 12.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp)),
+        Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)
+            .background(background, RoundedCornerShape(6.dp)),
     ) {
         if ((options.showLanguageTag && language != null) || options.showCopyButton) {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp)) {
@@ -180,7 +182,7 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                         language.uppercase(),
                         modifier = Modifier.padding(top = 10.dp),
                         style = MaterialTheme.typography.labelSmall.copy(
-                            color = MaterialTheme.colorScheme.primary,
+                            color = sheet.codeTextColor ?: MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold,
                         ),
                     )
@@ -198,14 +200,14 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(sheet.codePadding)) {
             SelectionContainer {
                 Text(
                     codeText,
                     softWrap = false,
-                    style = MaterialTheme.typography.bodyMedium.copy(
+                    style = (sheet.codeStyle ?: MaterialTheme.typography.bodyMedium).copy(
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sheet.codeTextColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
                 )
             }

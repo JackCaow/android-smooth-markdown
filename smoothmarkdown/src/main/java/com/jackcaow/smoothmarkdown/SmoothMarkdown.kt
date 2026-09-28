@@ -119,6 +119,7 @@ fun SmoothMarkdown(
     codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
     codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
     onCodeCopied: ((String) -> Unit)? = null,
+    styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
 ) {
     val document = remember(markdown) { parseMarkdown(markdown) }
     val blocks = remember(document) { document.children().toList() }
@@ -126,8 +127,12 @@ fun SmoothMarkdown(
         LocalCodeBlockOptions provides codeBlockOptions,
         LocalCodeBlockBuilder provides codeBlockBuilder,
         LocalOnCodeCopied provides onCodeCopied,
+        LocalMarkdownStyleSheet provides styleSheet,
     ) {
-        LazyColumn(modifier = modifier, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        LazyColumn(
+            modifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier,
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
+        ) {
             itemsIndexed(blocks) { _, block ->
                 MarkdownBlock(block, onLinkClick, onImageClick, enableHtml)
             }
@@ -137,17 +142,22 @@ fun SmoothMarkdown(
 
 @Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
+    val sheet = LocalMarkdownStyleSheet.current
     when (node) {
-        is Heading -> MarkdownInlineText(
-            inlineRender(node, enableHtml),
-            MaterialTheme.typography.headlineMedium.copy(
+        is Heading -> {
+            val baseStyle = sheet.headingStyles?.get(node.level - 1) ?: MaterialTheme.typography.headlineMedium.copy(
                 fontSize = (32 - (node.level - 1) * 3).sp,
                 fontWeight = FontWeight.Bold,
-            ),
-            onLinkClick,
-            onImageClick,
-            textAlign,
-        )
+            )
+            MarkdownInlineText(
+                inlineRender(node, enableHtml, sheet),
+                baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
+                    ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface),
+                onLinkClick,
+                onImageClick,
+                textAlign,
+            )
+        }
         is Paragraph -> {
             val meaningful = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.toList()
             val sole = meaningful.singleOrNull()
@@ -157,13 +167,16 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
                 )
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
-                else -> MarkdownInlineText(inlineRender(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
+                else -> MarkdownInlineText(inlineRender(node, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
             }
         }
         is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
         is IndentedCodeBlock -> EnhancedCodeBlock(node.literal, null)
-        is BlockQuote -> Row(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-            Box(Modifier.width(3.dp).height(44.dp).background(MaterialTheme.colorScheme.primary))
+        is BlockQuote -> Row(
+            (if (sheet.quoteBackground != null) Modifier.fillMaxWidth().background(sheet.quoteBackground)
+            else Modifier.fillMaxWidth()).padding(bottom = sheet.blockSpacing),
+        ) {
+            Box(Modifier.width(3.dp).height(44.dp).background(sheet.quoteBarColor ?: MaterialTheme.colorScheme.primary))
             Spacer(Modifier.width(12.dp))
             Column {
                 node.children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml, textAlign) }
@@ -178,24 +191,24 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         ) {
             Text(
                 "[${node.label}]: ",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, color = Color(0xFF1976D2)),
+                style = (sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge).copy(fontWeight = FontWeight.Bold, color = sheet.footnoteColor),
             )
             Box(Modifier.weight(1f)) {
                 MarkdownInlineText(
-                    inlineRender(node, enableHtml), MaterialTheme.typography.bodyLarge,
+                    inlineRender(node, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                     onLinkClick, onImageClick, textAlign, bottomPadding = 0.dp,
                 )
             }
         }
-        is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
+        is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = sheet.blockSpacing), color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant)
         is HtmlBlock -> {
             val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
             val imageAlt = if (enableHtml) SafeHtml.imageAlt(node.literal) else null
             val html = if (enableHtml) SafeHtml.parseBlock(node.literal) else null
             when {
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
-                imageAlt != null -> MarkdownText(AnnotatedString(imageAlt), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
-                html is SafeHtml.Block.Rule -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
+                imageAlt != null -> MarkdownText(AnnotatedString(imageAlt), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+                html is SafeHtml.Block.Rule -> HorizontalDivider(Modifier.padding(vertical = sheet.blockSpacing), color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant)
                 html is SafeHtml.Block.Container -> {
                     val alignment = when (html.alignment) {
                         "left" -> TextAlign.Left
@@ -204,8 +217,11 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         else -> textAlign
                     }
                     if (html.name == "blockquote") {
-                        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                            Box(Modifier.width(3.dp).height(44.dp).background(MaterialTheme.colorScheme.primary))
+                        Row(
+                            (if (sheet.quoteBackground != null) Modifier.fillMaxWidth().background(sheet.quoteBackground)
+                            else Modifier.fillMaxWidth()).padding(bottom = sheet.blockSpacing),
+                        ) {
+                            Box(Modifier.width(3.dp).height(44.dp).background(sheet.quoteBarColor ?: MaterialTheme.colorScheme.primary))
                             Spacer(Modifier.width(12.dp))
                             Column { parseMarkdown(html.content).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                         }
@@ -216,10 +232,10 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         parseMarkdown(html.trailing).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
                     }
                 }
-                else -> MarkdownText(AnnotatedString(node.literal), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+                else -> MarkdownText(AnnotatedString(node.literal), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
             }
         }
-        else -> MarkdownText(AnnotatedString(node.plainText()), MaterialTheme.typography.bodyLarge, onLinkClick)
+        else -> MarkdownText(AnnotatedString(node.plainText()), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick)
     }
 }
 
@@ -230,11 +246,12 @@ private fun MarkdownDetails(
     onImageClick: (String) -> Unit,
     enableHtml: Boolean,
 ) {
+    val sheet = LocalMarkdownStyleSheet.current
     val expanded = rememberSaveable(node) { mutableStateOf(node.isOpen) }
     val shape = RoundedCornerShape(6.dp)
     Column(
         Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .border(1.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant, shape)
             .clip(shape),
     ) {
         Row(
@@ -243,13 +260,14 @@ private fun MarkdownDetails(
                 .clickable(role = Role.Button) { expanded.value = !expanded.value }
                 .padding(12.dp),
         ) {
-            Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium)
+            Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
+                color = sheet.textColor ?: Color.Unspecified)
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 val summary = node.summary.singleOrNull()
                 if (summary is Paragraph) {
                     MarkdownInlineText(
-                        inlineRender(summary, enableHtml), MaterialTheme.typography.bodyLarge,
+                        inlineRender(summary, enableHtml, sheet), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                         onLinkClick, onImageClick, bottomPadding = 0.dp, interactive = false,
                     )
                 } else {
@@ -260,7 +278,7 @@ private fun MarkdownDetails(
             }
         }
         if (expanded.value && node.body.isNotEmpty()) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider(color = sheet.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant)
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
                 node.body.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
             }
@@ -269,12 +287,14 @@ private fun MarkdownDetails(
 }
 
 @Composable
-private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp = 12.dp) {
+private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null) {
+    val sheet = LocalMarkdownStyleSheet.current
+    val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     SelectionContainer {
         ClickableText(
             text = text,
-            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
+            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
             onClick = { position ->
                 text.getStringAnnotations("url", position, position).firstOrNull()?.item
                     ?.takeIf(::isSafeLink)?.let(onLinkClick)
@@ -290,15 +310,17 @@ private fun MarkdownInlineText(
     onLinkClick: (String) -> Unit,
     onImageClick: (String) -> Unit,
     textAlign: TextAlign? = null,
-    bottomPadding: androidx.compose.ui.unit.Dp = 12.dp,
+    bottomPadding: androidx.compose.ui.unit.Dp? = null,
     interactive: Boolean = true,
 ) {
+    val sheet = LocalMarkdownStyleSheet.current
+    val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     if (render.images.isEmpty() && render.math.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding)
         else Text(
             render.text,
-            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
+            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
         )
         return
     }
@@ -338,8 +360,8 @@ private fun MarkdownInlineText(
         Text(
             text = render.text,
             inlineContent = inline,
-            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding),
+            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing),
         )
         return
     }
@@ -347,8 +369,8 @@ private fun MarkdownInlineText(
         Text(
             text = render.text,
             inlineContent = inline,
-            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding).pointerInput(render.text) {
+            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).pointerInput(render.text) {
                 detectTapGestures { position ->
                     layout.value?.getOffsetForPosition(position)?.let { offset ->
                         render.text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
@@ -363,7 +385,8 @@ private fun MarkdownInlineText(
 
 @Composable
 private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: ((String) -> Unit)?) {
-    val model = imageModel(image.source) ?: return Text(image.alt)
+    val sheet = LocalMarkdownStyleSheet.current
+    val model = imageModel(image.source) ?: return Text(image.alt, color = sheet.textColor ?: Color.Unspecified)
     val modifier = Modifier.width(width.dp).height(height.dp)
     SubcomposeAsyncImage(
         model = imageRequest(image.source, model),
@@ -371,19 +394,20 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
         modifier = if (onImageClick != null) modifier.clickable { onImageClick(image.source) } else modifier,
         contentScale = ContentScale.Fit,
         loading = { androidx.compose.material3.CircularProgressIndicator() },
-        error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
+        error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
     )
 }
 
 @Composable
 private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> Unit) {
+    val sheet = LocalMarkdownStyleSheet.current
     val url = image.source
     val model = imageModel(url)
     if (model == null) {
-        Text(image.alt, modifier = Modifier.padding(bottom = 12.dp))
+        Text(image.alt, modifier = Modifier.padding(bottom = sheet.blockSpacing), color = sheet.textColor ?: Color.Unspecified)
         return
     }
-    var imageModifier: Modifier = Modifier.padding(bottom = 12.dp)
+    var imageModifier: Modifier = Modifier.padding(bottom = sheet.blockSpacing)
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
     SubcomposeAsyncImage(
@@ -391,7 +415,7 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
         contentDescription = image.alt.ifBlank { image.title ?: "Image" },
         modifier = imageModifier.clickable { onImageClick(url) },
         loading = { androidx.compose.material3.CircularProgressIndicator() },
-        error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
+        error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
     )
 }
 
@@ -421,8 +445,9 @@ private fun imageModel(url: String): String? {
 
 @Composable
 private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
+    val sheet = LocalMarkdownStyleSheet.current
     val start = (list as? OrderedList)?.startNumber ?: 1
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(bottom = sheet.listSpacing)) {
         list.children().filterIsInstance<ListItem>().forEachIndexed { index, item ->
             val task = item.children().filterIsInstance<TaskListItemMarker>().firstOrNull()
             val marker = when {
@@ -431,7 +456,7 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
                 else -> "•"
             }
             Row(Modifier.fillMaxWidth()) {
-                Text(marker, modifier = Modifier.width(34.dp), style = MaterialTheme.typography.bodyLarge)
+                Text(marker, modifier = Modifier.width(sheet.listIndent), style = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, color = sheet.textColor ?: Color.Unspecified)
                 Column(Modifier.weight(1f)) {
                     item.children().filterNot { it is TaskListItemMarker }.forEach {
                         MarkdownBlock(it, onLinkClick, onImageClick, enableHtml)
@@ -444,14 +469,15 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
 
 @Composable
 private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
+    val sheet = LocalMarkdownStyleSheet.current
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)) {
         table.children().flatMap { it.children() }.filterIsInstance<TableRow>().forEach { row ->
             Row {
                 row.children().filterIsInstance<TableCell>().forEach { cell ->
-                    val style = if (cell.isHeader) MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    else MaterialTheme.typography.bodyMedium
-                    Box(Modifier.width(150.dp).border(0.5.dp, MaterialTheme.colorScheme.outline).padding(8.dp)) {
-                        MarkdownInlineText(inlineRender(cell, enableHtml), style, onLinkClick, onImageClick)
+                    val style = if (cell.isHeader) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                    else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
+                    Box(Modifier.width(150.dp).border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline).padding(sheet.tableCellPadding)) {
+                        MarkdownInlineText(inlineRender(cell, enableHtml, sheet), style, onLinkClick, onImageClick)
                     }
                 }
             }
@@ -467,7 +493,7 @@ internal data class InlineRender(
 
 internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = inlineRender(node, enableHtml).text
 
-internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
+internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default()): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
     val math = linkedMapOf<String, String>()
     val text = buildAnnotatedString {
@@ -490,12 +516,16 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
             "i", "em" -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
             "s", "del", "strike" -> addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
             "u", "ins" -> addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
-            "mark" -> addStyle(SpanStyle(background = Color.Yellow.copy(alpha = 0.4f)), start, end)
+            "mark" -> addStyle(SpanStyle(background = styleSheet.highlightColor), start, end)
             "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript), start, end)
             "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript), start, end)
-            "code", "kbd" -> addStyle(SpanStyle(fontFamily = FontFamily.Monospace), start, end)
+            "code", "kbd" -> addStyle(SpanStyle(
+                fontFamily = FontFamily.Monospace,
+                background = styleSheet.inlineCodeBackground ?: Color.Unspecified,
+                color = styleSheet.inlineCodeTextColor ?: Color.Unspecified,
+            ), start, end)
             "a" -> tag.attributes["href"]?.takeIf(SafeHtml::isSafeLink)?.let { url ->
-                addStyle(SpanStyle(color = Color(0xFF0969DA), textDecoration = TextDecoration.Underline), start, end)
+                addStyle(SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline), start, end)
                 addStringAnnotation("url", url, start, end)
             }
             "font", "span" -> {
@@ -526,7 +556,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
                     SpanStyle(
                         baselineShift = BaselineShift.Superscript,
                         fontSize = 0.75.em,
-                        color = Color(0xFF1976D2),
+                        color = styleSheet.footnoteColor,
                     ), start, length,
                 )
             }
@@ -563,10 +593,14 @@ internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
         when (current) {
             is StrongEmphasis -> addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
             is Emphasis -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
-            is Code -> addStyle(SpanStyle(fontFamily = FontFamily.Monospace), start, end)
+            is Code -> addStyle(SpanStyle(
+                fontFamily = FontFamily.Monospace,
+                background = styleSheet.inlineCodeBackground ?: Color.Unspecified,
+                color = styleSheet.inlineCodeTextColor ?: Color.Unspecified,
+            ), start, end)
             is Strikethrough -> addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
             is Link -> if (isSafeLink(current.destination)) {
-                addStyle(SpanStyle(color = Color(0xFF0969DA), textDecoration = TextDecoration.Underline), start, end)
+                addStyle(SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline), start, end)
                 addStringAnnotation("url", current.destination, start, end)
             }
         }

@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 
@@ -93,6 +94,16 @@ class MainActivity : ComponentActivity() {
             val controller = remember { MarkdownEditorController(demoMarkdown) }
             var showEditor by remember { mutableStateOf(false) }
             var enableHtml by remember { mutableStateOf(false) }
+            var themeIndex by remember { mutableStateOf(0) }
+            val themes = listOf(
+                "System" to MarkdownStyleSheet.default(),
+                "Light" to MarkdownStyleSheet.light(),
+                "Dark" to MarkdownStyleSheet.dark(),
+                "GitHub" to MarkdownStyleSheet.github(),
+                "GitHub dark" to MarkdownStyleSheet.github(dark = true),
+                "VS Code" to MarkdownStyleSheet.vscode(),
+                "VS Code dark" to MarkdownStyleSheet.vscode(dark = true),
+            )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     TextButton(onClick = { showEditor = !showEditor }) {
@@ -101,6 +112,9 @@ class MainActivity : ComponentActivity() {
                     if (!showEditor) {
                         TextButton(onClick = { enableHtml = !enableHtml }) {
                             Text(if (enableHtml) "HTML on" else "Enable HTML")
+                        }
+                        TextButton(onClick = { themeIndex = (themeIndex + 1) % themes.size }) {
+                            Text("Theme: ${themes[themeIndex].first}")
                         }
                     }
                     if (showEditor) {
@@ -111,6 +125,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.weight(1f),
                             onLinkClick = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                             enableHtml = enableHtml,
+                            styleSheet = themes[themeIndex].second,
                         )
                     }
                 }
