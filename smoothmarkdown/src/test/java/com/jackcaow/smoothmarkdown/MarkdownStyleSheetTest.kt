@@ -24,6 +24,9 @@ class MarkdownStyleSheetTest {
         assertNotEquals(light.textColor, dark.textColor)
         assertNotEquals(light.codeBackground, github.codeBackground)
         assertEquals(6, github.headingStyles?.size)
+        assertEquals(Color(0xFFEEEEEE), light.tableHeaderBackgroundColor)
+        assertEquals(Color(0xFF303030), dark.tableHeaderBackgroundColor)
+        assertEquals(1.dp, light.horizontalRuleThickness)
     }
 
     @Test fun customLinkAndInlineCodeStylesReachRenderedRanges() {
@@ -42,6 +45,7 @@ class MarkdownStyleSheetTest {
 
     @Test fun invalidSpacingAndHeadingCountAreRejected() {
         assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(listIndent = (-1).dp) }
+        assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(horizontalRuleThickness = (-1).dp) }
         assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(headingStyles = listOf(TextStyle.Default)) }
     }
 }

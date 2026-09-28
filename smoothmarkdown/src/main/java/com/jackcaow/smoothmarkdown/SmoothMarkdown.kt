@@ -330,7 +330,11 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 )
             }
         }
-        is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = sheet.blockSpacing), color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant)
+        is ThematicBreak -> HorizontalDivider(
+            Modifier.padding(vertical = sheet.blockSpacing),
+            thickness = sheet.horizontalRuleThickness,
+            color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
+        )
         is HtmlBlock -> {
             val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
             val imageAlt = if (enableHtml) SafeHtml.imageAlt(node.literal) else null
@@ -338,7 +342,11 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             when {
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
                 imageAlt != null -> MarkdownText(AnnotatedString(imageAlt), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
-                html is SafeHtml.Block.Rule -> HorizontalDivider(Modifier.padding(vertical = sheet.blockSpacing), color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant)
+                html is SafeHtml.Block.Rule -> HorizontalDivider(
+                    Modifier.padding(vertical = sheet.blockSpacing),
+                    thickness = sheet.horizontalRuleThickness,
+                    color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
+                )
                 html is SafeHtml.Block.Container -> {
                     val alignment = when (html.alignment) {
                         "left" -> TextAlign.Left
@@ -662,7 +670,16 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
             Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
                 collectionItemInfo = CollectionItemInfo(index, 1, 0, 1)
             }) {
-                Text(marker, modifier = Modifier.width(sheet.listIndent), style = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, color = sheet.textColor ?: Color.Unspecified)
+                val markerStyle = if (task == null) sheet.listBulletStyle ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
+                    else sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
+                val markerColor = if (task == null) markerStyle.color.takeUnless { it == Color.Unspecified } ?: sheet.textColor ?: Color.Unspecified
+                    else sheet.textColor ?: Color.Unspecified
+                Text(
+                    marker,
+                    modifier = Modifier.width(sheet.listIndent),
+                    style = markerStyle,
+                    color = markerColor,
+                )
                 Column(Modifier.weight(1f)) {
                     item.children().filterNot { it is TaskListItemMarker }.forEach {
                         MarkdownBlock(it, onLinkClick, onImageClick, enableHtml)
@@ -685,7 +702,9 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
                 row.children().filterIsInstance<TableCell>().forEachIndexed { columnIndex, cell ->
                     val style = if (cell.isHeader) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
-                    Box(Modifier.width(150.dp).border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline)
+                    Box(Modifier.width(150.dp)
+                        .then(if (cell.isHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
+                        .border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline)
                         .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
                             collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
                             if (cell.isHeader) heading()

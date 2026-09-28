@@ -35,11 +35,18 @@ data class MarkdownStyleSheet(
     val listIndent: Dp = 34.dp,
     val codePadding: Dp = 12.dp,
     val tableCellPadding: Dp = 8.dp,
+    /** Text style for ordered and unordered list markers. Task markers remain checkbox glyphs. */
+    val listBulletStyle: TextStyle? = null,
+    /** Row fill behind table heading cells. */
+    val tableHeaderBackgroundColor: Color? = null,
+    /** Thickness for Markdown thematic breaks and HTML horizontal rules. */
+    val horizontalRuleThickness: Dp = 1.dp,
 ) {
     init {
         require(headingStyles == null || headingStyles.size == 6) { "headingStyles must contain H1 through H6" }
         require(blockSpacing.value >= 0 && listSpacing.value >= 0 && contentPadding.value >= 0 && listIndent.value >= 0 &&
             codePadding.value >= 0 && tableCellPadding.value >= 0) { "Markdown spacing cannot be negative" }
+        require(horizontalRuleThickness.value >= 0) { "horizontalRuleThickness cannot be negative" }
     }
 
     companion object {
@@ -52,6 +59,7 @@ data class MarkdownStyleSheet(
             linkColor = Color(0xFF1976D2), codeBackground = Color(0xFFF5F5F5), codeTextColor = Color(0xFF212121),
             inlineCodeBackground = Color(0xFFEEEEEE), inlineCodeTextColor = Color(0xFFD32F2F),
             quoteBarColor = Color(0xFFD0D7DE), tableBorderColor = Color(0xFFD0D7DE),
+            tableHeaderBackgroundColor = Color(0xFFEEEEEE),
             ruleColor = Color(0xFFD8DEE4), headingStyles = headingSizes(),
             paragraphStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             blockSpacing = 16.dp, listIndent = 24.dp,
@@ -64,6 +72,7 @@ data class MarkdownStyleSheet(
             codeTextColor = Color(0xFFB3B3B3), inlineCodeBackground = Color(0xFF424242),
             inlineCodeTextColor = Color(0xFFEF9A9A), quoteBarColor = Color(0xFF6E7681),
             tableBorderColor = Color(0xFF30363D), ruleColor = Color(0xFF30363D),
+            tableHeaderBackgroundColor = Color(0xFF303030),
             headingStyles = headingSizes(), paragraphStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             blockSpacing = 16.dp, listIndent = 24.dp,
         )
