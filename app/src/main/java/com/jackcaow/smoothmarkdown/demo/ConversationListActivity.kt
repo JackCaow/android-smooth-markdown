@@ -12,7 +12,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +29,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -139,7 +136,6 @@ private fun ConversationListScreen(
     var dark by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<ConversationSample?>(null) }
     var menuMessage by remember { mutableStateOf<ConversationMessage?>(null) }
-    var selectMessage by remember { mutableStateOf<ConversationMessage?>(null) }
     val openedAt = remember { System.currentTimeMillis() }
     BackHandler(selected != null) { selected = null }
     val background = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
@@ -198,29 +194,10 @@ private fun ConversationListScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { onCopy(message.content); menuMessage = null },
                             modifier = Modifier.testTag("conversation-copy-message")) { Text("复制") }
-                        TextButton(onClick = { menuMessage = null; selectMessage = message },
-                            modifier = Modifier.testTag("conversation-select-message")) { Text("选择文字") }
+                        Text("长按气泡正文可选择已渲染文字")
                     }
                 },
                 confirmButton = { TextButton(onClick = { menuMessage = null }) { Text("关闭") } },
-            )
-        }
-        selectMessage?.let { message ->
-            AlertDialog(
-                onDismissRequest = { selectMessage = null },
-                title = { Text("选择文字") },
-                text = {
-                    // The editable native selection handles and Android copy toolbar are available
-                    // in this read-only text field. Markdown remains rendered in the message bubble.
-                    BasicTextField(
-                        value = message.content,
-                        onValueChange = {},
-                        readOnly = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp),
-                        modifier = Modifier.testTag("conversation-selectable-text"),
-                    )
-                },
-                confirmButton = { TextButton(onClick = { selectMessage = null }) { Text("关闭") } },
             )
         }
     }
@@ -266,7 +243,7 @@ private fun ConversationRow(conversation: ConversationSample, dark: Boolean, ope
 @Composable
 private fun ConversationBubble(conversation: ConversationSample, message: ConversationMessage,
                                dark: Boolean, openedAt: Long, onLinkClick: (String) -> Unit,
-                               onLongPress: () -> Unit) {
+                               onMenuClick: () -> Unit) {
     val own = message.isMe
     val bubble = if (own) if (dark) Color(0xFF0A84FF) else conversationBlue
         else if (dark) Color(0xFF2C2C2E) else Color.White
@@ -284,8 +261,7 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
         verticalAlignment = Alignment.Top) {
         if (!own) { Avatar(conversation.avatar, conversation.avatarColor, 32); Spacer(Modifier.width(8.dp)) }
         Surface(color = bubble, shape = RoundedCornerShape(16.dp), shadowElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth(.75f).widthIn(max = 460.dp)
-                .pointerInput(message.content) { detectTapGestures(onLongPress = { onLongPress() }) }
+            modifier = Modifier.fillMaxWidth(.70f).widthIn(max = 460.dp)
                 .testTag("conversation-bubble-${conversation.id}-${conversation.messages.indexOf(message)}")) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                 SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
@@ -294,6 +270,10 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                     color = if (own) Color.White.copy(alpha = .6f) else Color.Gray,
                     modifier = Modifier.padding(top = 4.dp))
             }
+        }
+        TextButton(onClick = onMenuClick,
+            modifier = Modifier.testTag("conversation-message-menu-${conversation.id}-${conversation.messages.indexOf(message)}")) {
+            Text("⋯")
         }
         if (own) { Spacer(Modifier.width(8.dp)); Avatar(conversation.avatar, conversation.avatarColor, 32) }
     }
