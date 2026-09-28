@@ -10,6 +10,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 /** Source-backed editing commands. Offsets use UTF-16, matching Compose selections. */
 class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100) {
     var mode by mutableStateOf(MarkdownEditorMode.SOURCE)
+    /** Controls editor parsing, suggestions and commands for Scratch-style note links. */
+    var enableWikilinks by mutableStateOf(true)
     var value by mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))
         private set
     var savedText by mutableStateOf(initialText)
@@ -128,7 +130,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     /** Applies a visible inline edit without rewriting untouched Markdown delimiters. */
     internal fun replaceFormattedInlineText(blockId: String, visibleText: String, selection: TextRange, composition: TextRange? = null): Boolean {
         val block = semanticDocument().blockById(blockId) ?: return false
-        val model = MarkdownFormattedBlock.inline(block) ?: return false
+        val model = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return false
         val body = model.replaceVisible(visibleText) ?: return false
         val markdown = MarkdownFormattedBlock.markdown(block, body) ?: return false
         if (markdown != block.source && !replaceSemanticBlock(blockId, markdown)) return false
@@ -139,12 +141,14 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     internal fun applyFormattedInlineMark(command: MarkdownEditorCommand, destination: String? = null): Boolean {
         val blockId = activeFormattedBlockId ?: return false
         val block = semanticDocument().blockById(blockId) ?: return false
-        val model = MarkdownFormattedBlock.inline(block) ?: return false
+        if (command == MarkdownEditorCommand.WIKILINK && !enableWikilinks) return false
+        val model = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return false
         val kind = when (command) {
             MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
             MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
             MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
             MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
+            MarkdownEditorCommand.WIKILINK -> InlineMarkKind.WIKILINK
             else -> return false
         }
         val body = model.wrap(formattedSelection, kind, destination) ?: return false
@@ -155,6 +159,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
             InlineMarkKind.ITALIC -> 6
             InlineMarkKind.LINK -> 4
             InlineMarkKind.CODE -> 4
+            InlineMarkKind.WIKILINK -> 4
         } else formattedSelection.max - formattedSelection.min
         formattedSelection = TextRange(formattedSelection.min, formattedSelection.min + placeholderLength)
         formattedComposition = null
@@ -218,6 +223,19 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     fun insertMarkdown(markdown: String) = replaceSelection(markdown)
+
+    /** Select a suggestion in the active formatted block as one undoable source edit. */
+    fun insertWikilinkSuggestion(title: String): Boolean {
+        if (!enableWikilinks || mode != MarkdownEditorMode.FORMATTED) return false
+        val blockId = activeFormattedBlockId ?: return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val model = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return false
+        val match = WikilinkAutocomplete.match(model.visible, formattedSelection, model.marks) ?: return false
+        val replacement = model.replaceVisibleRangeWithWikilink(match.range, title) ?: return false
+        if (!replaceSemanticBlock(blockId, MarkdownFormattedBlock.markdown(block, replacement) ?: return false)) return false
+        setFormattedSelection(blockId, TextRange(match.range.min + title.length))
+        return true
+    }
 
     fun insertMarkdownBlock(markdown: String) {
         val block = markdown.trim()
@@ -308,7 +326,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     fun applyCommand(command: MarkdownEditorCommand, argument: String? = null) {
         if (mode == MarkdownEditorMode.FORMATTED && command in setOf(
                 MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
-                MarkdownEditorCommand.LINK, MarkdownEditorCommand.INLINE_CODE,
+                MarkdownEditorCommand.LINK, MarkdownEditorCommand.INLINE_CODE, MarkdownEditorCommand.WIKILINK,
             )) {
             applyFormattedInlineMark(command, argument)
             return
@@ -344,7 +362,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
             MarkdownEditorCommand.BLOCK_MATH -> wrapBlock("$$", "$$", "E = mc^2")
             MarkdownEditorCommand.MERMAID_DIAGRAM -> insertSeparatedBlock("```mermaid\nflowchart TD\n  A[Start] --> B[End]\n```")
             MarkdownEditorCommand.HORIZONTAL_RULE -> insertSeparatedBlock("---")
-            MarkdownEditorCommand.WIKILINK -> wrap("[[", "]]", "Note")
+            MarkdownEditorCommand.WIKILINK -> if (enableWikilinks) wrap("[[", "]]", "Note") else Unit
         }
     }
 

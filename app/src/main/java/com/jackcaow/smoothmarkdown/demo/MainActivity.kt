@@ -128,6 +128,7 @@ private fun DemoHome(
     var themeMenu by remember { mutableStateOf(false) }
     var showSource by remember { mutableStateOf(false) }
     var exportedLength by remember { mutableStateOf<Int?>(null) }
+    var tappedWikilink by remember { mutableStateOf<String?>(null) }
     val example = examples.first { it.id == exampleId }
     val specialPage = dedicatedPages.firstOrNull { it.id == pageId }
     val isEditor = pageId == "editor"
@@ -237,19 +238,22 @@ private fun DemoHome(
             if (isEditor) {
                 Text("Scratch-style editor preview", style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(horizontal = 16.dp).testTag("editor-intro"))
-                Text("Toolbar, source and formatted modes, Markdown import/export, image selection, table editing, and search.",
+                Text("Toolbar, slash-style note links, source and formatted modes, Markdown import/export, image selection, table editing, and search.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 exportedLength?.let {
                     Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
                 }
+                tappedWikilink?.let { Text("Wikilink: $it", modifier = Modifier.testTag("wikilink-tap-status")) }
                 SmoothMarkdownEditor(
                     controller = controller,
                     modifier = Modifier.weight(1f),
                     onPickImage = { MarkdownEditorImageSelection("https://picsum.photos/640/360", "Sample image", "Demo image") },
                     onImportMarkdown = { "## Imported markdown\n\nThis came from the host callback." },
                     onExportMarkdown = { exportedLength = it.length },
+                    wikilinkSuggestions = listOf("Daily Notes", "Project Plan", "Research Index", "Scratch Reference"),
+                    onTapWikilink = { tappedWikilink = it },
                 )
             } else if (pageId == "stream") {
                 StreamingDemo(

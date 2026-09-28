@@ -21,13 +21,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
@@ -36,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.ParserPluginRegistry
+import com.jackcaow.smoothmarkdown.WikilinkPlugin
 import kotlinx.coroutines.launch
 
 /** Source editor, preview, split view, and a focused formatted-block editing surface. */
@@ -49,7 +58,14 @@ fun SmoothMarkdownEditor(
     onImportMarkdown: (suspend () -> String?)? = null,
     onExportMarkdown: (suspend (String) -> Unit)? = null,
     onHostActionError: ((MarkdownEditorHostAction, Throwable) -> Unit)? = null,
+    enableWikilinks: Boolean = true,
+    wikilinkSuggestions: List<String> = emptyList(),
+    onTapWikilink: ((String) -> Unit)? = null,
 ) {
+    SideEffect { controller.enableWikilinks = enableWikilinks }
+    val previewPlugins = remember(enableWikilinks) {
+        if (enableWikilinks) ParserPluginRegistry().also { it.register(WikilinkPlugin()) } else null
+    }
     val scope = rememberCoroutineScope()
     var hostActionBusy by remember { mutableStateOf(false) }
     var hostStatus by remember { mutableStateOf("") }
@@ -96,8 +112,10 @@ fun SmoothMarkdownEditor(
                     (if (controller.mode == MarkdownEditorMode.FORMATTED) MarkdownEditorCommand.INLINE_CODE else MarkdownEditorCommand.CODE_BLOCK),
                 "Link" to MarkdownEditorCommand.LINK,
                 "Table" to MarkdownEditorCommand.TABLE,
+                "Wikilink" to MarkdownEditorCommand.WIKILINK,
             ).forEach { (label, command) ->
-                TextButton(onClick = { controller.applyCommand(command) }) { Text(label) }
+                TextButton(onClick = { controller.applyCommand(command) },
+                    enabled = command != MarkdownEditorCommand.WIKILINK || enableWikilinks) { Text(label) }
             }
             if (onPickImage != null) {
                 TextButton(onClick = {
@@ -125,12 +143,14 @@ fun SmoothMarkdownEditor(
         Spacer(Modifier.height(8.dp))
         when (controller.mode) {
             MarkdownEditorMode.SOURCE -> SourcePane(controller, Modifier.weight(1f))
-            MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f))
+            MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f),
+                plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f))
-                SmoothMarkdown(controller.text, Modifier.weight(1f))
+                SmoothMarkdown(controller.text, Modifier.weight(1f),
+                    plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             }
-            MarkdownEditorMode.FORMATTED -> FormattedBlockPane(controller, Modifier.weight(1f))
+            MarkdownEditorMode.FORMATTED -> FormattedBlockPane(controller, Modifier.weight(1f), wikilinkSuggestions)
         }
     }
 }
@@ -151,7 +171,7 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
 
 /** Paragraphs, ATX headings, fenced code, and GFM tables expose source-backed content. */
 @Composable
-private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier) {
+private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier, wikilinkSuggestions: List<String>) {
     val blocks = controller.semanticDocument().blocks
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         blocks.forEach { block ->
@@ -191,7 +211,7 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         if (list != null) FormattedList(controller, block.id, list)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
-                        val inline = MarkdownFormattedBlock.inline(block)
+                        val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
                         val rawSelection = if (controller.activeFormattedBlockId == block.id) controller.formattedSelection else TextRange.Zero
                         val visibleLength = inline?.visible?.length ?: editableText.length
                         val fieldSelection = TextRange(rawSelection.start.coerceIn(0, visibleLength), rawSelection.end.coerceIn(0, visibleLength))
@@ -199,9 +219,17 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         val fieldComposition = rawComposition?.let {
                             TextRange(it.start.coerceIn(0, visibleLength), it.end.coerceIn(0, visibleLength))
                         }
+                        val trigger = if (controller.enableWikilinks && controller.activeFormattedBlockId == block.id && inline != null)
+                            WikilinkAutocomplete.match(inline.visible, fieldSelection, inline.marks) else null
+                        val suggestions = trigger?.let { WikilinkAutocomplete.suggestions(it, wikilinkSuggestions) }.orEmpty()
+                        var selectedSuggestion by remember(block.id) { mutableIntStateOf(0) }
+                        var dismissedQuery by remember(block.id) { mutableStateOf<String?>(null) }
+                        val showSuggestions = trigger != null && dismissedQuery != trigger.query
                         BasicTextField(
                             value = TextFieldValue(inline?.annotated(MaterialTheme.colorScheme.primary) ?: androidx.compose.ui.text.AnnotatedString(editableText), fieldSelection, fieldComposition),
                             onValueChange = { next ->
+                                selectedSuggestion = 0
+                                dismissedQuery = null
                                 if (inline != null) {
                                     controller.setFormattedSelection(block.id, next.selection, next.composition)
                                     if (next.text != inline.visible) controller.replaceFormattedInlineText(block.id, next.text, next.selection, next.composition)
@@ -209,7 +237,23 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                                     controller.replaceFormattedBlockText(block.id, next.text)
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).onFocusChanged {
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).onPreviewKeyEvent { event ->
+                                if (!showSuggestions || event.type != KeyEventType.KeyDown) false else when (event.key) {
+                                    Key.DirectionDown -> {
+                                        if (suggestions.isNotEmpty()) selectedSuggestion = (selectedSuggestion + 1) % suggestions.size
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        if (suggestions.isNotEmpty()) selectedSuggestion = (selectedSuggestion - 1 + suggestions.size) % suggestions.size
+                                        true
+                                    }
+                                    Key.Enter -> {
+                                        suggestions.getOrNull(selectedSuggestion.coerceAtMost(suggestions.lastIndex))?.let(controller::insertWikilinkSuggestion) == true
+                                    }
+                                    Key.Escape -> { dismissedQuery = trigger?.query; true }
+                                    else -> false
+                                }
+                            }.onFocusChanged {
                                 if (it.isFocused) controller.setFormattedSelection(block.id, fieldSelection)
                             },
                             textStyle = when (block.kind) {
@@ -225,6 +269,19 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                             },
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         )
+                        if (showSuggestions) {
+                            Column(Modifier.fillMaxWidth().testTag("wikilink-suggestions")) {
+                                if (suggestions.isEmpty()) Text("No matching notes", modifier = Modifier.testTag("wikilink-empty"))
+                                suggestions.forEachIndexed { index, title ->
+                                    TextButton(onClick = { controller.insertWikilinkSuggestion(title) },
+                                        modifier = Modifier.testTag("wikilink-suggestion-$index").semantics {
+                                            selected = index == selectedSuggestion
+                                        }) {
+                                        Text(title)
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         Text(
                             block.source,

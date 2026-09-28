@@ -10,7 +10,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 
-internal enum class InlineMarkKind { BOLD, ITALIC, LINK, CODE }
+internal enum class InlineMarkKind { BOLD, ITALIC, LINK, CODE, WIKILINK }
 internal data class InlineMark(
     val kind: InlineMarkKind,
     val range: TextRange,
@@ -30,6 +30,7 @@ internal class MarkdownInlineEditing private constructor(
     val marks: List<InlineMark>,
     private val starts: List<Int>,
     private val ends: List<Int>,
+    private val enableWikilinks: Boolean,
 ) {
     fun annotated(linkColor: Color): AnnotatedString = buildAnnotatedString {
         append(visible)
@@ -40,6 +41,7 @@ internal class MarkdownInlineEditing private constructor(
                 InlineMarkKind.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
                 InlineMarkKind.LINK -> SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
                 InlineMarkKind.CODE -> SpanStyle(fontFamily = FontFamily.Monospace)
+                InlineMarkKind.WIKILINK -> SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
             }
             addStyle(style, mark.range.min, mark.range.max)
         }
@@ -69,9 +71,12 @@ internal class MarkdownInlineEditing private constructor(
         }
         val withinCode = marks.any { it.kind == InlineMarkKind.CODE && commonPrefix >= it.range.min && oldEnd <= it.range.max }
         if (withinCode && insertion.contains('`')) return null
-        val escaped = if (withinCode) insertion else escapeMarkdown(insertion)
+        val escaped = if (withinCode) insertion else escapeMarkdown(insertion, enableWikilinks)
         val candidate = source.replaceRange(rawStart, rawEnd, escaped)
-        return if (parse(candidate).visible == nextVisible) candidate else escapeMarkdown(nextVisible)
+        val candidateVisible = parse(candidate, enableWikilinks).visible
+        val normalizedVisible = if (enableWikilinks) Regex("""\[\[([^\]\r\n]+)\]\]""").replace(nextVisible) { it.groupValues[1] }
+            else nextVisible
+        return if (candidateVisible == normalizedVisible) candidate else escapeMarkdown(nextVisible, enableWikilinks)
     }
 
     fun wrap(selection: TextRange, kind: InlineMarkKind, destination: String? = null): String? {
@@ -79,12 +84,12 @@ internal class MarkdownInlineEditing private constructor(
         val upper = selection.max.coerceIn(lower, visible.length)
         val existing = marks.firstOrNull { it.kind == kind && it.range.min == lower && it.range.max == upper }
         if (existing != null && kind != InlineMarkKind.LINK) {
-            val delimiterLength = if (kind == InlineMarkKind.BOLD) 2 else 1
+            val delimiterLength = if (kind == InlineMarkKind.BOLD || kind == InlineMarkKind.WIKILINK) 2 else 1
             return source.replaceRange(existing.sourceStart, existing.sourceEnd,
                 source.substring(existing.sourceStart + delimiterLength, existing.sourceEnd - delimiterLength))
         }
-        if (kind == InlineMarkKind.LINK && marks.any {
-                it.kind == InlineMarkKind.LINK && lower < it.range.max && upper > it.range.min
+        if (kind == InlineMarkKind.LINK || kind == InlineMarkKind.WIKILINK) if (marks.any {
+                it.kind in setOf(InlineMarkKind.LINK, InlineMarkKind.WIKILINK) && lower < it.range.max && upper > it.range.min
             }) return null
         if (marks.any { it.kind == InlineMarkKind.CODE && lower < it.range.max && upper > it.range.min }) return null
         val rawStart = if (lower < starts.size) starts[lower] else ends.lastOrNull() ?: 0
@@ -95,6 +100,7 @@ internal class MarkdownInlineEditing private constructor(
                 InlineMarkKind.ITALIC -> "italic"
                 InlineMarkKind.LINK -> "link"
                 InlineMarkKind.CODE -> "code"
+                InlineMarkKind.WIKILINK -> "Note"
             }
         }
         val (prefix, suffix) = when (kind) {
@@ -102,13 +108,23 @@ internal class MarkdownInlineEditing private constructor(
             InlineMarkKind.ITALIC -> "*" to "*"
             InlineMarkKind.CODE -> "`" to "`"
             InlineMarkKind.LINK -> "[" to "](${destination?.takeIf(String::isNotBlank) ?: "https://example.com"})"
+            InlineMarkKind.WIKILINK -> "[[" to "]]"
         }
         if (kind == InlineMarkKind.CODE && body.contains('`')) return null
         return source.replaceRange(rawStart, rawEnd, prefix + body + suffix)
     }
 
+    /** Replace a typed `[[query` range with one semantic wikilink. */
+    fun replaceVisibleRangeWithWikilink(range: TextRange, title: String): String? {
+        if (!enableWikilinks || title.isEmpty() || title.any { it == ']' || it == '\n' || it == '\r' }) return null
+        if (range.min < 0 || range.max > visible.length || range.min >= range.max) return null
+        val rawStart = starts[range.min]
+        val rawEnd = ends[range.max - 1]
+        return source.replaceRange(rawStart, rawEnd, "[[$title]]")
+    }
+
     companion object {
-        fun parse(source: String): MarkdownInlineEditing {
+        fun parse(source: String, enableWikilinks: Boolean = false): MarkdownInlineEditing {
             val visible = StringBuilder()
             val starts = mutableListOf<Int>()
             val ends = mutableListOf<Int>()
@@ -163,6 +179,22 @@ internal class MarkdownInlineEditing private constructor(
                             continue
                         }
                     }
+                    if (enableWikilinks && source.startsWith("[[", index)) {
+                        val end = source.indexOf("]]", index + 2)
+                        if (end > index + 2 && end + 2 <= until && ']' !in source.substring(index + 2, end)) {
+                            val beginVisible = visible.length
+                            for (cursor in index + 2 until end) emit(source[cursor], cursor, cursor + 1)
+                            marks += InlineMark(InlineMarkKind.WIKILINK, TextRange(beginVisible, visible.length),
+                                source.substring(index + 2, end), index, end + 2)
+                            index = end + 2
+                            continue
+                        }
+                        // An unfinished note link remains literal while the user is typing it.
+                        emit('[', index, index + 1)
+                        emit('[', index + 1, index + 2)
+                        index += 2
+                        continue
+                    }
                     if (source[index] == '[' && (index == 0 || source[index - 1] != '!')) {
                         val mid = closing("](", index + 1, until)
                         if (mid > index + 1) {
@@ -182,12 +214,12 @@ internal class MarkdownInlineEditing private constructor(
                 }
             }
             parseRange(0, source.length)
-            return MarkdownInlineEditing(source, visible.toString(), marks, starts, ends)
+            return MarkdownInlineEditing(source, visible.toString(), marks, starts, ends, enableWikilinks)
         }
 
-        private fun escapeMarkdown(text: String): String = buildString {
+        private fun escapeMarkdown(text: String, enableWikilinks: Boolean): String = buildString {
             text.forEach { char ->
-                if (char in "\\*_`[]") append('\\')
+                if (char in "\\*_`" || (!enableWikilinks && char in "[]")) append('\\')
                 append(char)
             }
         }
