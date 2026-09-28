@@ -214,7 +214,10 @@ private fun SourceCard(code: String, darkMode: Boolean) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Mermaid 代码", code))
                 Toast.makeText(context, "代码已复制", Toast.LENGTH_SHORT).show()
-            }) { Text("复制代码") }
+            }) {
+                Text("复制代码", color = if (darkMode) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.inverseOnSurface)
+            }
         }
         SelectionContainer {
             Text(code, modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
