@@ -195,7 +195,7 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                         copied = true
                         copyCount++
                     }) {
-                        Text(if (copied) "Copied!" else "Copy", color = if (copied) Color(0xFF2DA44E) else Color.Unspecified)
+                        Text(if (copied) "Copied!" else "Copy", color = if (copied) Color(0xFF2DA44E) else sheet.linkColor)
                     }
                 }
             }
