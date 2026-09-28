@@ -26,6 +26,10 @@ private val demoMarkdown = """
 
     A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+    Inline Markdown image ![GitHub](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png) and text.
+
+    Inline HTML image <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="GitHub" width="24" height="24"> and text.
+
     > The source editor now supports formatting commands and preview.
 
     HTML: <b>bold</b> and <span style="color:red">red</span>.

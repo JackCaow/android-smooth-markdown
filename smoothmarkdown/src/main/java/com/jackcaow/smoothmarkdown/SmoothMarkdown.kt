@@ -4,6 +4,7 @@ import java.net.URI
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +18,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -36,6 +45,7 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import coil.compose.SubcomposeAsyncImage
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -100,13 +110,14 @@ fun SmoothMarkdown(
 @Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
     when (node) {
-        is Heading -> MarkdownText(
-            inlineText(node, enableHtml),
+        is Heading -> MarkdownInlineText(
+            inlineRender(node, enableHtml),
             MaterialTheme.typography.headlineMedium.copy(
                 fontSize = (32 - (node.level - 1) * 3).sp,
                 fontWeight = FontWeight.Bold,
             ),
             onLinkClick,
+            onImageClick,
             textAlign,
         )
         is Paragraph -> {
@@ -118,7 +129,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
                 )
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
-                else -> MarkdownText(inlineText(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
+                else -> MarkdownInlineText(inlineRender(node, enableHtml), MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
             }
         }
         is FencedCodeBlock -> CodeBlock(node.literal, node.info)
@@ -131,7 +142,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             }
         }
         is BulletList, is OrderedList -> MarkdownList(node, onLinkClick, onImageClick, enableHtml)
-        is TableBlock -> MarkdownTable(node, onLinkClick, enableHtml)
+        is TableBlock -> MarkdownTable(node, onLinkClick, onImageClick, enableHtml)
         is ThematicBreak -> HorizontalDivider(Modifier.padding(vertical = 14.dp))
         is HtmlBlock -> {
             val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
@@ -184,6 +195,64 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
 }
 
 @Composable
+private fun MarkdownInlineText(
+    render: InlineRender,
+    style: androidx.compose.ui.text.TextStyle,
+    onLinkClick: (String) -> Unit,
+    onImageClick: (String) -> Unit,
+    textAlign: TextAlign? = null,
+) {
+    if (render.images.isEmpty()) {
+        MarkdownText(render.text, style, onLinkClick, textAlign)
+        return
+    }
+    val density = LocalDensity.current
+    val layout = remember(render.text) { mutableStateOf<TextLayoutResult?>(null) }
+    val inline = render.images.mapValues { (_, image) ->
+        val width = image.width ?: 32f
+        val height = image.height ?: 32f
+        InlineTextContent(
+            placeholder = Placeholder(
+                width = with(density) { width.dp.toSp() },
+                height = with(density) { height.dp.toSp() },
+                placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+            ),
+        ) {
+            InlineImage(image, width, height, onImageClick)
+        }
+    }
+    SelectionContainer {
+        Text(
+            text = render.text,
+            inlineContent = inline,
+            style = style.copy(color = MaterialTheme.colorScheme.onSurface, textAlign = textAlign ?: TextAlign.Unspecified),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp).pointerInput(render.text) {
+                detectTapGestures { position ->
+                    layout.value?.getOffsetForPosition(position)?.let { offset ->
+                        render.text.getStringAnnotations("url", offset, offset).firstOrNull()?.item
+                            ?.takeIf(::isSafeLink)?.let(onLinkClick)
+                    }
+                }
+            },
+            onTextLayout = { layout.value = it },
+        )
+    }
+}
+
+@Composable
+private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: (String) -> Unit) {
+    val model = imageModel(image.source) ?: return Text(image.alt)
+    SubcomposeAsyncImage(
+        model = model,
+        contentDescription = image.alt.ifBlank { image.title ?: "Image" },
+        modifier = Modifier.width(width.dp).height(height.dp).clickable { onImageClick(image.source) },
+        contentScale = ContentScale.Fit,
+        loading = { androidx.compose.material3.CircularProgressIndicator() },
+        error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
+    )
+}
+
+@Composable
 private fun CodeBlock(code: String, info: String?) {
     Column(
         Modifier.fillMaxWidth().padding(bottom = 12.dp)
@@ -202,12 +271,11 @@ private fun CodeBlock(code: String, info: String?) {
 @Composable
 private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> Unit) {
     val url = image.source
-    val local = url.isNotBlank() && !url.startsWith("//") && !url.contains("..") && !url.contains(':') && !url.contains('\\')
-    if (!isSafeImage(url) && !local) {
+    val model = imageModel(url)
+    if (model == null) {
         Text(image.alt, modifier = Modifier.padding(bottom = 12.dp))
         return
     }
-    val model = if (local) "file:///android_asset/${url.trimStart('/')}" else url
     var imageModifier: Modifier = Modifier.padding(bottom = 12.dp)
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
@@ -218,6 +286,15 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
         loading = { androidx.compose.material3.CircularProgressIndicator() },
         error = { Text(image.alt.ifBlank { image.title ?: "Image" }) },
     )
+}
+
+private fun imageModel(url: String): String? {
+    val local = url.isNotBlank() && !url.startsWith("//") && !url.contains("..") && !url.contains(':') && !url.contains('\\')
+    return when {
+        local -> "file:///android_asset/${url.trimStart('/')}"
+        isSafeImage(url) -> url
+        else -> null
+    }
 }
 
 @Composable
@@ -244,7 +321,7 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
 }
 
 @Composable
-private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, enableHtml: Boolean) {
+private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp)) {
         table.children().flatMap { it.children() }.filterIsInstance<TableRow>().forEach { row ->
             Row {
@@ -252,7 +329,7 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, enab
                     val style = if (cell.isHeader) MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     else MaterialTheme.typography.bodyMedium
                     Box(Modifier.width(150.dp).border(0.5.dp, MaterialTheme.colorScheme.outline).padding(8.dp)) {
-                        MarkdownText(inlineText(cell, enableHtml), style, onLinkClick)
+                        MarkdownInlineText(inlineRender(cell, enableHtml), style, onLinkClick, onImageClick)
                     }
                 }
             }
@@ -260,8 +337,24 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, enab
     }
 }
 
-internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = buildAnnotatedString {
+internal data class InlineRender(val text: AnnotatedString, val images: Map<String, SafeHtml.ImageSpec>)
+
+internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = inlineRender(node, enableHtml).text
+
+internal fun inlineRender(node: Node, enableHtml: Boolean): InlineRender {
+    val images = linkedMapOf<String, SafeHtml.ImageSpec>()
+    val text = buildAnnotatedString {
     val htmlStack = mutableListOf<SafeHtml.Tag>()
+
+    fun appendImage(image: SafeHtml.ImageSpec) {
+        if (imageModel(image.source) == null) {
+            append(image.alt)
+            return
+        }
+        val id = "image-${images.size}"
+        images[id] = image
+        appendInlineContent(id, image.alt)
+    }
 
     fun applyHtmlStyle(tag: SafeHtml.Tag, start: Int, end: Int) {
         if (start == end) return
@@ -300,7 +393,7 @@ internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = buil
             is org.commonmark.node.Text -> append(current.literal)
             is Code -> append(current.literal)
             is SoftLineBreak, is HardLineBreak -> append("\n")
-            is Image -> append(current.plainText())
+            is Image -> appendImage(SafeHtml.ImageSpec(current.destination, current.plainText(), current.title, null, null))
             is HtmlInline -> {
                 if (!enableHtml) append(current.literal)
                 else {
@@ -312,7 +405,11 @@ internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = buil
                     } else if (tag.name in SafeHtml.voidTags) {
                         when (tag.name) {
                             "br" -> append("\n")
-                            "img" -> append(tag.attributes["alt"] ?: "")
+                            "img" -> {
+                                val image = SafeHtml.imageTag(current.literal)
+                                if (image != null) appendImage(image)
+                                else append(tag.attributes["alt"] ?: "")
+                            }
                         }
                     } else if (!tag.isSelfClosing) htmlStack += tag
                 }
@@ -333,6 +430,8 @@ internal fun inlineText(node: Node, enableHtml: Boolean): AnnotatedString = buil
         }
     }
     node.children().forEach(::appendNode)
+    }
+    return InlineRender(text, images)
 }
 
 internal fun isSafeLink(value: String): Boolean {

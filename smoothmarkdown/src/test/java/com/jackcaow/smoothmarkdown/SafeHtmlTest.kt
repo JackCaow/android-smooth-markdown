@@ -6,6 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import androidx.compose.ui.text.font.FontWeight
+import org.commonmark.node.Paragraph
 
 class SafeHtmlTest {
     @Test fun lexesBoundedTagsAndKeepsFirstAttribute() {
@@ -74,5 +75,37 @@ class SafeHtmlTest {
         assertEquals("unsafe", SafeHtml.imageAlt("<img src='javascript:alert(1)' alt='unsafe'>"))
         assertNull(SafeHtml.dimension("100%"))
         assertNull(SafeHtml.dimension("10001"))
+    }
+
+    @Test fun mixedInlineImagesRemainWidgetsWithStylesAndLinks() {
+        val paragraph = parseMarkdown(
+            "before **bold** ![Markdown](assets/icon.png) [link](https://example.com) " +
+                "<img src='https://example.com/logo.png' alt='HTML' width='64'> after",
+        ).firstChild as Paragraph
+        val enabled = inlineRender(paragraph, enableHtml = true)
+        assertEquals(2, enabled.images.size)
+        assertEquals(listOf("Markdown", "HTML"), enabled.images.values.map { it.alt })
+        assertEquals(64f, enabled.images.values.last().width)
+        assertTrue(enabled.text.text.contains("before bold"))
+        assertTrue(enabled.text.text.contains("after"))
+        assertFalse(enabled.text.text.contains("<img"))
+        assertTrue(enabled.text.spanStyles.any {
+            it.item.fontWeight == FontWeight.Bold && enabled.text.text.substring(it.start, it.end) == "bold"
+        })
+        assertEquals("https://example.com", enabled.text.getStringAnnotations("url", 0, enabled.text.length).single().item)
+
+        val disabled = inlineRender(paragraph, enableHtml = false)
+        assertEquals(1, disabled.images.size)
+        assertTrue(disabled.text.text.contains("<img"))
+    }
+
+    @Test fun unsafeInlineImagesKeepAltWithoutEmbedding() {
+        val paragraph = parseMarkdown(
+            "safe <img src='javascript:alert(1)' alt='unsafe'> end ![bad](file:///etc/passwd)",
+        ).firstChild as Paragraph
+        val rendered = inlineRender(paragraph, enableHtml = true)
+        assertTrue(rendered.images.isEmpty())
+        assertTrue(rendered.text.text.contains("unsafe"))
+        assertTrue(rendered.text.text.contains("bad"))
     }
 }
