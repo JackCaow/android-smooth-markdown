@@ -119,7 +119,8 @@ private class MathBlockParser(firstContent: String, initiallyClosed: Boolean) : 
 internal fun rememberMathRenderer(latex: String, displayMode: Boolean): RaTeXRenderer? {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val color = MaterialTheme.colorScheme.onSurface.toArgb()
+    val sheet = LocalMarkdownStyleSheet.current
+    val color = (sheet.textColor ?: MaterialTheme.colorScheme.onSurface).toArgb()
     val fontSizePx = with(density) { (if (displayMode) 22.dp else 18.dp).toPx() }
     return remember(latex, displayMode, color, fontSizePx) {
         runCatching {
