@@ -12,7 +12,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 
-/** Appends incoming chunks and renders the accumulated Markdown document. */
+/** Appends incoming chunks and renders the accumulated Markdown document.
+ * [imageBuilder] is forwarded to [SmoothMarkdown] for safe block, inline, and HTML images.
+ */
 @Composable
 fun StreamMarkdown(
     chunks: Flow<String>,
@@ -25,6 +27,7 @@ fun StreamMarkdown(
     styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
     plugins: ParserPluginRegistry? = null,
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
+    imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val markdown by produceState(initialValue = "", key1 = chunks, key2 = throttleMillis, key3 = enableHtml) {
@@ -57,5 +60,6 @@ fun StreamMarkdown(
         }
     }
     SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml,
-        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata)
+        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
+        imageBuilder = imageBuilder)
 }
