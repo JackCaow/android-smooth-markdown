@@ -34,10 +34,6 @@ data class MarkdownStyleSheet(
     val footnoteColor: Color = Color(0xFF1976D2),
     val quoteBarColor: Color? = null,
     val quoteBackground: Color? = null,
-    /** Overrides [quoteBackground]; its border color falls back to [quoteBarColor] when unspecified. */
-    val blockquoteDecoration: MarkdownBlockquoteDecoration? = null,
-    /** Insets between the blockquote border and its rendered content. */
-    val blockquotePadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
     val tableBorderColor: Color? = null,
     val ruleColor: Color? = null,
     val headingStyles: List<TextStyle>? = null,
@@ -57,6 +53,10 @@ data class MarkdownStyleSheet(
     val tableHeaderBackgroundColor: Color? = null,
     /** Thickness for Markdown thematic breaks and HTML horizontal rules. */
     val horizontalRuleThickness: Dp = 1.dp,
+    /** Overrides [quoteBackground]; its border color falls back to [quoteBarColor] when unspecified. */
+    val blockquoteDecoration: MarkdownBlockquoteDecoration? = null,
+    /** Insets between the blockquote border and its rendered content. */
+    val blockquotePadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
 ) {
     init {
         require(headingStyles == null || headingStyles.size == 6) { "headingStyles must contain H1 through H6" }
