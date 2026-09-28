@@ -9,6 +9,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.keyDown
+import androidx.compose.ui.test.keyUp
+import androidx.compose.ui.input.key.Key
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -47,5 +51,44 @@ class EditorControlsUiTest {
             assertEquals("Alpha beta alpha", controller.text)
             check(!controller.canUndo)
         }
+    }
+
+    @Test fun ctrlFAndCtrlShiftEnterWorkFromFocusedEditor() {
+        val controller = MarkdownEditorController("Alpha beta alpha")
+        controller.mode = MarkdownEditorMode.SOURCE
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithTag("editor-source-input").performClick()
+        compose.onNodeWithTag("editor-source-input").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.F)
+            keyUp(Key.F)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.onNodeWithTag("editor-search-query").assertExists()
+        compose.onNodeWithTag("editor-search-query").performTextInput("alpha")
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("2 matches")
+
+        compose.onNodeWithTag("editor-search-query").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            keyDown(Key.Enter)
+            keyUp(Key.Enter)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.onNodeWithTag("editor-exit-focus").assertExists()
+        compose.onNodeWithTag("editor-find").assertDoesNotExist()
+        compose.onNodeWithTag("editor-search-query").assertExists()
+
+        compose.onNodeWithTag("editor-search-query").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            keyDown(Key.Enter)
+            keyUp(Key.Enter)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.onNodeWithTag("editor-focus-mode").assertExists()
     }
 }

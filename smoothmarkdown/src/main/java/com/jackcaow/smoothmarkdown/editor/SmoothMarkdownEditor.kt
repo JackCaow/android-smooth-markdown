@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,12 +35,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
@@ -77,6 +83,11 @@ fun SmoothMarkdownEditor(
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var focusMode by remember { mutableStateOf(false) }
+    var searchFocusRequest by remember { mutableIntStateOf(0) }
+    val searchFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(searchOpen, searchFocusRequest) {
+        if (searchOpen) searchFocusRequester.requestFocus()
+    }
     val searchMatches = if (searchOpen) controller.findMatches(searchQuery) else emptyList()
     val slashTrigger = if (controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
     val slashSuggestions = slashTrigger?.let(MarkdownSlashCommands::suggestions).orEmpty()
@@ -94,7 +105,22 @@ fun SmoothMarkdownEditor(
             } finally { hostActionBusy = false }
         }
     }
-    Column(modifier) {
+    Column(modifier.onPreviewKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown || !event.isCtrlPressed || event.isAltPressed) {
+            false
+        } else when {
+            event.key == Key.F && !event.isShiftPressed -> {
+                searchOpen = true
+                searchFocusRequest++
+                true
+            }
+            event.key == Key.Enter && event.isShiftPressed -> {
+                focusMode = !focusMode
+                true
+            }
+            else -> false
+        }
+    }) {
         if (!focusMode) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Row {
                     MarkdownEditorMode.entries.forEach { mode ->
@@ -114,8 +140,10 @@ fun SmoothMarkdownEditor(
             TextButton(onClick = { focusMode = !focusMode }, modifier = Modifier.testTag(if (focusMode) "editor-exit-focus" else "editor-focus-mode")) {
                 Text(if (focusMode) "Exit focus" else "Focus mode")
             }
-            TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
-                Text(if (searchOpen) "Close find" else "Find")
+            if (!focusMode) {
+                TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
+                    Text(if (searchOpen) "Close find" else "Find")
+                }
             }
         }
         if (searchOpen) {
@@ -125,7 +153,7 @@ fun SmoothMarkdownEditor(
                     onValueChange = { searchQuery = it },
                     label = { Text("Find in note") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("editor-search-query"),
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester).testTag("editor-search-query"),
                 )
                 Row {
                     Text("${searchMatches.size} matches", modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
@@ -216,7 +244,7 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
     BasicTextField(
         value = controller.value,
         onValueChange = controller::updateFromInput,
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(12.dp),
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(12.dp).testTag("editor-source-input"),
         textStyle = MaterialTheme.typography.bodyMedium.copy(
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = FontFamily.Monospace,
