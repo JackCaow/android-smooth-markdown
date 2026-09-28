@@ -1,6 +1,9 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 import kotlin.math.max
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 data class MermaidPoint(val x: Float, val y: Float)
 data class MermaidRect(val x: Float, val y: Float, val width: Float, val height: Float) {
@@ -24,6 +27,16 @@ data class MermaidKanbanColumnPlacement(
     val column: MermaidKanbanColumn, val box: MermaidRect, val cards: List<MermaidRect>,
 )
 data class MermaidKanbanPlacement(val columns: List<MermaidKanbanColumnPlacement>)
+data class MermaidRadarPlacement(
+    val center: MermaidPoint, val radius: Float, val axisEnds: List<MermaidPoint>,
+    val rings: List<List<MermaidPoint>>, val curves: List<List<MermaidPoint>>, val legendY: Float,
+)
+data class MermaidXYBarPlacement(val rect: MermaidRect, val seriesIndex: Int)
+data class MermaidXYPlacement(
+    val plot: MermaidRect, val bars: List<MermaidXYBarPlacement>,
+    val lines: List<Pair<Int, List<MermaidPoint>>>, val categoryCenters: List<Float>,
+    val baseline: Float,
+)
 data class MermaidLayoutResult(
     val width: Float,
     val height: Float,
@@ -34,6 +47,8 @@ data class MermaidLayoutResult(
     val timeline: MermaidTimelinePlacement? = null,
     val gantt: MermaidGanttPlacement? = null,
     val kanban: MermaidKanbanPlacement? = null,
+    val radar: MermaidRadarPlacement? = null,
+    val xyChart: MermaidXYPlacement? = null,
 )
 
 /** Deterministic layered layout for the supported flowchart and sequence subset. Units are dp. */
@@ -45,6 +60,79 @@ object MermaidLayout {
         MermaidKind.Timeline -> timeline(diagram)
         MermaidKind.Gantt -> gantt(diagram)
         MermaidKind.Kanban -> kanban(diagram)
+        MermaidKind.Radar -> radar(diagram)
+        MermaidKind.XYChart -> xyChart(diagram)
+    }
+
+    private fun radar(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.radar)
+        val center = MermaidPoint(210f, if (data.title == null) 174f else 198f)
+        val radius = 118f
+        fun point(index: Int, ratio: Double): MermaidPoint {
+            val angle = -PI / 2 + index * 2 * PI / data.axes.size
+            return MermaidPoint(center.x + cos(angle).toFloat() * radius * ratio.toFloat(),
+                center.y + sin(angle).toFloat() * radius * ratio.toFloat())
+        }
+        val axes = data.axes.indices.map { point(it, 1.0) }
+        val rings = (1..data.ticks).map { tick ->
+            data.axes.indices.map { point(it, tick.toDouble() / data.ticks) }
+        }
+        val span = data.effectiveMax - data.effectiveMin
+        val curves = data.curves.map { curve ->
+            curve.values.mapIndexed { index, value ->
+                point(index, ((value - data.effectiveMin) / span).coerceIn(0.0, 1.0))
+            }
+        }
+        val legendY = center.y + radius + 52f
+        val height = legendY + if (data.showLegend) data.curves.size * 26f + 20f else 16f
+        return MermaidLayoutResult(420f, height, emptyMap(), emptyList(), emptyMap(),
+            radar = MermaidRadarPlacement(center, radius, axes, rings, curves, legendY))
+    }
+
+    private fun xyChart(diagram: MermaidDiagram): MermaidLayoutResult {
+        val data = requireNotNull(diagram.xyChart)
+        val horizontal = data.orientation == MermaidXYOrientation.Horizontal
+        val pointCount = data.pointCount
+        val top = if (data.title == null) 28f else 68f
+        val plot = if (horizontal) MermaidRect(116f, top, 320f, (pointCount * 58f).coerceAtLeast(190f))
+            else MermaidRect(64f, top, (pointCount * 76f).coerceAtLeast(310f), 250f)
+        val min = data.effectiveMin
+        val span = data.effectiveMax - min
+        fun scaled(value: Double): Float = ((value - min) / span).coerceIn(0.0, 1.0).toFloat()
+        val baseline = if (horizontal) plot.x + plot.width * scaled(0.0)
+            else plot.y + plot.height * (1f - scaled(0.0))
+        val bars = mutableListOf<MermaidXYBarPlacement>()
+        val lines = mutableListOf<Pair<Int, List<MermaidPoint>>>()
+        val barSeries = data.series.withIndex().filter { it.value.type == MermaidXYSeriesType.Bar }
+        val step = if (horizontal) plot.height / pointCount else plot.width / pointCount
+        val centers = List(pointCount) { index ->
+            if (horizontal) plot.y + (index + 0.5f) * step else plot.x + (index + 0.5f) * step
+        }
+        val barWidth = (step * 0.7f / barSeries.size.coerceAtLeast(1)).coerceAtMost(24f)
+        barSeries.forEachIndexed { barOrder, indexed ->
+            indexed.value.values.forEachIndexed { index, value ->
+                val offset = (barOrder - (barSeries.size - 1) / 2f) * barWidth
+                val end = if (horizontal) plot.x + plot.width * scaled(value)
+                    else plot.y + plot.height * (1f - scaled(value))
+                val rect = if (horizontal) MermaidRect(minOf(baseline, end), centers[index] + offset - barWidth / 2,
+                    kotlin.math.abs(end - baseline).coerceAtLeast(1f), barWidth)
+                else MermaidRect(centers[index] + offset - barWidth / 2, minOf(baseline, end),
+                    barWidth, kotlin.math.abs(end - baseline).coerceAtLeast(1f))
+                bars += MermaidXYBarPlacement(rect, indexed.index)
+            }
+        }
+        data.series.forEachIndexed { seriesIndex, series ->
+            if (series.type == MermaidXYSeriesType.Line) {
+                lines += seriesIndex to series.values.mapIndexed { index, value ->
+                    if (horizontal) MermaidPoint(plot.x + plot.width * scaled(value), centers[index])
+                    else MermaidPoint(centers[index], plot.y + plot.height * (1f - scaled(value)))
+                }
+            }
+        }
+        val width = plot.x + plot.width + 24f
+        val height = plot.y + plot.height + if (horizontal) 42f else 82f
+        return MermaidLayoutResult(width, height, emptyMap(), emptyList(), emptyMap(),
+            xyChart = MermaidXYPlacement(plot, bars, lines, centers, baseline))
     }
 
     private fun gantt(diagram: MermaidDiagram): MermaidLayoutResult {

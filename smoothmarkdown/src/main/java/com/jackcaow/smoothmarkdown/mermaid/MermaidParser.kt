@@ -18,6 +18,9 @@ object MermaidParser {
             header.equals("timeline", ignoreCase = true) -> MermaidTimelineParser().parse(lines)
             header.equals("gantt", ignoreCase = true) -> MermaidGanttParser().parse(rawLines)
             header.equals("kanban", ignoreCase = true) -> MermaidKanbanParser().parse(rawLines)
+            header.equals("radar-beta", ignoreCase = true) -> MermaidRadarParser().parse(lines)
+            Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) ->
+                MermaidXYChartParser().parse(lines)
             else -> null
         }
     }

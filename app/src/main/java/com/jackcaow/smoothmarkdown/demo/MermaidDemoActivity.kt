@@ -29,6 +29,8 @@ class MermaidDemoActivity : ComponentActivity() {
                 "Timeline" to timelineExample,
                 "Gantt" to ganttExample,
                 "Kanban" to kanbanExample,
+                "Radar" to radarExample,
+                "XY Chart" to xyChartExample,
             )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -102,4 +104,25 @@ private val kanbanExample = """
         task4[API integration] @{ ticket: "APP-104" }
       done[Done]
         task5[CI pipeline] @{ assigned: "Alice", priority: "Low" }
+""".trimIndent()
+
+private val radarExample = """
+    radar-beta
+    title 技能评估
+    axis 编程, 设计, 沟通, 管理, 创新
+    curve 张三["张三"]{5, 3, 4, 2, 4}
+    curve 李四["李四"]{3, 5, 3, 4, 3}
+    max 5
+    min 0
+    ticks 5
+    graticule polygon
+""".trimIndent()
+
+private val xyChartExample = """
+    xychart-beta
+    title "Quarterly Revenue"
+    x-axis [Q1, Q2, Q3, Q4]
+    y-axis "Revenue" 0 --> 100
+    bar [23, 45, 67, 89]
+    line [20, 50, 60, 85]
 """.trimIndent()

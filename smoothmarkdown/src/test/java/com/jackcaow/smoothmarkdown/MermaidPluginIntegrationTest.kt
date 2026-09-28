@@ -57,6 +57,19 @@ class MermaidPluginIntegrationTest {
             .firstChild is FencedCodeBlock)
     }
 
+    @Test fun radarAndXYChartFencesUseOptInPluginAndInvalidChartsStayCode() {
+        val radar = "```mermaid\nradar-beta\naxis A, B, C\ncurve c{1, 2, 3}\n```"
+        val xy = "```mermaid\nxychart-beta\nx-axis [A, B]\nbar [10, 20]\n```"
+        assertTrue(parseMarkdown(radar).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(xy).firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown(radar, plugins).firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown(xy, plugins).firstChild is MermaidDiagramNode)
+        assertTrue(parseMarkdown("```mermaid\nradar-beta\naxis A, B\n```", plugins)
+            .firstChild is FencedCodeBlock)
+        assertTrue(parseMarkdown("```mermaid\nxychart-beta\nbar [oops]\n```", plugins)
+            .firstChild is FencedCodeBlock)
+    }
+
     @Test fun nestedFenceInQuoteIsTransformed() {
         val document = parseMarkdown("> ```mermaid\n> graph TB\n> A --> B\n> ```", plugins)
         assertTrue(document.firstChild.firstChild is MermaidDiagramNode)

@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 /** Parsed subset of Mermaid supported by the native Compose prototype. */
-enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban }
+enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart }
 enum class MermaidDirection { TB, BT, LR, RL }
 enum class MermaidShape {
     Rectangle, Rounded, Stadium, Diamond, Hexagon, Circle, Subroutine,
@@ -81,6 +81,32 @@ data class MermaidKanbanData(
     fun task(id: String): MermaidKanbanTask? = allTasks.firstOrNull { it.id == id }
 }
 
+enum class MermaidRadarGraticule { Polygon, Circle }
+data class MermaidRadarAxis(val id: String, val label: String)
+data class MermaidRadarCurve(val id: String, val label: String, val values: List<Double>)
+data class MermaidRadarData(
+    val title: String?, val axes: List<MermaidRadarAxis>, val curves: List<MermaidRadarCurve>,
+    val showLegend: Boolean = true, val max: Double? = null, val min: Double? = null,
+    val graticule: MermaidRadarGraticule = MermaidRadarGraticule.Polygon, val ticks: Int = 5,
+) {
+    val effectiveMin: Double get() = min ?: 0.0
+    val effectiveMax: Double get() = max ?: (curves.flatMap { it.values }.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
+}
+
+enum class MermaidXYOrientation { Vertical, Horizontal }
+enum class MermaidXYSeriesType { Bar, Line }
+data class MermaidXYSeries(val type: MermaidXYSeriesType, val values: List<Double>)
+data class MermaidXYData(
+    val title: String?, val xAxisTitle: String?, val yAxisTitle: String?,
+    val categories: List<String>, val xAxisMin: Double?, val xAxisMax: Double?,
+    val yAxisMin: Double?, val yAxisMax: Double?, val orientation: MermaidXYOrientation,
+    val series: List<MermaidXYSeries>,
+) {
+    val pointCount: Int get() = if (categories.isNotEmpty()) categories.size else series.maxOf { it.values.size }
+    val effectiveMin: Double get() = yAxisMin ?: minOf(0.0, series.flatMap { it.values }.minOrNull() ?: 0.0)
+    val effectiveMax: Double get() = yAxisMax ?: maxOf(0.0, series.flatMap { it.values }.maxOrNull() ?: 0.0)
+}
+
 data class MermaidDiagram(
     val kind: MermaidKind,
     val direction: MermaidDirection,
@@ -91,6 +117,8 @@ data class MermaidDiagram(
     val timeline: MermaidTimelineData? = null,
     val gantt: MermaidGanttData? = null,
     val kanban: MermaidKanbanData? = null,
+    val radar: MermaidRadarData? = null,
+    val xyChart: MermaidXYData? = null,
 ) {
     fun node(id: String): MermaidNode? = nodes.firstOrNull { it.id == id }
 }

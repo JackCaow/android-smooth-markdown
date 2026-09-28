@@ -55,6 +55,14 @@ fun MermaidDiagramView(source: String, modifier: Modifier = Modifier) {
         MermaidKanbanView(diagram, layout, modifier)
         return
     }
+    if (diagram.kind == MermaidKind.Radar) {
+        MermaidRadarView(diagram, layout, modifier)
+        return
+    }
+    if (diagram.kind == MermaidKind.XYChart) {
+        MermaidXYChartView(diagram, layout, modifier)
+        return
+    }
     val foreground = MaterialTheme.colorScheme.onSurface
     val nodeFill = MaterialTheme.colorScheme.surfaceVariant
     val surface = MaterialTheme.colorScheme.surface
