@@ -21,11 +21,12 @@ fun StreamMarkdown(
     onImageClick: (String) -> Unit = {},
     onError: (Throwable) -> Unit = {},
     throttleMillis: Long = 50,
+    enableHtml: Boolean = false,
 ) {
     val errorHandler by rememberUpdatedState(onError)
-    val markdown by produceState(initialValue = "", key1 = chunks, key2 = throttleMillis) {
+    val markdown by produceState(initialValue = "", key1 = chunks, key2 = throttleMillis, key3 = enableHtml) {
         value = ""
-        val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis())
+        val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis(), enableHtml)
         var pending: Job? = null
         try {
             chunks.collect { chunk ->
@@ -52,5 +53,5 @@ fun StreamMarkdown(
             pending?.cancel()
         }
     }
-    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick)
+    SmoothMarkdown(markdown, modifier, onLinkClick, onImageClick, enableHtml)
 }

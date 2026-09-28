@@ -4,6 +4,7 @@ package com.jackcaow.smoothmarkdown
 class StreamMarkdownBuffer(
     private val intervalMillis: Long = 50,
     startMillis: Long = 0,
+    private val enableHtml: Boolean = false,
 ) {
     private val buffer = StringBuilder()
     val fullText: String get() = buffer.toString()
@@ -23,11 +24,15 @@ class StreamMarkdownBuffer(
     }
 
     fun flush(nowMillis: Long) {
-        visibleText = buffer.toString()
+        val full = buffer.toString()
+        visibleText = if (enableHtml) SafeHtml.safeRenderPrefix(full) else full
         lastUpdateMillis = nowMillis
     }
 
-    fun finish(nowMillis: Long) = flush(nowMillis)
+    fun finish(nowMillis: Long) {
+        visibleText = buffer.toString()
+        lastUpdateMillis = nowMillis
+    }
 
     fun reset(nowMillis: Long) {
         buffer.clear()

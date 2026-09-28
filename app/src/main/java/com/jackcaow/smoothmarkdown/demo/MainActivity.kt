@@ -28,6 +28,10 @@ private val demoMarkdown = """
 
     > The source editor now supports formatting commands and preview.
 
+    HTML: <b>bold</b> and <span style="color:red">red</span>.
+
+    <div align="center">Centered **Markdown**</div>
+
     - [x] Render headings and emphasis
     - [ ] Complete formatted-block editing
 
@@ -49,10 +53,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             val controller = remember { MarkdownEditorController(demoMarkdown) }
             var showEditor by remember { mutableStateOf(false) }
+            var enableHtml by remember { mutableStateOf(false) }
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     TextButton(onClick = { showEditor = !showEditor }) {
                         Text(if (showEditor) "Read" else "Open editor")
+                    }
+                    if (!showEditor) {
+                        TextButton(onClick = { enableHtml = !enableHtml }) {
+                            Text(if (enableHtml) "HTML on" else "Enable HTML")
+                        }
                     }
                     if (showEditor) {
                         SmoothMarkdownEditor(controller, Modifier.weight(1f))
@@ -61,6 +71,7 @@ class MainActivity : ComponentActivity() {
                             markdown = controller.text,
                             modifier = Modifier.weight(1f),
                             onLinkClick = { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                            enableHtml = enableHtml,
                         )
                     }
                 }

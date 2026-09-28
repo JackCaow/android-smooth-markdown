@@ -32,4 +32,12 @@ class StreamMarkdownBufferTest {
         assertNull(buffer.append("lead <font colo", 50))
         assertEquals("lead <font colo", buffer.visibleText)
     }
+
+    @Test fun htmlModeWithholdsPartialTagThenFlushesOnCompletion() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0, enableHtml = true)
+        assertNull(buffer.append("lead <font colo", 50))
+        assertEquals("lead ", buffer.visibleText)
+        buffer.finish(51)
+        assertEquals("lead <font colo", buffer.visibleText)
+    }
 }
