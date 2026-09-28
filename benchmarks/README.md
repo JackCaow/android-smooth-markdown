@@ -1,5 +1,7 @@
 # Reader parser and stream benchmark
 
+For the Compose Demo's repeatable 68,282-byte emulator render and scroll run, see [android-device.md](android-device.md).
+
 This is an opt-in host microbenchmark. It measures parsing and stream accumulation; it does not measure Compose layout, drawing, gesture latency, network images, or device memory.
 
 Fixture: `smoothmarkdown/src/test/resources/performance/flutter-readme.md` is an exact copy of Flutter Smooth Markdown `README.md` at `80e6bb6`, SHA-256 `c84c04eb11485a1102fde7ab104ef2b86636dda4d45d7862d3289148330ef199`. The test repeats it four times with blank-line separators: 68,282 UTF-8 bytes. The rapid stream divides the document into 32-character chunks and advances synthetic time by 1 ms per chunk. A 50 ms update interval yields 42 intermediate publishes; each publish reparses the visible prefix, then completion reparses the full text. This reflects the stream update pattern in Flutter's stream tests. The test runs 3 parser warmups and 10 measured parses, then 2 stream warmups and 5 measured runs. Buffer-only runs isolate accumulation cost.

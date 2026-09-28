@@ -144,6 +144,9 @@ class MainActivity : ComponentActivity() {
             )
             MaterialTheme {
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+                    TextButton(onClick = { startActivity(Intent(this@MainActivity, PerformanceActivity::class.java)) }) {
+                        Text("Long document benchmark")
+                    }
                     TextButton(onClick = { showEditor = !showEditor }) {
                         Text(if (showEditor) "Read" else "Open editor")
                     }
