@@ -11,10 +11,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -23,6 +29,8 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
@@ -43,9 +51,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.NoteAdd
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Schema
+import androidx.compose.material.icons.filled.Stream
+import androidx.compose.material.icons.filled.Title
 import com.jackcaow.smoothmarkdown.AdmonitionPlugin
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.EmojiPlugin
@@ -72,6 +109,32 @@ private val themeOptions = listOf(
     "VS Code" to MarkdownStyleSheet.vscode(),
     "VS Code dark" to MarkdownStyleSheet.vscode(dark = true),
 )
+
+private fun exampleIcon(index: Int): ImageVector = when (index) {
+    0 -> Icons.Filled.FormatBold
+    1 -> Icons.Filled.Title
+    2 -> Icons.Filled.FormatListBulleted
+    3 -> Icons.Filled.Code
+    4 -> Icons.Filled.FormatQuote
+    5 -> Icons.Filled.Link
+    6 -> Icons.Filled.AutoAwesome
+    7 -> Icons.Filled.Palette
+    8 -> Icons.Filled.Dashboard
+    else -> Icons.Filled.Article
+}
+
+private fun demoIcon(id: String): ImageVector = when (id) {
+    "math" -> Icons.Filled.Calculate
+    "stream" -> Icons.Filled.Stream
+    "footnote" -> Icons.Filled.NoteAdd
+    "html" -> Icons.Filled.Code
+    "chat-list" -> Icons.Filled.Chat
+    "ai" -> Icons.Filled.AutoAwesome
+    "conversation-list" -> Icons.Filled.Forum
+    "plugin" -> Icons.Filled.Extension
+    "mermaid" -> Icons.Filled.Schema
+    else -> Icons.Filled.Article
+}
 
 // Flutter's six presets share two chrome palettes: each preset selects its own
 // MarkdownStyleSheet, while its brightness controls the surrounding demo page.
@@ -148,6 +211,7 @@ private fun DemoHome(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val isDark = demoThemeIsDark(themeIndex)
     var languageCode by rememberSaveable { mutableStateOf(initialLanguage.code) }
     val language = DemoLanguage.fromCode(languageCode)
     var exampleId by remember { mutableStateOf(examples.first().id) }
@@ -192,26 +256,58 @@ private fun DemoHome(
         drawerState = drawerState,
         gesturesEnabled = isHome,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
-                Column(Modifier.verticalScroll(rememberScrollState()).padding(12.dp)) {
-                    Text(localizations.text(language, "drawer_header_title"),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(12.dp))
-                    NavigationDrawerItem(label = { Text("Markdown Editor") }, selected = isEditor,
-                        onClick = { select("editor") }, modifier = Modifier.testTag("nav-editor"))
+            ModalDrawerSheet(drawerContainerColor = if (isDark) Color(0xFF0D1117) else MaterialTheme.colorScheme.surface) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().height(160.dp)
+                            .background(Brush.linearGradient(if (isDark)
+                                listOf(Color(0xFF161B22), Color(0xFF21262D))
+                            else listOf(Color.Blue, Color(0xFF9C27B0))))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Bottom,
+                    ) {
+                        Icon(Icons.Filled.Article, contentDescription = null,
+                            modifier = Modifier.size(48.dp), tint = Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Text(localizations.text(language, "drawer_header_title"),
+                            fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    NavigationDrawerItem(label = {
+                        Column {
+                            Text("Markdown Editor", color = if (isDark) Color.White else Color.Unspecified)
+                            Text("Scratch-style editing preview", fontSize = 11.sp,
+                                color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray)
+                        }
+                    }, icon = { Icon(Icons.Filled.EditNote, contentDescription = null) },
+                        selected = isEditor, onClick = { select("editor") },
+                        modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-editor"))
                     HorizontalDivider()
                     Text(localizations.chrome(language, "examples"),
-                        style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(12.dp))
-                    examples.forEach { item ->
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    examples.forEachIndexed { index, item ->
                         NavigationDrawerItem(label = { Text(localizations.example(language, item)) },
+                            icon = { Icon(exampleIcon(index), contentDescription = null) },
                             selected = pageId == item.id,
-                            onClick = { select(item.id) }, modifier = Modifier.testTag("nav-${item.id}"))
+                            onClick = { select(item.id) },
+                            modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
                     }
                     HorizontalDivider()
                     Text(localizations.text(language, "drawer_demos"),
-                        style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(12.dp))
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     dedicatedPages.forEach { item ->
-                        NavigationDrawerItem(label = { Text(localizations.page(language, item)) },
+                        NavigationDrawerItem(label = {
+                            Column {
+                                Text(localizations.page(language, item))
+                                if (item.id in setOf("html", "chat-list", "ai", "conversation-list", "plugin", "mermaid")) {
+                                    Text(item.subtitle, fontSize = 11.sp,
+                                        color = if (isDark) Color.White.copy(alpha = 0.38f) else Color.Gray)
+                                }
+                            }
+                        }, icon = { Icon(demoIcon(item.id), contentDescription = null) },
                             selected = pageId == item.id,
                             onClick = {
                                 if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
@@ -220,20 +316,22 @@ private fun DemoHome(
                                 else if (item.id == "ai") scope.launch { drawerState.close(); openAIChat() }
                                 else if (item.id == "conversation-list") scope.launch { drawerState.close(); openConversationList() }
                                 else select(item.id)
-                            }, modifier = Modifier.testTag("nav-${item.id}"))
+                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
                     }
                     HorizontalDivider()
                     Text(localizations.text(language, "language"),
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(12.dp))
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     DemoLanguage.entries.forEach { option ->
                         NavigationDrawerItem(label = { Text(option.nativeName) },
+                            icon = { Icon(Icons.Filled.Language, contentDescription = null) },
                             selected = language == option,
                             onClick = {
                                 languageCode = option.code
                                 onLanguageChange(option)
                                 scope.launch { drawerState.close() }
-                            }, modifier = Modifier.testTag("language-${option.code}"))
+                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("language-${option.code}"))
                     }
                 }
             }
@@ -243,21 +341,33 @@ private fun DemoHome(
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         Column(Modifier.fillMaxSize()) {
             if (isHome) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    TextButton(onClick = { scope.launch { drawerState.open() } },
+                Row(Modifier.fillMaxWidth().height(56.dp)
+                    .background(if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.surface),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } },
                         modifier = Modifier.testTag("open-navigation")) {
-                        Text("☰ ${localizations.chrome(language, "examples")}")
+                        Icon(Icons.Filled.Menu, contentDescription = localizations.chrome(language, "examples"))
                     }
-                    TextButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
-                        Text(localizations.chrome(language, "edit"))
+                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f))
+                    IconButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
+                        Icon(Icons.Filled.EditNote, contentDescription = localizations.chrome(language, "edit"))
                     }
-                    Column {
-                        TextButton(onClick = { themeMenu = true }, modifier = Modifier.testTag("open-theme")) {
-                            Text(localizations.text(language, "drawer_theme"))
+                    Box {
+                        IconButton(onClick = { themeMenu = true }, modifier = Modifier.testTag("open-theme")) {
+                            Icon(Icons.Filled.Palette,
+                                contentDescription = localizations.text(language, "tooltip_theme"))
                         }
                         DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
                             themeOptions.forEachIndexed { index, item ->
-                                DropdownMenuItem(text = { Text(localizations.theme(language, index)) }, onClick = {
+                                DropdownMenuItem(text = { Text(localizations.theme(language, index)) },
+                                    leadingIcon = { Icon(if (index == themeIndex) Icons.Filled.CheckCircle
+                                        else Icons.Filled.RadioButtonUnchecked, contentDescription = null,
+                                        tint = if (index == themeIndex) Color(0xFF2196F3)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    trailingIcon = { Icon(if (demoThemeIsDark(index)) Icons.Filled.DarkMode
+                                        else Icons.Filled.LightMode, contentDescription = null,
+                                        modifier = Modifier.size(16.dp)) }, onClick = {
                                     onThemeChange(index)
                                     themeMenu = false
                                 }, modifier = Modifier.testTag("theme-$index"))
@@ -265,13 +375,32 @@ private fun DemoHome(
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(currentTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f)
-                        .testTag("current-title"))
-                    Text(localizations.theme(language, themeIndex), style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.testTag("current-theme"))
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.primaryContainer)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val titleColor = if (isDark) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                    val exampleIndex = examples.indexOfFirst { it.id == exampleId }.coerceAtLeast(0)
+                    Icon(exampleIcon(exampleIndex), contentDescription = null, tint = titleColor)
+                    Spacer(Modifier.width(12.dp))
+                    Text(currentTitle, style = MaterialTheme.typography.titleLarge, color = titleColor,
+                        modifier = Modifier.weight(1f).testTag("current-title"))
+                    Row(
+                        Modifier.background(if (isDark) Color(0xFF21262D) else Color.White.copy(alpha = 0.3f),
+                            RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("current-theme"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = null, tint = titleColor, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(localizations.theme(language, themeIndex), fontSize = 12.sp, color = titleColor)
+                    }
                 }
+                HorizontalDivider(color = if (isDark) Color(0xFF30363D) else Color(0xFFE0E0E0))
             } else {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back")) {
@@ -337,7 +466,7 @@ private fun DemoHome(
         }
         if (isHome) FloatingActionButton(onClick = { showSource = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("open-source")) {
-            Text(localizations.chrome(language, "source"), modifier = Modifier.padding(horizontal = 12.dp))
+            Icon(Icons.Filled.Code, contentDescription = localizations.chrome(language, "source_title"))
         }
         }
         }
