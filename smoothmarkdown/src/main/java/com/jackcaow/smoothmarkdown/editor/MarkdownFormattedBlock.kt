@@ -22,7 +22,7 @@ internal object MarkdownFormattedBlock {
             match.value + text + headingClosing(block.source.substring(match.value.length))
         }
         MarkdownBlockKind.CODE -> fencedParts(block.source)?.let { parts ->
-            parts.open + text + (if (text.isNotEmpty() && !text.endsWith("\n") && !text.endsWith("\r")) parts.newline else "") + parts.close
+            parts.open + text + (if (text.isNotEmpty() && !text.endsWith("\n") && !text.endsWith("\r")) parts.bodyTerminator else "") + parts.close
         }
         else -> null
     }
@@ -31,7 +31,7 @@ internal object MarkdownFormattedBlock {
 
     private fun headingClosing(body: String): String = Regex("[ \\t]+#+[ \\t]*$").find(body)?.value.orEmpty()
 
-    private data class FencedParts(val open: String, val body: String, val close: String, val newline: String)
+    private data class FencedParts(val open: String, val body: String, val close: String, val bodyTerminator: String)
 
     private fun fencedParts(source: String): FencedParts? {
         val firstNewline = source.indexOf('\n')
@@ -45,13 +45,9 @@ internal object MarkdownFormattedBlock {
         val closing = Regex("^ {0,3}(`{3,}|~{3,})[ \\t]*$").matchEntire(close) ?: return null
         val closingMarker = closing.groupValues[1]
         if (closingMarker.first() != marker.first() || closingMarker.length < marker.length) return null
-        val newline = if (open.endsWith("\r\n")) "\r\n" else "\n"
         val rawBody = source.substring(firstNewline + 1, finalLineStart)
-        val body = when {
-            rawBody.endsWith("\r\n") -> rawBody.dropLast(2)
-            rawBody.endsWith("\n") -> rawBody.dropLast(1)
-            else -> rawBody
-        }
-        return FencedParts(open, body, close, newline)
+        val bodyTerminator = if (rawBody.endsWith("\r\n")) "\r\n" else "\n"
+        val body = rawBody.removeSuffix(bodyTerminator)
+        return FencedParts(open, body, close, bodyTerminator)
     }
 }

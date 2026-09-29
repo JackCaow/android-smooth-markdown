@@ -755,9 +755,9 @@ private fun FormattedBlockPane(
                                 controller.clearFormattedBlockFocusTarget(block.id)
                             }
                         }
-                        val dragModifier = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
+                        val dragModifier = if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING, MarkdownBlockKind.CODE))
                             Modifier.testTag("formatted-block-drag-${block.id}") else Modifier
-                        val textTracker = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
+                        val textTracker = if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING, MarkdownBlockKind.CODE))
                             rememberFormattedTextFieldTracker(textPositions, block.id, controller.text, inline?.visible ?: editableText)
                             else null
                         val decorated = AnnotatedString.Builder(inline?.annotated(MaterialTheme.colorScheme.primary)
@@ -780,8 +780,8 @@ private fun FormattedBlockPane(
                                             controller.replaceFormattedInlineText(block.id, next.text, next.selection, next.composition)
                                         }
                                     }
-                                } else {
-                                    controller.replaceFormattedBlockText(block.id, next.text)
+                                } else if (next.text == editableText || controller.replaceFormattedBlockText(block.id, next.text)) {
+                                    controller.setFormattedSelection(block.id, next.selection, next.composition)
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp).then(dragModifier)
@@ -819,7 +819,7 @@ private fun FormattedBlockPane(
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             onTextLayout = { textTracker?.onTextLayout(it) },
                         )
-                        if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) &&
+                        if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING, MarkdownBlockKind.CODE) &&
                             controller.activeFormattedBlockId == block.id) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                 TextButton(onClick = {
@@ -874,7 +874,7 @@ private fun FormattedBlockPane(
         }
         if (textEndpoints != null) {
             val range = textEndpoints?.selection()
-            Text(if (range == null) "Start set. Place the caret in a paragraph or heading, then tap End."
+            Text(if (range == null) "Start set. Place the caret in a text or code field, then tap End."
                 else "Text range selected. Copy Markdown, delete, or replace it below.",
                 modifier = Modifier.testTag("formatted-text-selection-status"))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
