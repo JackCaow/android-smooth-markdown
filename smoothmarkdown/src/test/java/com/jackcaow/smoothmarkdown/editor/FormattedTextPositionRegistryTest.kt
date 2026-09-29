@@ -58,4 +58,25 @@ class FormattedTextPositionRegistryTest {
         registry.unregister(old)
         assertEquals(2, registry.positionAt(Offset(5f, 5f), "new")?.offset)
     }
+    @Test fun distinctTableCellsInOneBlockKeepSeparateCaretTargets() {
+        val source = "| A | B |\n| --- | --- |"
+        val registry = FormattedTextPositionRegistry()
+        val leftCell = MarkdownTableCellPosition(0, 0)
+        val rightCell = MarkdownTableCellPosition(0, 1)
+        val left = FormattedTextPositionTarget("block-0", source, "A",
+            { Rect(0f, 0f, 40f, 20f) }, { 1 }, { Offset(20f, 10f) }, leftCell)
+        val right = FormattedTextPositionTarget("block-0", source, "B",
+            { Rect(50f, 0f, 90f, 20f) }, { 0 }, { Offset(60f, 10f) }, rightCell)
+        registry.register(left)
+        registry.register(right)
+        assertEquals(MarkdownFormattedTextPosition("block-0", 1, tableCell = leftCell),
+            registry.positionAt(Offset(20f, 10f), source))
+        assertEquals(MarkdownFormattedTextPosition("block-0", 0, tableCell = rightCell),
+            registry.positionAt(Offset(60f, 10f), source))
+        assertEquals(Offset(60f, 10f), registry.cursorWindowPoint(
+            MarkdownFormattedTextPosition("block-0", 0, tableCell = rightCell), source))
+        registry.unregister(left)
+        assertEquals(rightCell, registry.positionAt(Offset(60f, 10f), source)?.tableCell)
+    }
+
 }

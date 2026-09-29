@@ -59,4 +59,17 @@ class FormattedTextEndpointsTest {
         }
         assertEquals(false, forward.copy(focus = null).containsCompleteBlock(blocks, "block-1"))
     }
+    @Test fun tableCellRangesPaintOnlySelectedCharacters() {
+        val source = "BeforeX\n\n| YAfter | H |\n| --- | --- |\n| A | B |"
+        val blocks = MarkdownEditorController(source).semanticDocument().blocks
+        val cell = MarkdownTableCellPosition(0, 0)
+        val cross = FormattedTextEndpoints(source, MarkdownFormattedTextPosition("block-0", 6))
+            .withFocus(MarkdownFormattedTextPosition("block-1", 1, tableCell = cell))
+        assertEquals(TextRange(0, 1), cross.tableVisibleRange(blocks, "block-1", cell, 6))
+        assertNull(cross.tableVisibleRange(blocks, "block-1", MarkdownTableCellPosition(0, 1), 1))
+        val same = FormattedTextEndpoints(source, MarkdownFormattedTextPosition("block-1", 2, tableCell = cell))
+            .withFocus(MarkdownFormattedTextPosition("block-1", 5, tableCell = cell))
+        assertEquals(TextRange(2, 5), same.tableVisibleRange(blocks, "block-1", cell, 6))
+    }
+
 }

@@ -17,12 +17,13 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
-/** UTF-16 offset in formatted prose, a fenced code body, or a list item's first text line. */
+/** UTF-16 offset in formatted prose, a fenced code body, a list line, or a displayed table cell. */
 data class MarkdownFormattedTextPosition(
     val blockId: String,
     val offset: Int,
     val listPath: List<Int>? = null,
     val listLineIndex: Int = 0,
+    val tableCell: MarkdownTableCellPosition? = null,
 )
 
 /** A source-revision-bound text selection across prose and eligible list lines. */
@@ -480,6 +481,8 @@ class MarkdownEditorController(
 
     /** Serializes rendered characters and complete intervening list/code/table blocks. */
     fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
+        if (selected.anchor.tableCell != null || selected.focus.tableCell != null)
+            return MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.copy()
         if (selected.anchor.listPath != null || selected.focus.listPath != null)
             return copyListEndpointSelection(selected)
         MarkdownCodeTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.let { return it.copy() }
@@ -512,6 +515,13 @@ class MarkdownEditorController(
 
     /** Replaces one rendered range with complete parsed Markdown blocks. */
     fun replaceFormattedTextSelectionWithMarkdown(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (selected.anchor.tableCell != null || selected.focus.tableCell != null) {
+            val table = MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)
+                ?: return false
+            val edit = table.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
         if (selected.anchor.listPath != null || selected.focus.listPath != null)
             return replaceListEndpointSelection(selected, markdown)
         if (!hasWellFormedUtf16(markdown)) return false

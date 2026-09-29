@@ -171,4 +171,35 @@ class FormattedTextEndpointsUiTest {
         }
     }
 
+    @Test fun proseToFirstTableCellCaretEndpointsCopyDeleteAndUndo() {
+        val original = "BeforeX\n\n| YAfter | H |\n| --- | --- |\n| A | B |\n\nOutside"
+        val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }
+        var copied: AnnotatedString? = null
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString? = copied
+            override fun setText(annotatedString: AnnotatedString) { copied = annotatedString }
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) }
+            }
+        }
+        compose.onNodeWithTag("formatted-block-drag-block-0").performClick()
+            .performTextInputSelection(TextRange(6))
+        compose.onNodeWithTag("formatted-text-start-block-0").performClick()
+        compose.onNodeWithTag("formatted-table-text-block-1-0-0").performScrollTo().performClick()
+            .performTextInputSelection(TextRange(1))
+        compose.onNodeWithTag("formatted-table-text-end-block-1-0-0").performClick()
+        compose.onNodeWithTag("formatted-text-selection-status").performScrollTo()
+        compose.onNodeWithTag("formatted-text-copy").performClick()
+        compose.runOnIdle { assertEquals("X\n\nY", copied?.text) }
+        compose.onNodeWithTag("formatted-text-delete").performClick()
+        compose.runOnIdle {
+            assertEquals("Before\n\n| After | H |\n| --- | --- |\n| A | B |\n\nOutside", controller.text)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+            check(!controller.canUndo)
+        }
+    }
+
 }

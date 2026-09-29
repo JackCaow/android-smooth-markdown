@@ -22,24 +22,26 @@ internal class FormattedTextPositionTarget(
     val boundsInWindow: () -> Rect?,
     val offsetAtWindowPoint: (Offset) -> Int?,
     val cursorAtVisibleOffset: ((Int) -> Offset?)? = null,
+    val tableCell: MarkdownTableCellPosition? = null,
 )
 
 /** Coordinates stay live through scrolling; no gesture or selection state is owned here. */
 internal class FormattedTextPositionRegistry {
-    private val targets = mutableMapOf<String, FormattedTextPositionTarget>()
+    private val targets = mutableMapOf<Pair<String, MarkdownTableCellPosition?>, FormattedTextPositionTarget>()
     var geometryRevision by mutableIntStateOf(0)
         private set
 
-    fun register(target: FormattedTextPositionTarget) { targets[target.blockId] = target; geometryRevision++ }
+    fun register(target: FormattedTextPositionTarget) { targets[target.blockId to target.tableCell] = target; geometryRevision++ }
 
     fun unregister(target: FormattedTextPositionTarget) {
-        if (targets[target.blockId] === target) { targets.remove(target.blockId); geometryRevision++ }
+        val key = target.blockId to target.tableCell
+        if (targets[key] === target) { targets.remove(key); geometryRevision++ }
     }
 
     fun geometryChanged() { geometryRevision++ }
 
     fun cursorWindowPoint(position: MarkdownFormattedTextPosition, currentSource: String): Offset? {
-        val target = targets[position.blockId]?.takeIf { it.source == currentSource } ?: return null
+        val target = targets[position.blockId to position.tableCell]?.takeIf { it.source == currentSource } ?: return null
         if (position.offset !in 0..target.visibleText.length ||
             safeUtf16Boundary(target.visibleText, position.offset) != position.offset) return null
         return target.cursorAtVisibleOffset?.invoke(position.offset)
@@ -59,7 +61,8 @@ internal class FormattedTextPositionRegistry {
             ?.first
             ?: return null
         val rawOffset = target.offsetAtWindowPoint(windowPoint) ?: return null
-        return MarkdownFormattedTextPosition(target.blockId, safeUtf16Boundary(target.visibleText, rawOffset))
+        return MarkdownFormattedTextPosition(target.blockId, safeUtf16Boundary(target.visibleText, rawOffset),
+            tableCell = target.tableCell)
     }
 }
 
@@ -76,6 +79,7 @@ internal class FormattedTextFieldTracker(
     blockId: String,
     source: String,
     visibleText: String,
+    tableCell: MarkdownTableCellPosition? = null,
 ) {
     private var coordinates: LayoutCoordinates? = null
     private var layout: TextLayoutResult? = null
@@ -98,6 +102,7 @@ internal class FormattedTextFieldTracker(
             if (placed == null || measured == null) null
             else measured.getCursorRect(offset).let { placed.localToWindow(Offset(it.left, it.bottom)) }
         },
+        tableCell = tableCell,
     )
 }
 
@@ -107,9 +112,10 @@ internal fun rememberFormattedTextFieldTracker(
     blockId: String,
     source: String,
     visibleText: String,
+    tableCell: MarkdownTableCellPosition? = null,
 ): FormattedTextFieldTracker {
-    val tracker = remember(registry, blockId, source, visibleText) {
-        FormattedTextFieldTracker(registry, blockId, source, visibleText)
+    val tracker = remember(registry, blockId, source, visibleText, tableCell) {
+        FormattedTextFieldTracker(registry, blockId, source, visibleText, tableCell)
     }
     DisposableEffect(registry, tracker) {
         registry.register(tracker.target)

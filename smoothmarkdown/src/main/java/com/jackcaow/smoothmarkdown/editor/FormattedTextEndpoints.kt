@@ -75,4 +75,31 @@ internal data class FormattedTextEndpoints(
         if (start !in 0..length || finish !in start..length || start == finish) return null
         return TextRange(start, finish)
     }
+    /** Paint only the displayed characters of a table cell endpoint. */
+    fun tableVisibleRange(blocks: List<MarkdownDocumentBlock>, blockId: String,
+                          cell: MarkdownTableCellPosition, length: Int): TextRange? {
+        val end = focus ?: return null
+        val anchorIndex = blocks.indexOfFirst { it.id == anchor.blockId }
+        val focusIndex = blocks.indexOfFirst { it.id == end.blockId }
+        val index = blocks.indexOfFirst { it.id == blockId }
+        if (anchorIndex < 0 || focusIndex < 0 || index < 0) return null
+        if (anchorIndex == focusIndex) {
+            if (index != anchorIndex || anchor.tableCell != cell || end.tableCell != cell) return null
+            val start = minOf(anchor.offset, end.offset)
+            val finish = maxOf(anchor.offset, end.offset)
+            return if (start in 0..length && finish in start..length && start != finish)
+                TextRange(start, finish) else null
+        }
+        val first = if (anchorIndex < focusIndex) anchor else end
+        val last = if (anchorIndex < focusIndex) end else anchor
+        val start = when {
+            index == minOf(anchorIndex, focusIndex) && first.tableCell == cell -> first.offset
+            index == maxOf(anchorIndex, focusIndex) && last.tableCell == cell -> 0
+            else -> return null
+        }
+        val finish = if (index == minOf(anchorIndex, focusIndex)) length else last.offset
+        return if (start in 0..length && finish in start..length && start != finish)
+            TextRange(start, finish) else null
+    }
+
 }
