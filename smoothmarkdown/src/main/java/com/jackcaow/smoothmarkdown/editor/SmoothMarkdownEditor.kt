@@ -1093,9 +1093,7 @@ private fun FormattedListItems(
                     val lineIndex = item.lines.indexOf(firstLine)
                     FormattedListTextField(controller, blockId, list, path, lineIndex,
                         Modifier.weight(1f).padding(vertical = 4.dp), "formatted-list-item-$blockId-$pathTag",
-                        onSourcePaste, textEndpoints, onSetStart, onSetEnd,
-                        path.size == 1 && lineIndex == 0 && item.lines.size == 1 &&
-                            item.parts.all { it is MarkdownSourceList.Line })
+                        onSourcePaste, textEndpoints, onSetStart, onSetEnd)
                 }
             }
             var nestedBase = 0
@@ -1106,7 +1104,7 @@ private fun FormattedListItems(
                         FormattedListTextField(controller, blockId, list, path, lineIndex,
                             Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp),
                             "formatted-list-continuation-$blockId-$pathTag-$lineIndex", onSourcePaste,
-                            textEndpoints, onSetStart, onSetEnd, false)
+                            textEndpoints, onSetStart, onSetEnd)
                     }
                     is MarkdownSourceList.NestedList -> {
                         FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase,
@@ -1141,7 +1139,6 @@ private fun FormattedListTextField(
     textEndpoints: FormattedTextEndpoints?,
     onSetStart: (MarkdownFormattedTextPosition) -> Unit,
     onSetEnd: (MarkdownFormattedTextPosition) -> Unit,
-    endpointEligible: Boolean,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
     val inline = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks)
@@ -1163,7 +1160,7 @@ private fun FormattedListTextField(
     }
     val blocks = controller.semanticDocument().blocks
     val decorated = AnnotatedString.Builder(inline.annotated(MaterialTheme.colorScheme.primary)).apply {
-        textEndpoints?.listVisibleRange(blocks, blockId, path, lineIndex, inline.visible.length)?.let { range ->
+        textEndpoints?.listVisibleRange(blocks, blockId, path, lineIndex, inline.visible.length, list)?.let { range ->
             addStyle(SpanStyle(background = editorTheme.selectionColor
                 ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
         }
@@ -1206,7 +1203,7 @@ private fun FormattedListTextField(
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
     )
-    if (endpointEligible && active) {
+    if (active) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { onSetStart(MarkdownFormattedTextPosition(blockId,
                 controller.formattedListSelection.start, path, lineIndex)) },

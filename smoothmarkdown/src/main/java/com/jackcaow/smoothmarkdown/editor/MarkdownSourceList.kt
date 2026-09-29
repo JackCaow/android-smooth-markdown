@@ -56,6 +56,42 @@ internal class MarkdownSourceList private constructor(
         source.substring(it.start, it.end)
     }
 
+    /** Source locations for verifying that a character edit kept every untouched list line a list line. */
+    data class SourceLine(val start: Int, val prefix: String, val content: String,
+                          val depth: Int, val firstInItem: Boolean)
+
+    fun sourceLines(): List<SourceLine> = buildList {
+        fun visit(items: List<Item>, depth: Int) {
+            items.forEach { item ->
+                item.parts.forEach { part ->
+                    when (part) {
+                        is Line -> {
+                            val start = source.lastIndexOf('\n', part.start - 1) + 1
+                            add(SourceLine(start, source.substring(start, part.start),
+                                source.substring(part.start, part.end), depth, part.start == item.contentStart))
+                        }
+                        is NestedList -> visit(part.items, depth + 1)
+                        is Raw -> Unit
+                    }
+                }
+            }
+        }
+        visit(items, 1)
+    }
+
+    fun rawSpans(): List<TextRange> = buildList {
+        fun visit(items: List<Item>) {
+            items.forEach { item -> item.parts.forEach { part ->
+                when (part) {
+                    is Raw -> add(TextRange(part.start, part.end))
+                    is NestedList -> visit(part.items)
+                    is Line -> Unit
+                }
+            } }
+        }
+        visit(items)
+    }
+
     fun rawContent(raw: Raw): String = source.substring(raw.start, raw.end)
 
     fun replaceLine(path: List<Int>, lineIndex: Int, content: String): String? {
@@ -388,6 +424,26 @@ internal class MarkdownSourceList private constructor(
         siblingRange(parentPath, firstIndex, lastIndex)?.let { (start, end) ->
             source.substring(start, end).trimEnd('\r', '\n')
         }
+
+    /** Clipboard Markdown for nested siblings starts at their own list depth. */
+    fun copySiblingItemsAsMarkdown(parentPath: List<Int>, firstIndex: Int, lastIndex: Int): String? {
+        val raw = copySiblingItems(parentPath, firstIndex, lastIndex) ?: return null
+        if (parentPath.isEmpty()) return raw
+        val start = siblingRange(parentPath, firstIndex, lastIndex)?.first ?: return null
+        val first = item(parentPath + firstIndex) ?: return null
+        val indent = source.substring(start, first.contentStart).takeWhile { it == ' ' || it == '\t' }
+        if (indent.isEmpty()) return raw
+        return buildString {
+            var cursor = 0
+            while (cursor < raw.length) {
+                val lineEnd = raw.indexOf('\n', cursor).let { if (it < 0) raw.length else it + 1 }
+                val line = raw.substring(cursor, lineEnd)
+                if (line.isNotBlank() && !line.startsWith(indent)) return null
+                append(if (line.startsWith(indent)) line.drop(indent.length) else line)
+                cursor = lineEnd
+            }
+        }
+    }
 
     fun deleteSiblingItems(parentPath: List<Int>, firstIndex: Int, lastIndex: Int): String? {
         val (start, end) = siblingRange(parentPath, firstIndex, lastIndex) ?: return null

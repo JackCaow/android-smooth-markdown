@@ -26,7 +26,7 @@ data class MarkdownFormattedTextPosition(
     val tableCell: MarkdownTableCellPosition? = null,
 )
 
-/** A source-revision-bound text selection across prose and eligible list lines. */
+/** A source-revision-bound text selection across prose and source-backed list lines. */
 data class MarkdownFormattedTextSelection(
     val source: String,
     val anchor: MarkdownFormattedTextPosition,
@@ -302,7 +302,7 @@ class MarkdownEditorController(
 
     fun copyFormattedListItemSelectionAsMarkdown(): String? {
         val (list, selected) = selectedFormattedListItems() ?: return null
-        return list.copySiblingItems(selected.parentPath, selected.firstIndex, selected.lastIndex)
+        return list.copySiblingItemsAsMarkdown(selected.parentPath, selected.firstIndex, selected.lastIndex)
     }
 
     /** Deletes complete sibling subtrees as one source edit and one undo step. */
@@ -605,6 +605,9 @@ class MarkdownEditorController(
         val contentEnd: Int,
         val isListLine: Boolean,
         val listItemIndex: Int? = null,
+        val listPathDepth: Int = 0,
+        val listLineIndex: Int = 0,
+        val listPath: List<Int>? = null,
     ) {
         fun fragment(start: Int, end: Int): String? {
             if (start == end) return ""
@@ -627,13 +630,13 @@ class MarkdownEditorController(
             val inline: MarkdownInlineEditing
             if (path != null) {
                 if (block.kind !in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST) ||
-                    path.size != 1 || position.listLineIndex != 0) return null
+                    path.isEmpty() || position.listLineIndex < 0) return null
                 val list = MarkdownSourceList.parse(block) ?: return null
                 val item = list.item(path) ?: return null
-                val line = item.lines.singleOrNull() ?: return null
-                if (item.parts.any { it !is MarkdownSourceList.Line } || line.start != item.contentStart ||
-                    line.end != item.contentEnd) return null
-                val raw = list.lineContent(path, 0) ?: return null
+                val line = item.lines.getOrNull(position.listLineIndex) ?: return null
+                if (line.start < 0 || line.end < line.start || line.end > block.source.length ||
+                    (position.listLineIndex == 0 && line.start != item.contentStart)) return null
+                val raw = list.lineContent(path, position.listLineIndex) ?: return null
                 inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
                 contentStart = block.range.min + line.start
                 contentEnd = block.range.min + line.end
@@ -652,7 +655,8 @@ class MarkdownEditorController(
                 inline.splitVisibleRange(TextRange(0, position.offset)) == null ||
                 inline.splitVisibleRange(TextRange(position.offset, inline.visible.length)) == null) return null
             return SourceTextEndpoint(index, block, inline, position.offset, lineStart, contentStart, contentEnd,
-                path != null, path?.firstOrNull())
+                path != null, path?.takeIf { it.size == 1 }?.firstOrNull(), path?.size ?: 0,
+                position.listLineIndex, path)
         }
         val anchor = endpoint(selected.anchor) ?: return null
         val focus = endpoint(selected.focus) ?: return null
@@ -687,11 +691,47 @@ class MarkdownEditorController(
     private fun replaceListEndpointSelection(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
         if (!hasWellFormedUtf16(markdown)) return false
         val (document, first, last) = resolveListEndpoints(selected) ?: return false
+        // Raw child blocks (for example a fenced code block inside a list item) cannot be
+        // safely joined to partial paragraph endpoints. Complete middle blocks remain atomic.
+        fun rawOverlaps(block: MarkdownDocumentBlock, start: Int, end: Int): Boolean =
+            MarkdownSourceList.parse(block)?.rawSpans()?.any { raw ->
+                block.range.min + raw.min < end && block.range.min + raw.max > start
+            } == true
+        if (first.isListLine && rawOverlaps(first.block, first.contentStart,
+                if (first.blockIndex == last.blockIndex) last.contentEnd else first.block.range.max)) return false
+        if (last.isListLine && first.blockIndex != last.blockIndex &&
+            rawOverlaps(last.block, last.block.range.min, last.contentEnd)) return false
         val inserted = if (markdown.isEmpty()) emptyList() else MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
         if (markdown.isNotEmpty() && (inserted.isEmpty() || inserted.first().range.min != 0 ||
                 inserted.last().range.max != markdown.length)) return false
         val left = first.inline.splitVisibleRange(TextRange(first.offset, first.inline.visible.length))?.before ?: return false
         val right = last.inline.splitVisibleRange(TextRange(0, last.offset))?.after ?: return false
+        if (markdown.isNotEmpty() && first.isListLine && first.listPath == last.listPath &&
+            first.contentStart == last.contentStart && (first.listPathDepth > 1 || first.listLineIndex > 0)) {
+            if ('\n' in markdown || '\r' in markdown) return false
+            val inlineBlock = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks.singleOrNull() ?: return false
+            if (inlineBlock.kind != MarkdownBlockKind.PARAGRAPH || inlineBlock.source != markdown) return false
+            val replacementVisible = MarkdownInlineEditing.parse(markdown, enableWikilinks).visible
+            val newContent = left + markdown + right
+            if (newContent == first.inline.source) return false
+            if (MarkdownInlineEditing.parse(newContent, enableWikilinks).visible !=
+                first.inline.visible.substring(0, first.offset) + replacementVisible +
+                    last.inline.visible.substring(last.offset)) return false
+            val candidate = text.replaceRange(first.contentStart, first.contentEnd, newContent)
+            val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+            if (parsed.size != document.blocks.size || parsed.indices.any { index ->
+                    index != first.blockIndex && (parsed[index].kind != document.blocks[index].kind ||
+                        parsed[index].source != document.blocks[index].source)
+                }) return false
+            val updatedBlock = parsed.getOrNull(first.blockIndex) ?: return false
+            if (updatedBlock.kind != first.block.kind ||
+                MarkdownSourceList.parse(updatedBlock)?.lineContent(first.listPath ?: return false,
+                    first.listLineIndex) != newContent ||
+                !preservesRetainedListLines(first, last, updatedBlock.source, parsed)) return false
+            replaceRange(first.contentStart, first.contentEnd, newContent,
+                selectedStart = left.length + markdown.length)
+            return true
+        }
         if (markdown.isEmpty() && MarkdownInlineEditing.parse(left + right, enableWikilinks).visible !=
             first.inline.visible.substring(0, first.offset) + last.inline.visible.substring(last.offset)) return false
         val before = text.substring(first.block.range.min, first.contentStart) + left
@@ -718,6 +758,7 @@ class MarkdownEditorController(
         if (inserted.isNotEmpty() && affected.windowed(inserted.size).none { window ->
                 inserted.zip(window).all { (want, actual) -> want.kind == actual.kind && want.source == actual.source }
             }) return false
+        if (!preservesRetainedListLines(first, last, replacement, parsed)) return false
         // A retained sibling marker must still parse as that list item. In particular, an
         // ordered marker other than "1." can otherwise become a paragraph continuation.
         if (last.listItemIndex != null) {
@@ -740,6 +781,40 @@ class MarkdownEditorController(
         }
         val caret = before.length + if (markdown.isEmpty()) 0 else (if (before.isNotEmpty()) separator.length else 0) + markdown.length
         replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret)
+        return true
+    }
+
+    private fun preservesRetainedListLines(first: SourceTextEndpoint, last: SourceTextEndpoint,
+                                           replacement: String, parsed: List<MarkdownDocumentBlock>): Boolean {
+        val lines = parsed.flatMap { block ->
+            MarkdownSourceList.parse(block)?.sourceLines()?.map { block.range.min + it.start to it }.orEmpty()
+        }.toMap()
+        val suffixLength = last.block.range.max - last.contentEnd
+        val newSuffixStart = first.block.range.min + replacement.length - suffixLength
+        val boundaryBlocks = listOf(first.block, last.block).distinctBy { it.id }
+        for (block in boundaryBlocks) {
+            val old = MarkdownSourceList.parse(block) ?: continue
+            for (line in old.sourceLines()) {
+                val absolute = block.range.min + line.start
+                val mapped = when {
+                    block.id == first.block.id && absolute < first.lineStart -> absolute
+                    block.id == last.block.id && absolute > last.lineStart ->
+                        newSuffixStart + absolute - last.contentEnd
+                    else -> continue
+                }
+                val retained = lines[mapped] ?: return false
+                if (retained.prefix != line.prefix || retained.content != line.content ||
+                    retained.depth != line.depth || retained.firstInItem != line.firstInItem) return false
+            }
+        }
+        if (first.isListLine && (first.listPathDepth > 1 || first.listLineIndex > 0)) {
+            val oldLine = MarkdownSourceList.parse(first.block)?.sourceLines()?.firstOrNull {
+                first.block.range.min + it.start == first.lineStart
+            } ?: return false
+            val newLine = lines[first.lineStart] ?: return false
+            if (newLine.prefix != oldLine.prefix || newLine.depth != oldLine.depth ||
+                newLine.firstInItem != oldLine.firstInItem) return false
+        }
         return true
     }
 

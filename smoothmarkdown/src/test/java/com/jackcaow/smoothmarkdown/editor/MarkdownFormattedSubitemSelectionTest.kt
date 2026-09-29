@@ -28,7 +28,7 @@ class MarkdownFormattedSubitemSelectionTest {
         val controller = MarkdownEditorController(source)
         assertTrue(controller.selectFormattedListItem("block-0", listOf(0, 0)))
         assertTrue(controller.selectFormattedListItem("block-0", listOf(0, 1)))
-        assertEquals("  - One\n  - Two", controller.copyFormattedListItemSelectionAsMarkdown())
+        assertEquals("- One\n- Two", controller.copyFormattedListItemSelectionAsMarkdown())
         assertTrue(controller.deleteFormattedListItemSelection())
         assertEquals("- Parent\n- End", controller.text)
         assertTrue(controller.undo())
