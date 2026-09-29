@@ -1,0 +1,14 @@
+Pixel 7 / Android 35 / SmoothMarkdownAcceptance read-only AVD
+
+Command:
+adb -s emulator-5554 shell am instrument -w -e class com.jackcaow.smoothmarkdown.demo.DemoHomeNavigationUiTest com.jackcaow.smoothmarkdown.demo.test/androidx.test.runner.AndroidJUnitRunner
+
+Observed output (exec session 63883):
+com.jackcaow.smoothmarkdown.demo.DemoHomeNavigationUiTest:
+.
+
+Time: 14.773
+
+OK (1 test)
+
+The test opened the drawer, checked the fixed Flutter example title, selected Headers, and opened the Markdown Source dialog.
