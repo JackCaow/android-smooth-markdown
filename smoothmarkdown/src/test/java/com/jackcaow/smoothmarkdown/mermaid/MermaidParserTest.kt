@@ -58,6 +58,31 @@ class MermaidParserTest {
         assertEquals(listOf("D", "E"), diagram.subgraphs.first { it.id == "inner" }.nodeIds)
     }
 
+    @Test fun flutterFlowchartDottedConnectorWithoutArrowKeepsLabelsAndChain() {
+        // Flutter's FlowchartParser accepts `...` as a dotted edge without a tip.
+        val diagram = MermaidParser.parse("""
+            graph LR
+            A[Draft] ...|review| B[Approved] -.-> C[Published]
+            B --- D[Archived]
+            C === E[Done]
+        """.trimIndent())!!
+        assertEquals(5, diagram.nodes.size)
+        assertEquals(4, diagram.edges.size)
+        assertEquals("review", diagram.edges[0].label)
+        assertEquals(MermaidLine.Dotted, diagram.edges[0].line)
+        assertEquals(MermaidArrow.None, diagram.edges[0].arrow)
+        assertEquals(MermaidLine.Dotted, diagram.edges[1].line)
+        assertEquals(MermaidArrow.Arrow, diagram.edges[1].arrow)
+        assertEquals(MermaidLine.Solid, diagram.edges[2].line)
+        assertEquals(MermaidArrow.None, diagram.edges[2].arrow)
+        assertEquals(MermaidLine.Thick, diagram.edges[3].line)
+        assertEquals(MermaidArrow.None, diagram.edges[3].arrow)
+        val layout = MermaidLayout.compute(diagram)
+        assertEquals(4, layout.edges.size)
+        assertTrue(layout.nodes.getValue("A").x < layout.nodes.getValue("B").x)
+        assertEquals("review", layout.edges.first().edge.label)
+    }
+
     @Test fun directionsAndParserReuseDoNotLeakState() {
         val parser = MermaidFlowchartParser()
         val first = parser.parse(listOf("graph BT", "A --> B"))!!
