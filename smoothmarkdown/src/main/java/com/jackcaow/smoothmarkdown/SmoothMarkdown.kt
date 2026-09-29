@@ -30,6 +30,8 @@ import androidx.compose.foundation.text.contextmenu.builder.item
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
 import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
 import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMenuComponents
+import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuDropdownProvider
+import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +40,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -45,6 +48,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -72,7 +82,7 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -122,6 +132,8 @@ import org.commonmark.node.ThematicBreak
 import org.commonmark.node.Text as MarkdownTextNode
 import org.commonmark.parser.Parser
 import org.commonmark.parser.IncludeSourceSpans
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 private val baseParser = Parser.builder().extensions(
     listOf(
@@ -294,8 +306,34 @@ private fun MarkdownSelectionRegion(
 ) {
     val clipboard = LocalClipboard.current
     val anchorRegistry = remember { NonTextAnchorRegistry() }
-    val filteringClipboard = remember(clipboard, anchorRegistry) { OverlayFilteringClipboard(clipboard, anchorRegistry) }
     val state = rememberSelectionState()
+    val scope = rememberCoroutineScope()
+    val copyVisible: (String) -> Unit = { text ->
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("selection", text)))
+        }
+        state.clear()
+    }
+    val toolbarProvider = LocalTextContextMenuToolbarProvider.current
+    val dropdownProvider = LocalTextContextMenuDropdownProvider.current
+    val legacyToolbar = LocalTextToolbar.current
+    val wrappedToolbar = remember(toolbarProvider, state, anchorRegistry, clipboard) {
+        toolbarProvider?.let { provider ->
+            ReaderCopyMenuProvider(provider,
+                { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) }, copyVisible)
+        }
+    }
+    val wrappedDropdown = remember(dropdownProvider, state, anchorRegistry, clipboard) {
+        dropdownProvider?.let { provider ->
+            ReaderCopyMenuProvider(provider,
+                { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) }, copyVisible)
+        }
+    }
+    val wrappedLegacyToolbar = remember(legacyToolbar, state, anchorRegistry, clipboard, showDefaultCopyAction) {
+        ReaderCopyTextToolbar(legacyToolbar,
+            { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) },
+            copyVisible, showDefaultCopyAction)
+    }
     DisposableEffect(controller, state) {
         controller?.attach(state)
         onDispose { controller?.detach(state) }
@@ -308,60 +346,58 @@ private fun MarkdownSelectionRegion(
             separator()
             for (action in menuActions) {
                 item(key = action.key, label = action.label) {
-                    val raw = state.selectedTexts.joinToString("") { it.text }
-                    action.onClick(removeNonTextSelectionOverlayLines(raw, anchorRegistry.snapshot()))
+                    action.onClick(visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()).text)
                     close()
                 }
             }
         }
     }
-    CompositionLocalProvider(LocalClipboard provides filteringClipboard, LocalNonTextAnchorRegistry provides anchorRegistry) {
-        SelectionContainer(state = state, modifier = menuModifier) { content() }
+    val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
+        if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
+            (event.isCtrlPressed || event.isMetaPressed)) {
+            val selected = visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot())
+            if (selected.hadAnchor) {
+                copyVisible(selected.text)
+                true
+            } else false
+        } else false
+    }
+    CompositionLocalProvider(
+        LocalNonTextAnchorRegistry provides anchorRegistry,
+        LocalTextContextMenuToolbarProvider provides wrappedToolbar,
+        LocalTextContextMenuDropdownProvider provides wrappedDropdown,
+        LocalTextToolbar provides wrappedLegacyToolbar,
+    ) {
+        SelectionContainer(state = state, modifier = menuModifier.then(keyboardCopy)) { content() }
     }
 }
 
-/** Remove complete rows and edge fragments belonging to this mounted reader's random anchors. */
-internal fun removeNonTextSelectionOverlayLines(text: String, anchors: Set<String>): String = text.split('\n')
-    .mapNotNull { line ->
-        var clean = line
-        for (anchor in anchors) {
-            clean = clean.replace(anchor, "")
-            clean = removeAnchorEdgeFragment(clean, anchor, leading = true)
-            clean = removeAnchorEdgeFragment(clean, anchor, leading = false)
+internal data class VisibleSelection(val text: String, val hadAnchor: Boolean)
+
+/** Strip only selected ranges annotated by this mounted Reader's nontext blocks. */
+internal fun visibleSelectedText(selectedTexts: List<AnnotatedString>, anchors: Set<String>): VisibleSelection {
+    var hadAnchor = false
+    val visible = mutableListOf<String>()
+    for (selected in selectedTexts) {
+        val ranges = selected.getStringAnnotations(nonTextAnchorAnnotationTag, 0, selected.length)
+            .filter { it.item in anchors && it.start < it.end }
+            .sortedBy { it.start }
+        if (ranges.isEmpty()) {
+            visible += selected.text
+            continue
         }
-        clean.takeUnless { it.isEmpty() && line.isNotEmpty() }
-    }
-    .joinToString("\n")
-
-/** At least 16 random anchor characters must match at a line edge. */
-private fun removeAnchorEdgeFragment(line: String, anchor: String, leading: Boolean): String {
-    if (line.length < 16) return line
-    if (anchor.contains(line)) return ""
-    for (length in minOf(line.length, anchor.length) downTo 16) {
-        if (leading && line.startsWith(anchor.takeLast(length))) return line.drop(length)
-        if (!leading && line.endsWith(anchor.take(length))) return line.dropLast(length)
-    }
-    return line
-}
-
-internal class OverlayFilteringClipboard(private val delegate: Clipboard, private val anchors: NonTextAnchorRegistry) : Clipboard {
-    override suspend fun getClipEntry(): ClipEntry? = delegate.getClipEntry()
-
-    override suspend fun setClipEntry(clipEntry: ClipEntry?) {
-        val data = clipEntry?.clipData
-        if (data != null && data.itemCount == 1 && data.description.mimeTypeCount == 1 &&
-            data.description.getMimeType(0) == "text/plain") {
-            val original = data.getItemAt(0).text?.toString()
-            if (original != null) {
-                val filtered = removeNonTextSelectionOverlayLines(original, anchors.snapshot())
-                if (filtered != original) {
-                    delegate.setClipEntry(ClipEntry(ClipData.newPlainText(data.description.label, filtered)))
-                    return
-                }
+        hadAnchor = true
+        val text = buildString {
+            var position = 0
+            for (range in ranges) {
+                if (range.start > position) append(selected.text, position, range.start)
+                position = maxOf(position, range.end)
             }
+            if (position < selected.length) append(selected.text, position, selected.length)
         }
-        delegate.setClipEntry(clipEntry)
+        if (text.isNotEmpty()) visible += text
     }
+    return VisibleSelection(visible.joinToString("\n"), hadAnchor)
 }
 
 @Composable
