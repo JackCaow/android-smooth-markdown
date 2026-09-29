@@ -150,8 +150,18 @@ class ReaderDocumentTextTest {
         assertEquals("First\nLast", controller.fullDocumentSelectionProjection()?.text)
 
         controller.bindDocument(small, false, null, null, customCodeBuilder = true)
-        assertNull(controller.fullDocumentSelectionProjection())
+        assertEquals("First\nLast", controller.fullDocumentSelectionProjection()?.text)
         controller.bindDocument(small, false, null, null, customImageBuilder = true)
+        assertEquals("First\nLast", controller.fullDocumentSelectionProjection()?.text)
+
+        val code = parseMarkdown("~~~kotlin\nval x = 1\n~~~")
+        controller.bindDocument(code, false, null, null, customCodeBuilder = true)
+        assertNull(controller.fullDocumentSelectionProjection())
+        val image = parseMarkdown("Before ![icon](https://example.com/icon.png) after")
+        controller.bindDocument(image, false, null, null, customImageBuilder = true)
+        assertNull(controller.fullDocumentSelectionProjection())
+        val htmlImage = parseMarkdown("Before <img src='https://example.com/icon.png' alt='icon'> after", enableHtml = true)
+        controller.bindDocument(htmlImage, true, null, null, customImageBuilder = true)
         assertNull(controller.fullDocumentSelectionProjection())
 
         val builders = MarkdownBuilderRegistry().register(Paragraph::class, object : MarkdownNodeBuilder {

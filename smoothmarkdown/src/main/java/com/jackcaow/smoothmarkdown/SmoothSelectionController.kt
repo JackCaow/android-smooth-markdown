@@ -10,6 +10,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import org.commonmark.node.Node
 import org.commonmark.node.HtmlBlock
+import org.commonmark.node.HtmlInline
+import org.commonmark.node.Image
+import org.commonmark.node.FencedCodeBlock
+import org.commonmark.node.IndentedCodeBlock
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
@@ -82,8 +86,10 @@ class SmoothSelectionController {
     }
 
     internal fun fullDocumentSelectionProjection(): ReaderDocumentText? {
-        if (hasCustomCodeBuilder || hasCustomImageBuilder) return null
         val node = document ?: return null
+        if (readerDocumentUsesCustomVisualBuilder(
+                node, documentHtml, hasCustomCodeBuilder, hasCustomImageBuilder,
+            )) return null
         if (readerDocumentHasOpaqueRenderer(node, documentHtml, documentPlugins, documentBuilders)) return null
         if (readerDocumentNodeCount(node) > MAX_FULL_SELECTION_RENDER_NODES) return null
         val projection = readerDocumentText(
@@ -221,6 +227,32 @@ internal fun exactWholeDocumentCopyText(
 internal const val MAX_FULL_SELECTION_BLOCKS = 512
 internal const val MAX_FULL_SELECTION_UTF16 = 100_000
 internal const val MAX_FULL_SELECTION_RENDER_NODES = 2_048
+
+/** A configured host builder only prevents native selection if this document actually uses it. */
+internal fun readerDocumentUsesCustomVisualBuilder(
+    document: Node,
+    enableHtml: Boolean,
+    customCodeBuilder: Boolean,
+    customImageBuilder: Boolean,
+): Boolean {
+    if (!customCodeBuilder && !customImageBuilder) return false
+    fun visit(node: Node, depth: Int): Boolean {
+        if (depth > 64) return true
+        if (customCodeBuilder && (node is FencedCodeBlock || node is IndentedCodeBlock)) return true
+        if (customImageBuilder && (node is Image ||
+                    (enableHtml && node is HtmlInline && SafeHtml.imageTag(node.literal) != null) ||
+                    (enableHtml && node is HtmlBlock && SafeHtml.imageTag(node.literal) != null))) return true
+        if (node is DetailsNode && (node.summary + node.body).any { visit(it, depth + 1) }) return true
+        if (enableHtml && customImageBuilder && node is HtmlBlock) {
+            val html = SafeHtml.parseBlock(node.literal)
+            if (html is SafeHtml.Block.Container &&
+                parseMarkdown(html.content + "\n" + html.trailing, enableHtml = true)
+                    .children().any { visit(it, depth + 1) }) return true
+        }
+        return node.children().any { visit(it, depth + 1) }
+    }
+    return document.children().any { visit(it, 0) }
+}
 
 /**
  * Copy text supplied by a custom renderer does not prove its Compose output participates in the
