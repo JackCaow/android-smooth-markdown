@@ -14,14 +14,10 @@ data class MarkdownSelectionTarget(
     val key: Any,
     val boundsInWindow: Rect,
     val text: AnnotatedString,
-    val wordBoundaryAtWindowPosition: ((Offset) -> TextRange)? = null,
-    val containsTextAtWindowPosition: ((Offset) -> Boolean)? = null,
     val offsetAtWindowPosition: ((Offset) -> Int)? = null,
 ) {
-    /** Keep the original four-argument constructor available to positional callers. */
-    constructor(key: Any, boundsInWindow: Rect, text: AnnotatedString,
-                legacyOffsetAtWindowPosition: ((Offset) -> Int)?) :
-        this(key, boundsInWindow, text, null, null, legacyOffsetAtWindowPosition)
+    internal var wordBoundaryAtWindowPosition: ((Offset) -> TextRange)? = null
+    internal var containsTextAtWindowPosition: ((Offset) -> Boolean)? = null
 }
 
 internal fun textLayoutContainsWindowPoint(layout: TextLayoutResult?, point: Offset, bounds: Rect): Boolean {

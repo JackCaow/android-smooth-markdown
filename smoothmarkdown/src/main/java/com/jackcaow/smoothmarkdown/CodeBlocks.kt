@@ -247,15 +247,16 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                         offsetAtWindowPosition = { windowPoint ->
                             codeLayout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                         },
+                    ).apply {
                         wordBoundaryAtWindowPosition = { windowPoint ->
                             codeLayout.value?.let { result ->
                                 result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
                             } ?: TextRange(0)
-                        },
+                        }
                         containsTextAtWindowPosition = { windowPoint ->
                             textLayoutContainsWindowPoint(codeLayout.value, windowPoint, bounds)
-                        },
-                    ))
+                        }
+                    })
                 }
             } ?: Modifier
             val content: @Composable () -> Unit = {

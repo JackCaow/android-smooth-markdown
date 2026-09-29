@@ -9,6 +9,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReaderSelectionRangeTest {
+    @Test fun legacyTargetConstructorAndCopyKeepOffsetCallbackInFourthComponent() {
+        val legacy = MarkdownSelectionTarget(Any(), Rect(0f, 0f, 100f, 30f),
+            AnnotatedString("alpha")) { 2 }
+        assertEquals(2, legacy.component4()?.invoke(Offset.Zero))
+        assertEquals(2, legacy.copy().offsetAtWindowPosition?.invoke(Offset.Zero))
+    }
+
     @Test fun wordAndParagraphMapToRenderedTextOffsets() {
         val first = target("alpha beta\ngamma delta", 0f, offset = 7, word = TextRange(6, 10))
         val second = target("later paragraph", 100f, offset = 2, word = TextRange(0, 5))
@@ -37,7 +44,7 @@ class ReaderSelectionRangeTest {
 
     @Test fun fullWidthBoundsOutsideTextGlyphsReturnsNoRange() {
         val first = target("alpha beta", 0f, offset = 2, word = TextRange(0, 5))
-            .copy(containsTextAtWindowPosition = { false })
+            .apply { containsTextAtWindowPosition = { false } }
         assertNull(readerSelectionRangeAt(Offset(190f, 20f), listOf(first), listOf(first.text),
             ReaderSelectionGranularity.WORD))
     }
@@ -47,6 +54,5 @@ class ReaderSelectionRangeTest {
         boundsInWindow = Rect(0f, top, 200f, top + 50f),
         text = AnnotatedString(text),
         offsetAtWindowPosition = { offset },
-        wordBoundaryAtWindowPosition = { word },
-    )
+    ).apply { wordBoundaryAtWindowPosition = { word } }
 }

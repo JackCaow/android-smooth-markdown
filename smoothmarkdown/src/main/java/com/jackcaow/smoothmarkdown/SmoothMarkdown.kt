@@ -622,15 +622,16 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
                 offsetAtWindowPosition = { windowPoint ->
                     layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                 },
+            ).apply {
                 wordBoundaryAtWindowPosition = { windowPoint ->
                     layout.value?.let { result ->
                         result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
                     } ?: TextRange(0)
-                },
+                }
                 containsTextAtWindowPosition = { windowPoint ->
                     textLayoutContainsWindowPoint(layout.value, windowPoint, bounds)
-                },
-            ))
+                }
+            })
         }
     } ?: Modifier
     val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
@@ -682,15 +683,16 @@ private fun MarkdownInlineText(
                 offsetAtWindowPosition = { windowPoint ->
                     layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                 },
+            ).apply {
                 wordBoundaryAtWindowPosition = { windowPoint ->
                     layout.value?.let { result ->
                         result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
                     } ?: TextRange(0)
-                },
+                }
                 containsTextAtWindowPosition = { windowPoint ->
                     textLayoutContainsWindowPoint(layout.value, windowPoint, bounds)
-                },
-            ))
+                }
+            })
         }
     } ?: Modifier
     if (render.images.isEmpty() && render.math.isEmpty()) {
