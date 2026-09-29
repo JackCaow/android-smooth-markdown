@@ -280,12 +280,14 @@ fun SmoothMarkdown(
     val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
-    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder) {
+    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, plugins) {
         groupSelectableBlocks(
             blocks,
             bridgeVisibleNonText = selectable || selectableAsSingleRegion,
             bridgeBuiltInCode = (selectable || selectableAsSingleRegion) && codeBlockBuilder == null,
             bridgeDetails = selectable || selectableAsSingleRegion,
+            selectionMode = { node -> if (selectable || selectableAsSingleRegion)
+                readerBlockSelectionMode(node, builderRegistry, plugins) else null },
         )
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
@@ -560,22 +562,45 @@ private fun MarkdownSelectionGroup(
     }
 }
 
-/** Keep selectable prose, nontext geometry, built-in code, and neighboring details mounted together. */
+/** A renderer must opt in before its Compose content can join neighboring native selection. */
+internal fun readerBlockSelectionMode(
+    node: Node,
+    builders: MarkdownBuilderRegistry?,
+    plugins: ParserPluginRegistry?,
+): MarkdownBlockSelectionMode? {
+    builders?.findBuilder(node)?.let { return it.selectionMode(node) }
+    if (node is Paragraph) {
+        val sole = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.singleOrNull()
+        if (sole is Image) builders?.findBuilder(sole)?.let { return it.selectionMode(sole) }
+    }
+    if (node is PluginBlockNode) return plugins?.blockRenderer(node)?.selectionMode(node)
+        ?: MarkdownBlockSelectionMode.NONE
+    return null
+}
+
+/** Keep selectable prose, visual anchors, built-in code, and opted-in blocks mounted together. */
 internal fun groupSelectableBlocks(
     blocks: List<Node>,
     bridgeVisibleNonText: Boolean = false,
     bridgeBuiltInCode: Boolean = false,
     bridgeDetails: Boolean = false,
+    selectionMode: (Node) -> MarkdownBlockSelectionMode? = { null },
 ): List<List<Node>> {
     val groups = mutableListOf<List<Node>>()
     val pending = mutableListOf<Node>()
     fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
     var needsFollowingProse = false
     for (block in blocks) {
-        val prose = block is Heading || block is Paragraph || block is BlockQuote ||
+        val mode = selectionMode(block)
+        val builtIn = block is Heading || block is Paragraph || block is BlockQuote ||
             block is BulletList || block is OrderedList ||
-            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak)) ||
+            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak || block is BlockMathNode)) ||
             (bridgeBuiltInCode && (block is FencedCodeBlock || block is IndentedCodeBlock))
+        val prose = when (mode) {
+            MarkdownBlockSelectionMode.NONE -> false
+            MarkdownBlockSelectionMode.NATIVE_TEXT, MarkdownBlockSelectionMode.NON_TEXT -> true
+            null -> builtIn
+        }
         if (needsFollowingProse) {
             if (prose) {
                 pending += block
@@ -586,7 +611,7 @@ internal fun groupSelectableBlocks(
             flush()
             needsFollowingProse = false
         }
-        if (bridgeDetails && block is DetailsNode) {
+        if (bridgeDetails && block is DetailsNode && mode != MarkdownBlockSelectionMode.NONE) {
             val preceding = pending.removeLastOrNull()
             flush()
             if (preceding != null) pending += preceding
@@ -601,22 +626,31 @@ internal fun groupSelectableBlocks(
 }
 
 @Composable
+private fun ReaderCustomBlockSelection(mode: MarkdownBlockSelectionMode, content: @Composable () -> Unit) {
+    if (mode == MarkdownBlockSelectionMode.NON_TEXT) {
+        SelectableNonTextBlock { DisableSelection { content() } }
+    } else content()
+}
+
+@Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val plugins = LocalParserPlugins.current
     val builder = LocalMarkdownBuilders.current?.findBuilder(node)
     if (builder != null) {
-        builder.Render(node, MarkdownBuilderContext(
-            sheet, enableHtml, onLinkClick, onImageClick,
-            childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
-            inlineChildRenderer = { parent, style ->
-                MarkdownInlineText(
-                    inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
-                    style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
-                    onLinkClick, onImageClick, textAlign,
-                )
-            },
-        ))
+        ReaderCustomBlockSelection(builder.selectionMode(node)) {
+            builder.Render(node, MarkdownBuilderContext(
+                sheet, enableHtml, onLinkClick, onImageClick,
+                childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
+                inlineChildRenderer = { parent, style ->
+                    MarkdownInlineText(
+                        inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                        style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                        onLinkClick, onImageClick, textAlign,
+                    )
+                },
+            ))
+        }
         return
     }
     when (node) {
@@ -681,17 +715,21 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             val soleBuilder = sole?.let { LocalMarkdownBuilders.current?.findBuilder(it) }
             val htmlImage = if (enableHtml && sole is HtmlInline) SafeHtml.imageTag(sole.literal) else null
             when {
-                sole is Image && soleBuilder != null -> soleBuilder.Render(sole, MarkdownBuilderContext(
-                    sheet, enableHtml, onLinkClick, onImageClick,
-                    childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
-                    inlineChildRenderer = { parent, style ->
-                        MarkdownInlineText(
-                            inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
-                            style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
-                            onLinkClick, onImageClick, textAlign,
-                        )
-                    },
-                ))
+                sole is Image && soleBuilder != null -> {
+                    ReaderCustomBlockSelection(soleBuilder.selectionMode(sole)) {
+                        soleBuilder.Render(sole, MarkdownBuilderContext(
+                            sheet, enableHtml, onLinkClick, onImageClick,
+                            childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
+                            inlineChildRenderer = { parent, style ->
+                                MarkdownInlineText(
+                                    inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                                    style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                                    onLinkClick, onImageClick, textAlign,
+                                )
+                            },
+                        ))
+                    }
+                }
                 sole is Image -> MarkdownImage(
                     SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
                 )
@@ -712,7 +750,11 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         is BlockMathNode -> BlockMath(node)
         is PluginBlockNode -> {
             val renderer = plugins?.blockRenderer(node)
-            if (renderer != null) renderer.RenderBlock(node) { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) }
+            if (renderer != null) {
+                ReaderCustomBlockSelection(renderer.selectionMode(node)) {
+                    renderer.RenderBlock(node) { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) }
+                }
+            }
         }
         is FootnoteDefinitionNode -> Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),

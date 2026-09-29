@@ -58,6 +58,8 @@ interface BlockParserPlugin : ParserPlugin {
     fun parseFencedCodeBlock(block: FencedCodeBlock): PluginBlockNode? = null
     /** Text for whole-document copy when [RenderBlock] replaces a block; null means it is unknown. */
     fun documentText(node: PluginBlockNode): String? = null
+    /** Explicit native selection contract for this block's [RenderBlock] output. */
+    fun selectionMode(node: PluginBlockNode): MarkdownBlockSelectionMode = MarkdownBlockSelectionMode.NONE
     @Composable fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit)
 }
 

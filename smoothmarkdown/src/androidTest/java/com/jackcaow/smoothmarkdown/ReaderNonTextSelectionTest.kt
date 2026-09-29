@@ -1,6 +1,10 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,12 +14,19 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.click
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import org.commonmark.node.Image
+import org.commonmark.node.Node
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Rule
@@ -140,6 +151,48 @@ class ReaderNonTextSelectionTest {
             assertTrue("Missing table cell: $selected", selected.contains("One"))
             assertTrue("Missing text after table: $selected", selected.contains("After the table."))
         }
+    }
+
+    @Test fun selectAllSpansMathVisualAndDelimitedTextWithoutCopyingAnchor() {
+        val controller = SmoothSelectionController()
+        val plugins = ParserPluginRegistry().apply { registerBlock(DelimitedBlockPlugin("note")) }
+        val source = "Before math.\n\n\u0024\u0024\nx + y\n\u0024\u0024\n\n" +
+            ":::note\nVisible plugin text.\n:::\n\nAfter plugin."
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdown(source, selectable = true, selectionController = controller,
+                    plugins = plugins)
+            }
+        }
+        compose.runOnIdle { controller.selectAll() }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            val selected = controller.selectedText
+            assertTrue("Missing preceding prose: $selected", selected.contains("Before math."))
+            assertTrue("Missing native plugin text: $selected", selected.contains("Visible plugin text."))
+            assertTrue("Missing following prose: $selected", selected.contains("After plugin."))
+            assertFalse("Visual anchor leaked into copy: $selected", selected.contains("smd"))
+        }
+    }
+
+    @Test fun visualBuilderAnchorPreservesTouchCallback() {
+        var taps = 0
+        val builder = object : MarkdownNodeBuilder {
+            override fun canBuild(node: Node) = node is Image
+            override fun selectionMode(node: Node) = MarkdownBlockSelectionMode.NON_TEXT
+            @Composable override fun Render(node: Node, context: MarkdownBuilderContext) {
+                Box(Modifier.size(80.dp).testTag("custom-visual").clickable { taps++ })
+            }
+        }
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdown("Before.\n\n![visual](https://example.com/v.png)\n\nAfter.",
+                    selectable = true,
+                    builderRegistry = MarkdownBuilderRegistry().register(Image::class, builder))
+            }
+        }
+        compose.onNodeWithTag("custom-visual").performTouchInput { click() }
+        compose.runOnIdle { assertTrue("Visual tap was intercepted by selection anchor", taps == 1) }
     }
 
     @Test fun longPressDragFromTableCellIntoFollowingParagraphSelectsVisibleText() {

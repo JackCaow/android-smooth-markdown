@@ -19,6 +19,16 @@ sealed interface MarkdownInlinePresentation {
     data class Widget(val width: Dp, val height: Dp, val fallbackText: String) : MarkdownInlinePresentation
 }
 
+/** How a custom block participates in the Reader's native cross-block selection. */
+enum class MarkdownBlockSelectionMode {
+    /** Unknown Compose content stays outside neighboring selection groups. */
+    NONE,
+    /** Render emits selectable text in the same order as its document text projection. */
+    NATIVE_TEXT,
+    /** Render is visual only; a hidden anchor bridges it and contributes no partial-copy text. */
+    NON_TEXT,
+}
+
 /** Context passed to a custom Compose node builder. Child rendering uses the same registry. */
 class MarkdownBuilderContext internal constructor(
     val styleSheet: MarkdownStyleSheet,
@@ -54,6 +64,8 @@ interface MarkdownNodeBuilder {
     fun renderInline(node: Node): MarkdownInlinePresentation? = null
     /** Text for whole-document copy when [Render] replaces a block; null means it is unknown. */
     fun documentText(node: Node): String? = null
+    /** Opt in only when [Render] satisfies the chosen native selection behavior. */
+    fun selectionMode(node: Node): MarkdownBlockSelectionMode = MarkdownBlockSelectionMode.NONE
 }
 
 /**
