@@ -263,7 +263,8 @@ fun SmoothMarkdownEditor(
                                 val active = controller.mode == mode
                                 TextButton(onClick = { requestMode(mode) },
                                     modifier = Modifier.clip(RoundedCornerShape(effectiveTheme.toolbarButtonRadius ?: 6.dp))
-                                        .background(if (active) effectiveTheme.toolbarActiveBackgroundColor ?: colors.primary.copy(alpha = 0.12f) else Color.Transparent),
+                                        .background(if (active) effectiveTheme.toolbarActiveBackgroundColor ?: colors.primary.copy(alpha = 0.12f) else Color.Transparent)
+                                        .testTag("editor-mode-${mode.name.lowercase()}"),
                                     colors = ButtonDefaults.textButtonColors(
                                         contentColor = if (active) effectiveTheme.toolbarActiveIconColor ?: colors.primary
                                             else effectiveTheme.toolbarIconColor ?: colors.primary,
@@ -409,6 +410,7 @@ fun SmoothMarkdownEditor(
                 sourceFocus.setFocused(focused, latestOnFocusChanged.value)
             }
             MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f)
+                .testTag("editor-preview-scroll")
                 .background(effectiveTheme.previewColor ?: colors.surface)
                 .padding(effectiveTheme.previewPadding ?: 16.dp),
                 plugins = previewPlugins, onWikilinkClick = onTapWikilink)
@@ -418,6 +420,7 @@ fun SmoothMarkdownEditor(
                 }
                 Spacer(Modifier.width(1.dp).fillMaxHeight().background(effectiveTheme.dividerColor ?: colors.outlineVariant))
                 SmoothMarkdown(controller.text, Modifier.weight(1f)
+                    .testTag("editor-preview-scroll")
                     .background(effectiveTheme.previewColor ?: colors.surface)
                     .padding(effectiveTheme.previewPadding ?: 16.dp),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink)
@@ -521,7 +524,8 @@ private fun FormattedBlockPane(
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
     var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
     Column(modifier.fillMaxSize().background(editorTheme.previewColor ?: MaterialTheme.colorScheme.surface)
-        .verticalScroll(rememberScrollState()).padding(editorTheme.contentPadding ?: 16.dp)) {
+        .verticalScroll(rememberScrollState()).testTag("editor-formatted-scroll")
+        .padding(editorTheme.contentPadding ?: 16.dp)) {
         var pendingRendered = false
         blocks.forEach { block ->
             if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
