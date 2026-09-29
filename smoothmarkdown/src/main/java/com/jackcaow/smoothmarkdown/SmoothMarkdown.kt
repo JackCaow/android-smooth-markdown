@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.text.contextmenu.builder.item
@@ -254,7 +255,8 @@ fun SmoothMarkdown(
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
-        groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
+        groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion,
+            bridgeDetails = selectable || selectableAsSingleRegion)
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
     val targetCallback = remember(activeController, onTextPositioned) {
@@ -471,15 +473,38 @@ private fun MarkdownSelectionGroup(
     }
 }
 
-/** Keep text around visible nontext blocks mounted in one lazy item for a shared selection range. */
-internal fun groupSelectableBlocks(blocks: List<Node>, bridgeVisibleNonText: Boolean = false): List<List<Node>> {
+/** Keep one prose neighbor on each side of details mounted with its visible content. */
+internal fun groupSelectableBlocks(
+    blocks: List<Node>,
+    bridgeVisibleNonText: Boolean = false,
+    bridgeDetails: Boolean = false,
+): List<List<Node>> {
     val groups = mutableListOf<List<Node>>()
     val pending = mutableListOf<Node>()
     fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
+    var needsFollowingProse = false
     for (block in blocks) {
         val prose = block is Heading || block is Paragraph || block is BlockQuote ||
             block is BulletList || block is OrderedList ||
             (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak))
+        if (needsFollowingProse) {
+            if (prose) {
+                pending += block
+                flush()
+                needsFollowingProse = false
+                continue
+            }
+            flush()
+            needsFollowingProse = false
+        }
+        if (bridgeDetails && block is DetailsNode) {
+            val preceding = pending.removeLastOrNull()
+            flush()
+            if (preceding != null) pending += preceding
+            pending += block
+            needsFollowingProse = true
+            continue
+        }
         if (prose) pending += block else { flush(); groups += listOf(block) }
     }
     flush()
@@ -687,8 +712,10 @@ private fun MarkdownDetails(
                 ) { expanded.value = !expanded.value }
                 .padding(12.dp),
         ) {
-            Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
-                color = sheet.textColor ?: Color.Unspecified)
+            DisableSelection {
+                Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
+                    color = sheet.textColor ?: Color.Unspecified)
+            }
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 val summary = node.summary.singleOrNull()

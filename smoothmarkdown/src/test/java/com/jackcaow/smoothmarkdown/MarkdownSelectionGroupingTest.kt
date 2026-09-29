@@ -71,6 +71,31 @@ class MarkdownSelectionGroupingTest {
         assertEquals(listOf(1, 1, 1, 1, 1), groupSelectableBlocks(blocks).map { it.size })
     }
 
+    @Test fun detailsBridgeOnlyItsNearestProseNeighbors() {
+        val source = """
+            Earlier paragraph.
+
+            Before details.
+
+            <details open>
+            <summary>Summary</summary>
+            Body.
+            </details>
+
+            After details.
+
+            Later paragraph.
+        """.trimIndent()
+        for (enableHtml in listOf(false, true)) {
+            val blocks = parseMarkdown(source, enableHtml = enableHtml).directChildren()
+            assertEquals(listOf(Paragraph::class, Paragraph::class, DetailsNode::class,
+                Paragraph::class, Paragraph::class), blocks.map { it::class })
+            assertEquals(listOf(2, 1, 2), groupSelectableBlocks(blocks).map { it.size })
+            assertEquals(listOf(1, 3, 1), groupSelectableBlocks(blocks, bridgeDetails = true).map { it.size })
+            assertEquals(blocks, groupSelectableBlocks(blocks, bridgeDetails = true).flatten())
+        }
+    }
+
     private fun Node.directChildren(): List<Node> {
         val result = mutableListOf<Node>()
         var child = firstChild
