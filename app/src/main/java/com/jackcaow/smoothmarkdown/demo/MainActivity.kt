@@ -421,6 +421,9 @@ private fun DemoHome(
                 Text("Toolbar, slash commands, wikilinks, source and formatted modes, Markdown import/export, image selection, table editing, search, and focus mode.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text("Hardware keyboard: Ctrl+E inline code · Ctrl+Alt+1–6 headings · Ctrl+Shift+B quote · Ctrl+Shift+7/8 lists.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("editor-shortcuts-help"))
                 exportedLength?.let {
                     Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
