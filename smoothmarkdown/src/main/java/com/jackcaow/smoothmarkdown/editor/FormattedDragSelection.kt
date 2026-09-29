@@ -1,6 +1,8 @@
 package com.jackcaow.smoothmarkdown.editor
 
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
@@ -8,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -80,14 +83,32 @@ internal fun Modifier.formattedDragSelectionTarget(
         coordinates[0] = it
         registry.register(target, it.boundsInWindow())
     }.pointerInput(registry, target) {
-        detectDragGesturesAfterLongPress(
-            onDragStart = { registry.begin(target) },
-            onDragEnd = registry::end,
-            onDragCancel = registry::end,
-            onDrag = { change, _ ->
-                coordinates[0]?.let { registry.update(it.localToWindow(change.position)) }
-                change.consume()
-            },
-        )
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val longPress = awaitLongPressOrCancellation(down.id)
+            if (longPress != null) {
+                var claimed = false
+                try {
+                    // Let BasicTextField own selection inside its own bounds. Observe movement
+                    // before child handlers consume it, and claim only a cross-target drag.
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == longPress.id } ?: break
+                        if (!change.pressed) break
+                        val layout = coordinates[0] ?: continue
+                        val windowPoint = layout.localToWindow(change.position)
+                        if (!claimed && !layout.boundsInWindow().contains(windowPoint)) {
+                            claimed = registry.begin(target)
+                        }
+                        if (claimed) {
+                            registry.update(windowPoint)
+                            change.consume()
+                        }
+                    }
+                } finally {
+                    if (claimed) registry.end()
+                }
+            }
+        }
     }
 }
