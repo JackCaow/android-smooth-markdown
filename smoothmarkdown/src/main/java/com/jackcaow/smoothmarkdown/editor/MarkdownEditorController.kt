@@ -588,6 +588,7 @@ class MarkdownEditorController(
         val contentStart: Int,
         val contentEnd: Int,
         val isListLine: Boolean,
+        val listItemIndex: Int? = null,
     ) {
         fun fragment(start: Int, end: Int): String? {
             if (start == end) return ""
@@ -634,7 +635,8 @@ class MarkdownEditorController(
             if (position.offset !in 0..inline.visible.length ||
                 inline.splitVisibleRange(TextRange(0, position.offset)) == null ||
                 inline.splitVisibleRange(TextRange(position.offset, inline.visible.length)) == null) return null
-            return SourceTextEndpoint(index, block, inline, position.offset, lineStart, contentStart, contentEnd, path != null)
+            return SourceTextEndpoint(index, block, inline, position.offset, lineStart, contentStart, contentEnd,
+                path != null, path?.firstOrNull())
         }
         val anchor = endpoint(selected.anchor) ?: return null
         val focus = endpoint(selected.focus) ?: return null
@@ -659,16 +661,19 @@ class MarkdownEditorController(
         val middleEnd = if (last.isListLine) last.lineStart else last.block.range.min
         if (middleStart > middleEnd) return null
         val middle = text.substring(middleStart, middleEnd)
-        return (start + middle + end).trimStart('\r', '\n').trimEnd('\r', '\n').takeIf { it.isNotEmpty() }
+        // Match prose copy's omission of separators when an endpoint selects no characters.
+        // Leave every newline inside a nonempty fragment or between selected blocks untouched.
+        val selectedMiddle = middle.let { if (start.isEmpty()) it.dropWhile { char -> char == '\r' || char == '\n' } else it }
+            .let { if (end.isEmpty()) it.dropLastWhile { char -> char == '\r' || char == '\n' } else it }
+        return (start + selectedMiddle + end).takeIf { it.isNotEmpty() }
     }
 
     private fun replaceListEndpointSelection(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
         if (!hasWellFormedUtf16(markdown)) return false
         val (document, first, last) = resolveListEndpoints(selected) ?: return false
-        if (markdown.isNotEmpty()) {
-            val inserted = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
-            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return false
-        }
+        val inserted = if (markdown.isEmpty()) emptyList() else MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+        if (markdown.isNotEmpty() && (inserted.isEmpty() || inserted.first().range.min != 0 ||
+                inserted.last().range.max != markdown.length)) return false
         val left = first.inline.splitVisibleRange(TextRange(first.offset, first.inline.visible.length))?.before ?: return false
         val right = last.inline.splitVisibleRange(TextRange(0, last.offset))?.after ?: return false
         if (markdown.isEmpty() && MarkdownInlineEditing.parse(left + right, enableWikilinks).visible !=
@@ -691,6 +696,32 @@ class MarkdownEditorController(
         if (parsed.size < untouchedBefore.size + untouchedAfter.size ||
             untouchedBefore.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source } ||
             untouchedAfter.zip(parsed.takeLast(untouchedAfter.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val affected = parsed.drop(untouchedBefore.size).dropLast(untouchedAfter.size)
+        if (before.isNotEmpty() && (affected.firstOrNull()?.kind != first.block.kind ||
+                markdown.isNotEmpty() && affected.firstOrNull()?.source != before)) return false
+        if (inserted.isNotEmpty() && affected.windowed(inserted.size).none { window ->
+                inserted.zip(window).all { (want, actual) -> want.kind == actual.kind && want.source == actual.source }
+            }) return false
+        // A retained sibling marker must still parse as that list item. In particular, an
+        // ordered marker other than "1." can otherwise become a paragraph continuation.
+        if (last.listItemIndex != null) {
+            val list = MarkdownSourceList.parse(last.block) ?: return false
+            for (itemIndex in last.listItemIndex + 1 until list.items.size) {
+                val item = list.items[itemIndex]
+                val oldLineStart = last.block.range.min + last.block.source.lastIndexOf('\n', item.contentStart - 1) + 1
+                val newLineStart = first.block.range.min + replacement.length - after.length + right.length +
+                    oldLineStart - last.contentEnd
+                val containing = parsed.firstOrNull { newLineStart in it.range.min until it.range.max } ?: return false
+                val newList = MarkdownSourceList.parse(containing) ?: return false
+                val preserved = newList.items.indices.any { index ->
+                    val next = newList.items[index]
+                    val lineStart = containing.range.min + containing.source.lastIndexOf('\n', next.contentStart - 1) + 1
+                    lineStart == newLineStart && next.marker == item.marker &&
+                        newList.lineContent(listOf(index), 0) == list.lineContent(listOf(itemIndex), 0)
+                }
+                if (!preserved) return false
+            }
+        }
         val caret = before.length + if (markdown.isEmpty()) 0 else (if (before.isNotEmpty()) separator.length else 0) + markdown.length
         replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret)
         return true

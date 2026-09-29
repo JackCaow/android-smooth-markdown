@@ -35,6 +35,27 @@ class FormattedSemanticTextSelectionTest {
         assertEquals(source, replace.text)
     }
 
+    @Test fun listDeleteKeepsTrailingSiblingAsListItem() {
+        val source = "- BeforeX\n- YAfter\n- keep"
+        val selected = MarkdownFormattedTextSelection(source, listPosition(0, 0, 6), listPosition(0, 1, 1))
+        val editor = MarkdownEditorController(source)
+        assertTrue(editor.deleteFormattedTextSelection(selected))
+        assertEquals("- BeforeAfter\n- keep", editor.text)
+        val list = MarkdownSourceList.parse(editor.semanticDocument().blocks.single())
+        assertEquals(2, list?.items?.size)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+    }
+
+    @Test fun copyKeepsCrLfAndInteriorBlankLineTriviaExactly() {
+        val source = "- BeforeX\r\n\r\n\r\n```text\r\nline\r\n\r\n```\r\n\r\nRightTail"
+        val selected = MarkdownFormattedTextSelection(source, listPosition(0, 0, 6),
+            MarkdownFormattedTextPosition("block-2", 5))
+        val editor = MarkdownEditorController(source)
+        assertEquals("- X\r\n\r\n\r\n```text\r\nline\r\n\r\n```\r\n\r\nRight",
+            editor.copyFormattedTextSelectionAsMarkdown(selected))
+    }
+
     @Test fun listEndpointAcrossWholeStructuredBlocksPreservesUnselectedSource() {
         val source = "top\r\n\r\n- BeforeX\r\n- second\r\n\r\n```js\r\nconst x = 1\r\n```\r\n\r\nRightTail\r\n\r\nbottom"
         val selected = MarkdownFormattedTextSelection(source, listPosition(1, 0, 6),
@@ -51,14 +72,24 @@ class FormattedSemanticTextSelectionTest {
         assertEquals(copy.copyFormattedTextSelectionAsMarkdown(selected), copy.copyFormattedTextSelectionAsMarkdown(reverse))
     }
 
-    @Test fun proseToOrderedListEndpointKeepsRemainingItemsAndTaskMarkers() {
+    @Test fun proseToOrderedListEndpointRejectsWhenLaterItemWouldBecomeParagraph() {
         val source = "top\n\nLeftX\n\n1. Before\n2. [x] YAfter\n3. keep\n\nbottom"
         val selected = MarkdownFormattedTextSelection(source,
             MarkdownFormattedTextPosition("block-1", 4), listPosition(2, 1, 1))
         val editor = MarkdownEditorController(source)
         assertEquals("X\n\n1. Before\n2. [x] Y", editor.copyFormattedTextSelectionAsMarkdown(selected))
+        assertFalse(editor.deleteFormattedTextSelection(selected))
+        assertEquals(source, editor.text)
+        assertFalse(editor.canUndo)
+    }
+
+    @Test fun proseToLastTaskItemEndpointMergesWithoutChangingOutsideBlocks() {
+        val source = "top\n\nLeftX\n\n1. Before\n2. [x] YAfter\n\nbottom"
+        val selected = MarkdownFormattedTextSelection(source,
+            MarkdownFormattedTextPosition("block-1", 4), listPosition(2, 1, 1))
+        val editor = MarkdownEditorController(source)
         assertTrue(editor.deleteFormattedTextSelection(selected))
-        assertEquals("top\n\nLeftAfter\n3. keep\n\nbottom", editor.text)
+        assertEquals("top\n\nLeftAfter\n\nbottom", editor.text)
         assertTrue(editor.undo())
         assertEquals(source, editor.text)
     }
