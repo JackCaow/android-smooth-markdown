@@ -78,6 +78,38 @@ internal class MarkdownSourceList private constructor(
         val focusVisibleOffset: Int,
     )
 
+    data class SourcePasteEdit(val source: String, val selectionOffset: Int)
+
+    /** Preserve an unsupported multiline paste as source, keeping following lines in this item. */
+    fun replaceLineForSourcePaste(path: List<Int>, lineIndex: Int, before: String,
+                                  pasted: String, after: String): SourcePasteEdit? {
+        val selected = item(path) ?: return null
+        val line = selected.lines.getOrNull(lineIndex) ?: return null
+        val itemStart = source.lastIndexOf('\n', selected.contentStart - 1) + 1
+        val itemEnd = source.indexOfAny(charArrayOf('\r', '\n'), itemStart)
+            .let { if (it < 0) source.length else it }
+        val markerMatch = marker.find(source.substring(itemStart, itemEnd))
+        // Tabs and unusual markers are left literal; Source mode exposes their exact result.
+        val indent = if (markerMatch?.range?.first == 0 && '\t' !in markerMatch.value)
+            " ".repeat(markerMatch.groupValues[1].length + markerMatch.groupValues[2].length +
+                markerMatch.groupValues[3].length) else ""
+        val newline = if ("\r\n" in source) "\r\n" else "\n"
+        val normalized = pasted.replace("\r\n", "\n").replace('\r', '\n')
+        val pieces = normalized.split('\n')
+        val inserted = buildString {
+            pieces.forEachIndexed { index, piece ->
+                if (index > 0) {
+                    append(newline)
+                    if (piece.isNotEmpty() || (index == pieces.lastIndex && after.isNotEmpty())) append(indent)
+                }
+                append(piece)
+            }
+        }
+        val replacement = before + inserted + after
+        return SourcePasteEdit(source.replaceRange(line.start, line.end, replacement),
+            line.start + before.length + inserted.length)
+    }
+
     /** Keeps pasted plain soft lines in the same list-item paragraph. */
     fun replaceLineWithPlainLines(path: List<Int>, lineIndex: Int, before: String,
                                   pasted: List<String>, after: String,

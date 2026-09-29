@@ -423,6 +423,7 @@ fun SmoothMarkdownEditor(
             MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
                 controller, Modifier.weight(1f), wikilinkSuggestions,
                 customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
+                onSourcePaste = { onModeChanged?.invoke(MarkdownEditorMode.SOURCE) },
             )
         }
     }
@@ -442,13 +443,22 @@ private fun editorToolbarLabel(command: MarkdownEditorCommand): String = when (c
 @Composable
 private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier, onFocusChanged: (Boolean) -> Unit) {
     val theme = LocalMarkdownEditorTheme.current
+    val sourceFocusRequester = remember(controller) { FocusRequester() }
+    val sourceFocusRequested = controller.sourceFocusRequested
+    LaunchedEffect(sourceFocusRequested) {
+        if (sourceFocusRequested) {
+            sourceFocusRequester.requestFocus()
+            controller.clearSourceFocusRequest()
+        }
+    }
     DisposableEffect(controller) { onDispose { onFocusChanged(false) } }
     BasicTextField(
         value = controller.value,
         onValueChange = controller::updateFromInput,
         modifier = modifier.fillMaxSize().background(theme.sourceColor ?: MaterialTheme.colorScheme.surface)
             .padding(theme.sourcePadding ?: 16.dp)
-            .onFocusChanged { onFocusChanged(it.isFocused) }.testTag("editor-source-input"),
+            .focusRequester(sourceFocusRequester).onFocusChanged { onFocusChanged(it.isFocused) }
+            .testTag("editor-source-input"),
         textStyle = theme.sourceTextStyle ?: MaterialTheme.typography.bodyMedium.copy(
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = FontFamily.Monospace,
@@ -466,6 +476,7 @@ private fun FormattedBlockPane(
     customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)?,
     customBlockBuilder: MarkdownEditorCustomBlockBuilder?,
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder?,
+    onSourcePaste: () -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
     val blocks = controller.semanticDocument().blocks
@@ -566,7 +577,7 @@ private fun FormattedBlockPane(
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (block.kind == MarkdownBlockKind.BULLET_LIST || block.kind == MarkdownBlockKind.ORDERED_LIST) {
                         val list = MarkdownSourceList.parse(block)
-                        if (list != null) FormattedList(controller, block.id, list, dragSelection)
+                        if (list != null) FormattedList(controller, block.id, list, dragSelection, onSourcePaste)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
@@ -785,11 +796,12 @@ private fun PendingEmptyParagraphField(controller: MarkdownEditorController, mod
 
 @Composable
 private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList,
-                          dragSelection: FormattedDragSelection) {
+                          dragSelection: FormattedDragSelection, onSourcePaste: () -> Unit) {
     val block = controller.semanticDocument().blockById(blockId)
     val pending = controller.pendingListExit
     val showPending = block != null && pending != null && pending.offset > block.range.min && pending.offset < block.range.max
-    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending, dragSelection)
+    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending, dragSelection,
+        onSourcePaste)
 }
 
 @Composable
@@ -803,6 +815,7 @@ private fun FormattedListItems(
     indexBase: Int,
     showPending: Boolean = false,
     dragSelection: FormattedDragSelection,
+    onSourcePaste: () -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
     Column {
@@ -845,7 +858,8 @@ private fun FormattedListItems(
                 if (firstLine != null) {
                     val lineIndex = item.lines.indexOf(firstLine)
                     FormattedListTextField(controller, blockId, list, path, lineIndex,
-                        Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"))
+                        Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"),
+                        onSourcePaste)
                 }
             }
             var nestedBase = 0
@@ -855,11 +869,11 @@ private fun FormattedListItems(
                         val lineIndex = item.lines.indexOf(part)
                         FormattedListTextField(controller, blockId, list, path, lineIndex,
                             Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp)
-                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"))
+                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"), onSourcePaste)
                     }
                     is MarkdownSourceList.NestedList -> {
                         FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase,
-                            dragSelection = dragSelection)
+                            dragSelection = dragSelection, onSourcePaste = onSourcePaste)
                         nestedBase += part.items.size
                     }
                     is MarkdownSourceList.Raw -> Text(
@@ -884,6 +898,7 @@ private fun FormattedListTextField(
     path: List<Int>,
     lineIndex: Int,
     modifier: Modifier,
+    onSourcePaste: () -> Unit,
 ) {
     val inline = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks)
     val active = controller.activeFormattedBlockId == blockId && controller.activeFormattedListPath == path &&
@@ -912,6 +927,9 @@ private fun FormattedListTextField(
                 // The pasted child list replaces this field; its last item receives focus.
             } else if (controller.replaceFormattedListLineWithPlainLines(blockId, path, lineIndex, next.text, selection)) {
                 // A plain multi-line paste stays in this item as editable soft lines.
+            } else if (controller.replaceFormattedListLineWithSourcePaste(blockId, path, lineIndex, next.text, selection)) {
+                // Unsupported paragraphs remain visible and editable in the source pane.
+                onSourcePaste()
             } else if (next.text == inline.visible || controller.replaceFormattedListLineText(blockId, path, lineIndex, next.text)) {
                 controller.setFormattedListSelection(blockId, path, lineIndex, next.selection, next.composition)
             }
