@@ -70,6 +70,16 @@ class StreamMarkdownBufferTest {
         assertEquals(listOf(0.75.em, 0.75.em), rendered.spanStyles.map { it.item.fontSize })
     }
 
+    @Test fun splitKeyboardTagAppearsAsOneInlineKeyAfterCompletion() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0, enableHtml = true)
+        assertNull(buffer.append("Press <kb", 50))
+        assertEquals("Press ", buffer.visibleText)
+        assertNull(buffer.append("d>Ctrl</kbd>+C", 100))
+        val rendered = inlineRender(parseMarkdown(buffer.visibleText, enableHtml = true).firstChild!!, enableHtml = true)
+        assertEquals("Press Ctrl+C", rendered.text.text)
+        assertEquals(listOf("Ctrl"), rendered.kbds.values.toList())
+    }
+
     @Test fun completedStreamRevealsUnfinishedTagAsLiteralSource() {
         val buffer = StreamMarkdownBuffer(startMillis = 0)
         assertNull(buffer.append("lead <font colo", 50))
