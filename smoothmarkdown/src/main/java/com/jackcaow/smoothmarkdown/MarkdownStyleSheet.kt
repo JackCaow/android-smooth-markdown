@@ -72,7 +72,7 @@ data class MarkdownStyleSheet(
     val codeTextColor: Color? = null,
     val inlineCodeBackground: Color? = null,
     val inlineCodeTextColor: Color? = null,
-    val highlightColor: Color = Color.Yellow.copy(alpha = 0.4f),
+    val highlightColor: Color = Color(0xFFFFF176),
     val footnoteColor: Color = Color(0xFF1976D2),
     val quoteBarColor: Color? = null,
     val quoteBackground: Color? = null,
@@ -109,6 +109,10 @@ data class MarkdownStyleSheet(
     val italicStyle: SpanStyle? = null,
     /** Inline Markdown strikethrough, merged over the default strike decoration. */
     val strikethroughStyle: SpanStyle? = null,
+    /** HTML `<u>` and `<ins>`, merged over the default underline decoration. */
+    val underlineStyle: SpanStyle? = null,
+    /** HTML `<mark>`, merged over [highlightColor]. */
+    val highlightStyle: SpanStyle? = null,
     /** Inline Markdown and safe HTML links, merged over [linkColor] and underline. */
     val linkStyle: SpanStyle? = null,
     /** Inline code and HTML code/kbd, merged over legacy inline-code colors. */
@@ -117,6 +121,8 @@ data class MarkdownStyleSheet(
     val subscriptStyle: SpanStyle? = null,
     /** HTML `<sup>` text style, merged over the default smaller, shifted text. */
     val superscriptStyle: SpanStyle? = null,
+    /** HTML `<kbd>` key cap text style, over the default 13sp monospace text. */
+    val kbdStyle: TextStyle? = null,
     /** Per-edge table border; when absent, [tableBorderColor] colors a 1dp full grid. */
     val tableBorder: MarkdownTableBorder? = null,
 ) {
@@ -136,6 +142,7 @@ data class MarkdownStyleSheet(
             textColor = Color(0xFF212121), headingColor = Color.Black,
             linkColor = Color(0xFF1976D2), codeBackground = Color(0xFFF5F5F5), codeTextColor = Color(0xFF212121),
             inlineCodeBackground = Color(0xFFEEEEEE), inlineCodeTextColor = Color(0xFFD32F2F),
+            highlightStyle = SpanStyle(color = Color(0xDD000000)),
             quoteBarColor = Color(0xFFBDBDBD), quoteBackground = Color(0xFFFAFAFA),
             tableBorderColor = Color(0xFFD0D7DE),
             tableHeaderBackgroundColor = Color(0xFFEEEEEE),
@@ -150,7 +157,8 @@ data class MarkdownStyleSheet(
             textColor = Color(0xFFB3B3B3), headingColor = Color.White,
             linkColor = Color(0xFF64B5F6), codeBackground = Color(0xFF212121),
             codeTextColor = Color(0xFFB3B3B3), inlineCodeBackground = Color(0xFF424242),
-            inlineCodeTextColor = Color(0xFFEF9A9A), quoteBarColor = Color(0xFF757575),
+            inlineCodeTextColor = Color(0xFFEF9A9A), highlightColor = Color(0xFF4D4400),
+            quoteBarColor = Color(0xFF757575),
             quoteBackground = Color(0xFF212121),
             tableBorderColor = Color(0xFF30363D), ruleColor = Color(0xFF30363D),
             tableHeaderBackgroundColor = Color(0xFF303030),
