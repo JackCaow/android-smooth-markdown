@@ -154,14 +154,13 @@ private fun DemoDrawerItem(
     isDark: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
 ) {
     val iconColor = if (selected) {
         if (isDark) Color(0xFF90CAF9) else Color(0xFF2196F3)
     } else if (isDark) Color.White.copy(alpha = 0.70f) else Color.Black.copy(alpha = 0.54f)
     Row(
         modifier = modifier.fillMaxWidth()
-            .heightIn(min = if (subtitle == null) 56.dp else 72.dp)
+            .heightIn(min = 56.dp)
             .background(if (selected && isDark) Color(0xFF161B22) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
@@ -169,14 +168,10 @@ private fun DemoDrawerItem(
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = iconColor)
         Spacer(Modifier.width(32.dp))
-        Column {
-            Text(title, fontSize = 16.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (isDark) Color.White else if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface)
-            if (subtitle != null) Text(subtitle, fontSize = 11.sp,
-                color = if (isDark) Color.White.copy(alpha = 0.38f) else Color.Gray)
-        }
+        Text(title, fontSize = 16.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isDark) Color.White else if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -335,7 +330,7 @@ private fun DemoHome(
                     }
                     Spacer(Modifier.height(8.dp))
                     DemoDrawerItem(
-                        title = "Markdown Editor", subtitle = "Scratch-style editing preview",
+                        title = "Markdown Editor",
                         icon = Icons.Filled.EditNote, selected = false, isDark = isDark,
                         onClick = { select("editor") }, modifier = Modifier.testTag("nav-editor"),
                     )
@@ -357,7 +352,6 @@ private fun DemoHome(
                     dedicatedPages.forEach { item ->
                         DemoDrawerItem(
                             title = localizations.page(language, item),
-                            subtitle = item.subtitle.takeIf { item.id in setOf("html", "chat-list", "ai", "conversation-list", "plugin", "mermaid") },
                             icon = demoIcon(item.id), selected = pageId == item.id,
                             isDark = isDark, onClick = {
                                 if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
