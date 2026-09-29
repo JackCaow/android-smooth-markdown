@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import org.commonmark.node.Node
+import org.commonmark.node.HtmlBlock
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
@@ -77,6 +78,7 @@ class SmoothSelectionController {
     internal fun fullDocumentSelectionProjection(): ReaderDocumentText? {
         if (hasCustomCodeBuilder || hasCustomImageBuilder) return null
         val node = document ?: return null
+        if (readerDocumentHasOpaqueRenderer(node, documentHtml, documentPlugins, documentBuilders)) return null
         if (readerDocumentNodeCount(node) > MAX_FULL_SELECTION_RENDER_NODES) return null
         val projection = readerDocumentText(
             node, documentHtml, documentPlugins, documentBuilders, detailsExpanded,
@@ -192,6 +194,32 @@ class SmoothSelectionController {
 internal const val MAX_FULL_SELECTION_BLOCKS = 512
 internal const val MAX_FULL_SELECTION_UTF16 = 100_000
 internal const val MAX_FULL_SELECTION_RENDER_NODES = 2_048
+
+/**
+ * Copy text supplied by a custom renderer does not prove its Compose output participates in the
+ * outer SelectionContainer. Native full selection therefore rejects those renderer boundaries.
+ */
+internal fun readerDocumentHasOpaqueRenderer(
+    document: Node,
+    enableHtml: Boolean,
+    plugins: ParserPluginRegistry?,
+    builders: MarkdownBuilderRegistry?,
+): Boolean {
+    fun visit(node: Node, depth: Int): Boolean {
+        if (depth > 64 || builders?.findBuilder(node) != null || node is PluginBlockNode) return true
+        if (node is DetailsNode &&
+            (node.summary + node.body).any { visit(it, depth + 1) }) return true
+        if (enableHtml && node is HtmlBlock) {
+            val html = SafeHtml.parseBlock(node.literal)
+            if (html is SafeHtml.Block.Container) {
+                val nested = parseMarkdown(html.content + "\n" + html.trailing, plugins, enableHtml = true)
+                if (nested.children().any { visit(it, depth + 1) }) return true
+            }
+        }
+        return node.children().any { visit(it, depth + 1) }
+    }
+    return document.children().any { visit(it, 0) }
+}
 
 /** Count visual AST work even when it projects to no text (for example, hundreds of images). */
 internal fun readerDocumentNodeCount(document: Node): Int {
