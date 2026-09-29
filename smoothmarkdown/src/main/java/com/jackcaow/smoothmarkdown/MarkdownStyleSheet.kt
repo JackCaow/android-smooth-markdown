@@ -121,6 +121,8 @@ data class MarkdownStyleSheet(
     val subscriptStyle: SpanStyle? = null,
     /** HTML `<sup>` text style, merged over the default smaller, shifted text. */
     val superscriptStyle: SpanStyle? = null,
+    /** HTML `<kbd>` key cap text style, over the default 13sp monospace text. */
+    val kbdStyle: TextStyle? = null,
     /** Per-edge table border; when absent, [tableBorderColor] colors a 1dp full grid. */
     val tableBorder: MarkdownTableBorder? = null,
 ) {

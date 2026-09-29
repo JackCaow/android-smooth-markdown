@@ -73,12 +73,14 @@ import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.isSpecified
@@ -175,7 +177,10 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     }
     val document = parser.parse(markdown)
     plugins?.transformFencedBlocks(document)
-    if (enableHtml) HtmlCodePostProcessor(markdown).process(document)
+    if (enableHtml) {
+        HtmlCodePostProcessor(markdown).process(document)
+        HtmlKbdPostProcessor().process(document)
+    }
     val result = FootnoteReferencePostProcessor(markdown).process(document)
     (plugins?.getInlinePlugin("wikilink") as? WikilinkPlugin)?.let {
         WikilinkPostProcessor.process(result, it)
@@ -810,7 +815,7 @@ private fun MarkdownInlineText(
             })
         }
     } ?: Modifier
-    if (render.images.isEmpty() && render.math.isEmpty()) {
+    if (render.images.isEmpty() && render.math.isEmpty() && render.kbds.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
@@ -821,6 +826,7 @@ private fun MarkdownInlineText(
     }
     BoxWithConstraints {
         val density = LocalDensity.current
+        val textMeasurer = rememberTextMeasurer()
         val maxImageWidth = maxWidth.value.takeIf { it.isFinite() && it > 0f }
             ?: LocalConfiguration.current.screenWidthDp.toFloat()
         val customImageBuilder = LocalImageBuilder.current
@@ -852,6 +858,28 @@ private fun MarkdownInlineText(
                 if (renderer == null) Text("$$latex$")
                 else Canvas(Modifier.width(widthDp).height(heightDp)) {
                     renderer.draw(drawContext.canvas.nativeCanvas)
+                }
+            }
+        }
+        render.kbds.forEach { (id, label) ->
+            val border = sheet.ruleColor ?: Color(0xFFBDBDBD)
+            val base = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
+            val keyStyle = base.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+                .merge(sheet.kbdStyle).let { it.copy(color = it.color.takeUnless { color -> color == Color.Unspecified } ?: foreground) }
+            val measured = textMeasurer.measure(label, style = keyStyle, maxLines = 1, softWrap = false)
+            val width = with(density) { measured.size.width.toDp() } + 12.dp
+            val height = with(density) { measured.size.height.toDp() } + 4.dp
+            val shape = RoundedCornerShape(4.dp)
+            inline[id] = InlineTextContent(
+                placeholder = Placeholder(
+                    width = with(density) { width.toSp() },
+                    height = with(density) { height.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+                ),
+            ) {
+                Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
+                    .padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                 }
             }
         }
@@ -1089,6 +1117,7 @@ internal data class InlineRender(
     val text: AnnotatedString,
     val images: Map<String, SafeHtml.ImageSpec>,
     val math: Map<String, String>,
+    val kbds: Map<String, String>,
 )
 
 internal fun inlineText(node: Node, enableHtml: Boolean, plugins: ParserPluginRegistry? = null): AnnotatedString = inlineRender(node, enableHtml, plugins = plugins).text
@@ -1096,6 +1125,7 @@ internal fun inlineText(node: Node, enableHtml: Boolean, plugins: ParserPluginRe
 internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(), plugins: ParserPluginRegistry? = null): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
     val math = linkedMapOf<String, String>()
+    val kbds = linkedMapOf<String, String>()
     val boldSpan = SpanStyle(fontWeight = FontWeight.Bold).merge(styleSheet.boldStyle)
     val italicSpan = SpanStyle(fontStyle = FontStyle.Italic).merge(styleSheet.italicStyle)
     val strikeSpan = SpanStyle(textDecoration = TextDecoration.LineThrough).merge(styleSheet.strikethroughStyle)
@@ -1132,7 +1162,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                 .merge(styleSheet.subscriptStyle), start, end)
             "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)
                 .merge(styleSheet.superscriptStyle), start, end)
-            "code", "kbd" -> addStyle(codeSpan, start, end)
+            "code" -> addStyle(codeSpan, start, end)
             "a" -> tag.attributes["href"]?.takeIf(SafeHtml::isSafeLink)?.let { url ->
                 addStyle(linkSpan, start, end)
                 addStringAnnotation("url", url, start, end)
@@ -1173,6 +1203,13 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                 val id = "math-${math.size}"
                 math[id] = current.latex
                 appendInlineContent(id, "$$${current.latex}$")
+            }
+            is HtmlKbdNode -> {
+                if (current.label.isNotEmpty()) {
+                    val id = "kbd-${kbds.size}"
+                    kbds[id] = current.label
+                    appendInlineContent(id, current.label)
+                }
             }
             is PluginInlineNode -> {
                 val presentation = plugins?.renderInline(current)
@@ -1224,7 +1261,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
     }
     node.children().forEach(::appendNode)
     }
-    return InlineRender(text, images, math)
+    return InlineRender(text, images, math, kbds)
 }
 
 internal fun isSafeLink(value: String): Boolean {
