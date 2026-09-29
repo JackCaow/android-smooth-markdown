@@ -1315,40 +1315,59 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
     val rows = table.children().flatMap { it.children() }.filterIsInstance<TableRow>().toList()
     val columns = (rows.maxOfOrNull { it.children().filterIsInstance<TableCell>().count() } ?: 0).coerceAtLeast(1)
     val border = resolveTableBorder(sheet, MaterialTheme.colorScheme.outline)
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
-        .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
-        rows.forEachIndexed { rowIndex, row ->
-            val cells = row.children().filterIsInstance<TableCell>().toList()
-            val rowIsHeader = cells.firstOrNull()?.isHeader == true
-            Row(Modifier.height(IntrinsicSize.Min)) {
-                repeat(columns) { columnIndex ->
-                    val cell = cells.getOrNull(columnIndex)
-                    val style = if (cell?.isHeader == true) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
-                    val edges = tableCellBorderEdges(border, rowIndex, rows.size, columnIndex, columns)
-                    Box(Modifier.width(150.dp).fillMaxHeight()
-                        .then(if (rowIsHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
-                        .drawBehind {
-                            fun drawEdge(side: MarkdownTableBorderSide?, x: Float, y: Float, width: Float, height: Float) {
-                                if (side == null || side.width.value == 0f) return
-                                drawRect(side.color, topLeft = Offset(x, y), size = Size(width, height))
-                            }
-                            edges.top?.let { drawEdge(it, 0f, 0f, size.width, it.width.toPx().coerceAtMost(size.height)) }
-                            edges.right?.let {
-                                val stroke = it.width.toPx().coerceAtMost(size.width)
-                                drawEdge(it, size.width - stroke, 0f, stroke, size.height)
-                            }
-                            edges.bottom?.let {
-                                val stroke = it.width.toPx().coerceAtMost(size.height)
-                                drawEdge(it, 0f, size.height - stroke, size.width, stroke)
-                            }
-                            edges.left?.let { drawEdge(it, 0f, 0f, it.width.toPx().coerceAtMost(size.width), size.height) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val minimumWidth = (sheet.tableCellPadding * 2 + 1.dp) * columns
+        val tableWidth = maxOf(maxWidth, minimumWidth)
+        Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
+            .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
+            rows.forEachIndexed { rowIndex, row ->
+                val cells = row.children().filterIsInstance<TableCell>().toList()
+                val rowIsHeader = cells.firstOrNull()?.isHeader == true
+                Row(Modifier.width(tableWidth).height(IntrinsicSize.Min)) {
+                    repeat(columns) { columnIndex ->
+                        val cell = cells.getOrNull(columnIndex)
+                        val cellAlignment = when (cell?.alignment) {
+                            TableCell.Alignment.CENTER -> Alignment.Center
+                            TableCell.Alignment.RIGHT -> Alignment.CenterEnd
+                            else -> Alignment.CenterStart
                         }
-                        .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
-                            collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
-                            if (cell?.isHeader == true) heading()
-                        }) {
-                        if (cell != null) MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current), style, onLinkClick, onImageClick)
+                        val cellTextAlign = when (cell?.alignment) {
+                            TableCell.Alignment.CENTER -> TextAlign.Center
+                            TableCell.Alignment.RIGHT -> TextAlign.Right
+                            else -> TextAlign.Left
+                        }
+                        val style = if (cell?.isHeader == true) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
+                        val edges = tableCellBorderEdges(border, rowIndex, rows.size, columnIndex, columns)
+                        Box(Modifier.weight(1f).fillMaxHeight()
+                            .then(if (rowIsHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
+                            .drawBehind {
+                                fun drawEdge(side: MarkdownTableBorderSide?, x: Float, y: Float, width: Float, height: Float) {
+                                    if (side == null || side.width.value == 0f) return
+                                    drawRect(side.color, topLeft = Offset(x, y), size = Size(width, height))
+                                }
+                                edges.top?.let { drawEdge(it, 0f, 0f, size.width, it.width.toPx().coerceAtMost(size.height)) }
+                                edges.right?.let {
+                                    val stroke = it.width.toPx().coerceAtMost(size.width)
+                                    drawEdge(it, size.width - stroke, 0f, stroke, size.height)
+                                }
+                                edges.bottom?.let {
+                                    val stroke = it.width.toPx().coerceAtMost(size.height)
+                                    drawEdge(it, 0f, size.height - stroke, size.width, stroke)
+                                }
+                                edges.left?.let { drawEdge(it, 0f, 0f, it.width.toPx().coerceAtMost(size.width), size.height) }
+                            }
+                            .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
+                                collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
+                                if (cell?.isHeader == true) heading()
+                            }, contentAlignment = cellAlignment) {
+                            if (cell != null) MarkdownInlineText(
+                                inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current),
+                                style, onLinkClick, onImageClick,
+                                textAlign = cellTextAlign,
+                                bottomPadding = 0.dp,
+                            )
+                        }
                     }
                 }
             }
