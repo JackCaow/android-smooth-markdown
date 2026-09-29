@@ -194,10 +194,10 @@ private fun AIChatScreen(
     var showMore by remember { mutableStateOf(false) }
     var showGuide by remember { mutableStateOf(false) }
     var sourceMessage by remember { mutableStateOf<AIChatMessage?>(null) }
-    // Match Flutter's in-memory settings; never bundle or persist a credential.
+    // The debug build can supply a local-only key; user edits remain in memory.
     var provider by remember { mutableStateOf(defaultAIProvider) }
     var qwenApiKey by remember { mutableStateOf("") }
-    var deepSeekApiKey by remember { mutableStateOf("") }
+    var deepSeekApiKey by remember { mutableStateOf(BuildConfig.DEEPSEEK_API_KEY) }
     var qwenModel by remember { mutableStateOf(qwenModels.first().first) }
     var deepSeekModel by remember { mutableStateOf(deepSeekModels.first().first) }
     var enableThinking by remember { mutableStateOf(true) }
