@@ -50,8 +50,44 @@ class FormattedRangeInlineCommandTest {
         assertFalse(controller.canUndo)
     }
 
-    @Test fun tableRectangleRefusesMixedMarksWithoutPartialMutation() {
+    @Test fun tableRectangleWrapsCompleteItalicButKeepsOtherCellsAndOneUndo() {
         val source = "| A | B |\n| --- | --- |\n| x | *y* |"
+        val controller = MarkdownEditorController(source)
+        assertTrue(controller.beginFormattedTableCellDrag("block-0", 1, 0))
+        assertTrue(controller.extendFormattedTableCellDrag("block-0", 1, 1))
+        assertTrue(controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.BOLD))
+        assertEquals("| A | B |\n| --- | --- |\n| **x** | __*y*__ |", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(source, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun blockBatchBoldsCompleteLinkAndItalicWithoutChangingUntouchedSource() {
+        val source = "*one*\n\n# [two](https://example.com/path)\n\nafter"
+        val controller = MarkdownEditorController(source)
+        assertTrue(controller.beginFormattedBlockDrag("block-0"))
+        assertTrue(controller.extendFormattedBlockDrag("block-1"))
+        assertTrue(controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.BOLD))
+        assertEquals("__*one*__\n\n# __[two](https://example.com/path)__\n\nafter", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(source, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun listBatchItalicizesCompleteBoldAndLeavesChildAndSiblingUntouched() {
+        val source = "- **first**\n- second\n  - child\n- outside"
+        val controller = MarkdownEditorController(source)
+        assertTrue(controller.beginFormattedListItemDrag("block-0", listOf(0)))
+        assertTrue(controller.extendFormattedListItemDrag("block-0", listOf(1)))
+        assertTrue(controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC))
+        assertEquals("- _**first**_\n- *second*\n  - child\n- outside", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(source, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun nestedBatchRefusesPartialMarkAtomically() {
+        val source = "| A | B |\n| --- | --- |\n| *safe* | part *mixed* |"
         val controller = MarkdownEditorController(source)
         assertTrue(controller.beginFormattedTableCellDrag("block-0", 1, 0))
         assertTrue(controller.extendFormattedTableCellDrag("block-0", 1, 1))

@@ -245,7 +245,7 @@ internal class MarkdownSourceList private constructor(
             val line = selected.lines.firstOrNull { it.start == selected.contentStart } ?: selected.lines.firstOrNull() ?: return null
             val inline = MarkdownInlineEditing.parse(source.substring(line.start, line.end), enableWikilinks)
             if (inline.visible.isEmpty()) return@mapNotNull null
-            val wrapped = inline.wrap(TextRange(0, inline.visible.length), kind, destination) ?: return null
+            val wrapped = inline.wrapComplete(kind, destination) ?: return null
             if (wrapped == inline.source) null else Triple(line.start, line.end, wrapped)
         }
         if (patches.isEmpty()) return null
