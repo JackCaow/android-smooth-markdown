@@ -9,6 +9,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import org.commonmark.node.Emphasis
+import org.commonmark.node.Link
+import org.commonmark.node.Node
+import org.commonmark.node.Paragraph
+import org.commonmark.node.StrongEmphasis
+import org.commonmark.node.Text
+import org.commonmark.parser.Parser
 
 internal enum class InlineMarkKind { BOLD, ITALIC, STRIKETHROUGH, LINK, CODE, WIKILINK }
 internal data class InlineMark(
@@ -121,6 +128,64 @@ internal class MarkdownInlineEditing private constructor(
         }
         if (kind == InlineMarkKind.CODE && body.contains('`')) return null
         return source.replaceRange(rawStart, rawEnd, prefix + body + suffix)
+    }
+
+    /** Complete-line batch wrapping for a single simple nested emphasis/link node. */
+    fun wrapComplete(kind: InlineMarkKind, destination: String? = null): String? {
+        if (visible.isEmpty()) return null
+        val full = TextRange(0, visible.length)
+        if (marks.isEmpty() || (marks.size == 1 && marks[0].kind == kind && marks[0].range == full)) {
+            return wrap(full, kind, destination)
+        }
+        if (kind !in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC)) return null
+        val inner = marks.singleOrNull() ?: return null
+        if (inner.range != full || inner.sourceStart != 0 || inner.sourceEnd != source.length ||
+            inner.kind !in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK)) return null
+        if (!simpleInlineTreeMatches(source, inner.kind, visible, inner.destination)) return null
+        val delimiters = if (kind == InlineMarkKind.BOLD) listOf("__", "**") else listOf("_", "*")
+        return delimiters.firstNotNullOfOrNull { delimiter ->
+            val candidate = delimiter + source + delimiter
+            val parsed = parse(candidate, enableWikilinks)
+            val expected = setOf(
+                Triple(inner.kind, full, inner.destination),
+                Triple(kind, full, null),
+            )
+            val actual = parsed.marks.map { Triple(it.kind, it.range, it.destination) }.toSet()
+            if (parsed.visible == visible && parsed.marks.size == 2 && actual == expected &&
+                nestedInlineTreeMatches(candidate, kind, inner.kind, visible, inner.destination)) candidate else null
+        }
+    }
+
+    private fun simpleInlineTreeMatches(source: String, kind: InlineMarkKind, text: String, destination: String?): Boolean {
+        val node = singleInlineNode(source) ?: return false
+        return matchesInnerNode(node, kind, text, destination)
+    }
+
+    private fun nestedInlineTreeMatches(source: String, outer: InlineMarkKind, inner: InlineMarkKind,
+                                        text: String, destination: String?): Boolean {
+        val node = singleInlineNode(source) ?: return false
+        if (!matchesKind(node, outer) || node.firstChild == null || node.firstChild !== node.lastChild) return false
+        return matchesInnerNode(node.firstChild, inner, text, destination)
+    }
+
+    private fun singleInlineNode(source: String): Node? {
+        val document = Parser.builder().build().parse(source)
+        val paragraph = document.firstChild as? Paragraph ?: return null
+        if (paragraph !== document.lastChild || paragraph.firstChild !== paragraph.lastChild) return null
+        return paragraph.firstChild
+    }
+
+    private fun matchesInnerNode(node: Node?, kind: InlineMarkKind, text: String, destination: String?): Boolean {
+        if (node == null || !matchesKind(node, kind) || node.firstChild !== node.lastChild) return false
+        if (kind == InlineMarkKind.LINK && (node as Link).destination != destination) return false
+        return (node.firstChild as? Text)?.literal == text
+    }
+
+    private fun matchesKind(node: Node, kind: InlineMarkKind): Boolean = when (kind) {
+        InlineMarkKind.BOLD -> node is StrongEmphasis
+        InlineMarkKind.ITALIC -> node is Emphasis
+        InlineMarkKind.LINK -> node is Link
+        else -> false
     }
 
     /** Replace a typed `[[query` range with one semantic wikilink. */

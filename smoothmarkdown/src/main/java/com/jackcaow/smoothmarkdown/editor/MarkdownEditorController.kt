@@ -494,14 +494,10 @@ class MarkdownEditorController(
         return true
     }
 
-    /** Avoids crossing existing nested marks whose delimiters cannot be split safely. */
+    /** Complete-line wrap with a bounded nested emphasis/link case. */
     private fun wrapCompleteInlineSource(source: String, kind: InlineMarkKind, destination: String?): String? {
         val inline = MarkdownInlineEditing.parse(source, enableWikilinks)
-        if (inline.visible.isEmpty()) return null
-        if (inline.marks.isNotEmpty() &&
-            (inline.marks.size != 1 || inline.marks.single().kind != kind ||
-                inline.marks.single().range != TextRange(0, inline.visible.length))) return null
-        val wrapped = inline.wrap(TextRange(0, inline.visible.length), kind, destination) ?: return null
+        val wrapped = inline.wrapComplete(kind, destination) ?: return null
         if (MarkdownInlineEditing.parse(wrapped, enableWikilinks).visible != inline.visible) return null
         return wrapped
     }
