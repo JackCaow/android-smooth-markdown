@@ -222,6 +222,26 @@ class MarkdownEditorController(
         return true
     }
 
+    /** A long press starts a fresh range; drag updates keep its original anchor. */
+    fun beginFormattedBlockDrag(blockId: String): Boolean {
+        formattedBlockSelection = null
+        return extendFormattedBlockDrag(blockId)
+    }
+
+    fun extendFormattedBlockDrag(blockId: String): Boolean {
+        val document = semanticDocument()
+        val index = document.blocks.indexOfFirst { it.id == blockId && it.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) }
+        if (index < 0) return false
+        val previous = formattedBlockSelection?.takeIf { it.source == text }
+        if (previous != null && document.blocks.subList(minOf(previous.anchorIndex, index), maxOf(previous.anchorIndex, index) + 1)
+                .any { it.kind != MarkdownBlockKind.PARAGRAPH && it.kind != MarkdownBlockKind.HEADING }) return false
+        formattedBlockSelection = if (previous == null) MarkdownDocumentBlockSelection(text, index, index)
+            else previous.copy(extentIndex = index)
+        formattedListItemSelection = null
+        formattedTableCellSelection = null
+        return true
+    }
+
     fun clearFormattedBlockSelection() { formattedBlockSelection = null }
 
     /** Tap one sibling item to anchor, then another item to extend. */
@@ -234,6 +254,26 @@ class MarkdownEditorController(
         }
         formattedListItemSelection = if (old == null) MarkdownListItemSelection(text, blockId, path, path)
             else old.copy(extentPath = path)
+        return true
+    }
+
+    fun beginFormattedListItemDrag(blockId: String, path: List<Int>): Boolean {
+        formattedListItemSelection = null
+        return extendFormattedListItemDrag(blockId, path)
+    }
+
+    fun extendFormattedListItemDrag(blockId: String, path: List<Int>): Boolean {
+        if (path.isEmpty()) return false
+        val list = semanticDocument().blockById(blockId)?.let(MarkdownSourceList::parse) ?: return false
+        if (list.item(path) == null) return false
+        val previous = formattedListItemSelection?.takeIf {
+            it.source == text && it.blockId == blockId && it.parentPath == path.dropLast(1)
+        }
+        if (formattedListItemSelection != null && previous == null) return false
+        formattedListItemSelection = if (previous == null) MarkdownListItemSelection(text, blockId, path, path)
+            else previous.copy(extentPath = path)
+        formattedBlockSelection = null
+        formattedTableCellSelection = null
         return true
     }
 
@@ -294,6 +334,24 @@ class MarkdownEditorController(
         return true
     }
 
+    fun beginFormattedTableCellDrag(blockId: String, rowIndex: Int, columnIndex: Int): Boolean {
+        formattedTableCellSelection = null
+        return extendFormattedTableCellDrag(blockId, rowIndex, columnIndex)
+    }
+
+    fun extendFormattedTableCellDrag(blockId: String, rowIndex: Int, columnIndex: Int): Boolean {
+        val table = semanticTable(blockId) ?: return false
+        if (rowIndex !in 0..table.rows.size || columnIndex !in table.headers.indices) return false
+        val position = MarkdownTableCellPosition(rowIndex, columnIndex)
+        val previous = formattedTableCellSelection?.takeIf { it.source == text && it.blockId == blockId }
+        if (formattedTableCellSelection != null && previous == null) return false
+        formattedTableCellSelection = if (previous == null) MarkdownTableCellSelection(text, blockId, position, position)
+            else previous.copy(extent = position)
+        formattedBlockSelection = null
+        formattedListItemSelection = null
+        return true
+    }
+
     fun resetFormattedTableCellSelection() { formattedTableCellSelection = null }
 
     fun copyFormattedTableCellSelectionAsTsv(): String? {
@@ -313,6 +371,29 @@ class MarkdownEditorController(
         for (row in selected.firstRow..selected.lastRow) {
             for (column in selected.firstColumn..selected.lastColumn) {
                 updated = updated.replaceCell(if (row == 0) 0 else row - 1, column, "", row == 0)
+            }
+        }
+        if (updated == table) return false
+        val patches = table.sourcePatchesForCells(block.source, updated) ?: return false
+        val replacement = patches.sortedByDescending { it.start }.fold(block.source) { source, patch ->
+            source.replaceRange(patch.start, patch.end, patch.replacement)
+        }
+        return replaceSemanticBlock(selected.blockId, replacement)
+    }
+
+    /** Pastes a same-sized TSV rectangle while retaining untouched cell padding and separators. */
+    fun replaceFormattedTableCellSelectionFromTsv(tsv: String): Boolean {
+        val (table, selected) = selectedFormattedTableCells() ?: return false
+        val rows = tsv.replace("\r\n", "\n").split('\n').map { it.split('\t') }
+        if (rows.size != selected.lastRow - selected.firstRow + 1 ||
+            rows.any { it.size != selected.lastColumn - selected.firstColumn + 1 }) return false
+        val block = semanticDocument().blockById(selected.blockId) ?: return false
+        var updated = table
+        rows.forEachIndexed { rowOffset, cells ->
+            cells.forEachIndexed { columnOffset, value ->
+                val row = selected.firstRow + rowOffset
+                updated = updated.replaceCell(if (row == 0) 0 else row - 1,
+                    selected.firstColumn + columnOffset, value, row == 0)
             }
         }
         if (updated == table) return false
