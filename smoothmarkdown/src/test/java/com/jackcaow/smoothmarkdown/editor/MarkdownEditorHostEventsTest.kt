@@ -21,12 +21,23 @@ class MarkdownEditorHostEventsTest {
     }
 
     @Test fun sourceChangesAndUndoReportDistinctCommittedSnapshots() {
-        val tracker = MarkdownEditorHostEvents(TextFieldValue("First"))
+        val controller = MarkdownEditorController("First")
+        val tracker = MarkdownEditorHostEvents(controller.value)
         val source = mutableListOf<String>()
-        tracker.accept(TextFieldValue("Second"), { source += it }, null)
-        tracker.accept(TextFieldValue("Second", TextRange(2)), { source += it }, null)
-        tracker.accept(TextFieldValue("First"), { source += it }, null)
-        assertEquals(listOf("Second", "First"), source)
+        val observer: (TextFieldValue) -> Unit = { tracker.accept(it, { text -> source += text }, null) }
+        controller.addValueObserver(observer)
+
+        // Both writes occur before Compose could start another frame or collect a snapshot flow.
+        controller.text = "Second"
+        controller.text = "Third"
+        assertEquals(listOf("Second", "Third"), source)
+        controller.setSelection(2)
+        assertEquals(listOf("Second", "Third"), source)
+        check(controller.undo())
+        assertEquals(listOf("Second", "Third", "Second"), source)
+        controller.removeValueObserver(observer)
+        controller.text = "Detached"
+        assertEquals(listOf("Second", "Third", "Second"), source)
     }
 
     @Test fun imeCompositionNotifiesOnlyAfterCommitButStillReportsSelection() {

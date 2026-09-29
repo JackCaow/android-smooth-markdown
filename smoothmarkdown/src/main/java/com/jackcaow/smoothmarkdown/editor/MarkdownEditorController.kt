@@ -114,6 +114,7 @@ class MarkdownEditorController(
 
     private val undoStack = ArrayDeque<EditorSnapshot>()
     private val redoStack = ArrayDeque<EditorSnapshot>()
+    private val valueObservers = linkedSetOf<(TextFieldValue) -> Unit>()
     private var historyRevision by mutableIntStateOf(0)
     private var transactionDepth = 0
     private var transactionBefore: EditorSnapshot? = null
@@ -141,11 +142,11 @@ class MarkdownEditorController(
             formattedListItemSelection = null
             formattedTableCellSelection = null
         }
-        value = next
+        publishValue(next)
     }
 
     fun setSelection(start: Int, end: Int = start) {
-        value = value.copy(selection = TextRange(start.coerceIn(0, text.length), end.coerceIn(0, text.length)))
+        publishValue(value.copy(selection = TextRange(start.coerceIn(0, text.length), end.coerceIn(0, text.length))))
     }
 
     internal fun setFormattedSelection(blockId: String, selection: TextRange, composition: TextRange? = null) {
@@ -1102,7 +1103,7 @@ class MarkdownEditorController(
 
     private fun updateValue(next: TextFieldValue) {
         if (next.text != value.text) recordUndo(value)
-        value = next
+        publishValue(next)
         pendingListExit = null
         if (next.text != formattedBlockSelection?.source) formattedBlockSelection = null
         if (next.text != formattedListItemSelection?.source) formattedListItemSelection = null
@@ -1119,7 +1120,7 @@ class MarkdownEditorController(
     )
 
     private fun restore(snapshot: EditorSnapshot) {
-        value = snapshot.value
+        publishValue(snapshot.value)
         activeFormattedBlockId = snapshot.blockId
         formattedSelection = snapshot.selection
         formattedComposition = snapshot.composition
@@ -1141,6 +1142,16 @@ class MarkdownEditorController(
             redoStack.clear()
             historyRevision++
         }
+    }
+
+    /** Synchronous changes let a mounted host observe every edit, even within one Compose frame. */
+    internal fun addValueObserver(observer: (TextFieldValue) -> Unit) { valueObservers += observer }
+    internal fun removeValueObserver(observer: (TextFieldValue) -> Unit) { valueObservers -= observer }
+
+    private fun publishValue(next: TextFieldValue) {
+        if (next == value) return
+        value = next
+        valueObservers.toList().forEach { it(next) }
     }
 
     private fun push(stack: ArrayDeque<EditorSnapshot>, snapshot: EditorSnapshot) {

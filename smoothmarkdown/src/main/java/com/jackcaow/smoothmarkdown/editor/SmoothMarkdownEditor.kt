@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -32,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -104,13 +104,15 @@ fun SmoothMarkdownEditor(
         controller.enableWikilinks = enableWikilinks
         if (mode != null && controller.mode != mode) controller.mode = mode
     }
-    val latestOnChanged by rememberUpdatedState(onChanged)
-    val latestOnSelectionChanged by rememberUpdatedState(onSelectionChanged)
+    val latestOnChanged = rememberUpdatedState(onChanged)
+    val latestOnSelectionChanged = rememberUpdatedState(onSelectionChanged)
     val hostEvents = remember(controller) { MarkdownEditorHostEvents(controller.value) }
-    LaunchedEffect(controller) {
-        snapshotFlow { controller.value }.collect { value ->
-            hostEvents.accept(value, latestOnChanged, latestOnSelectionChanged)
+    DisposableEffect(controller, hostEvents) {
+        val observer: (TextFieldValue) -> Unit = { value ->
+            hostEvents.accept(value, latestOnChanged.value, latestOnSelectionChanged.value)
         }
+        controller.addValueObserver(observer)
+        onDispose { controller.removeValueObserver(observer) }
     }
     val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
         controller.parserPlugins?.copy()?.also { registry ->

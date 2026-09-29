@@ -40,22 +40,29 @@ class EditorHostStateUiTest {
     @Test fun hostControlsModeAndReceivesFocusModeRequests() {
         val controller = MarkdownEditorController("Content")
         var hostMode by mutableStateOf(MarkdownEditorMode.SOURCE)
+        var acceptModeRequest by mutableStateOf(false)
         val modes = mutableListOf<MarkdownEditorMode>()
         val focusModes = mutableListOf<Boolean>()
         compose.setContent {
             MaterialTheme {
                 SmoothMarkdownEditor(controller, mode = hostMode,
-                    onModeChanged = { modes += it; hostMode = it },
+                    onModeChanged = { modes += it; if (acceptModeRequest) hostMode = it },
                     onFocusModeChanged = { focusModes += it })
             }
         }
 
         compose.onNodeWithText("Preview").performClick()
+        compose.runOnIdle {
+            assertEquals(MarkdownEditorMode.SOURCE, controller.mode)
+            assertEquals(listOf(MarkdownEditorMode.PREVIEW), modes)
+            acceptModeRequest = true
+        }
+        compose.onNodeWithText("Preview").performClick()
         compose.waitUntil(5_000) { controller.mode == MarkdownEditorMode.PREVIEW }
         compose.onNodeWithTag("editor-focus-mode").performClick()
         compose.onNodeWithTag("editor-exit-focus").performClick()
         compose.runOnIdle {
-            assertEquals(listOf(MarkdownEditorMode.PREVIEW), modes)
+            assertEquals(listOf(MarkdownEditorMode.PREVIEW, MarkdownEditorMode.PREVIEW), modes)
             assertEquals(listOf(true, false), focusModes)
         }
     }
