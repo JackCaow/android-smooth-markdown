@@ -63,6 +63,12 @@ import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.WikilinkPlugin
 import kotlinx.coroutines.launch
 
+/** Compose content placed before or after the native editor toolbar controls. */
+typealias MarkdownEditorToolbarSlot = @Composable () -> Unit
+
+/** Wrap or replace the complete default toolbar. Call [defaultToolbar] to retain its controls. */
+typealias MarkdownEditorToolbarBuilder = @Composable (defaultToolbar: MarkdownEditorToolbarSlot) -> Unit
+
 /** Source editor, preview, split view, and a focused formatted-block editing surface. */
 @Composable
 fun SmoothMarkdownEditor(
@@ -82,6 +88,14 @@ fun SmoothMarkdownEditor(
     customSlashCommands: List<MarkdownEditorSlashCommand> = emptyList(),
     capabilities: MarkdownEditorCapabilities = MarkdownEditorCapabilities.All,
     toolbarCommands: List<MarkdownEditorCommand>? = null,
+    /** Whether the toolbar is shown. Find results and suggestions remain available. */
+    showToolbar: Boolean = true,
+    /** Host controls before the mode buttons, in the supplied order. */
+    toolbarLeading: List<MarkdownEditorToolbarSlot> = emptyList(),
+    /** Host controls after Find, in the supplied order. */
+    toolbarTrailing: List<MarkdownEditorToolbarSlot> = emptyList(),
+    /** Wrap or replace the complete default toolbar. */
+    toolbarBuilder: MarkdownEditorToolbarBuilder? = null,
     customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)? = null,
     customBlockBuilder: MarkdownEditorCustomBlockBuilder? = null,
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder? = null,
@@ -222,28 +236,99 @@ fun SmoothMarkdownEditor(
             }
         }
     }) {
-        if (!focusMode) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Row {
-                    MarkdownEditorMode.entries.forEach { mode ->
-                        TextButton(onClick = { requestMode(mode) }) {
-                            Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
+        if (showToolbar && !focusMode) {
+            val defaultToolbar: MarkdownEditorToolbarSlot = {
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState())) {
+                            toolbarLeading.forEach { it() }
+                            MarkdownEditorMode.entries.forEach { mode ->
+                                TextButton(onClick = { requestMode(mode) }) {
+                                    Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
+                                }
+                            }
+                        }
+                        if (onSave != null) {
+                            Button(onClick = {
+                                onSave(controller.text)
+                                controller.markSaved()
+                            }, enabled = controller.isDirty) { Text("Save") }
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-focus-mode")) {
+                            Text("Focus mode")
+                        }
+                        TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
+                            Text(if (searchOpen) "Close find" else "Find")
+                        }
+                        toolbarTrailing.forEach { it() }
+                    }
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                        TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text("Undo") }
+                        TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text("Redo") }
+                        val defaultCommands = listOf(
+                            "B" to MarkdownEditorCommand.BOLD,
+                            "I" to MarkdownEditorCommand.ITALIC,
+                            "H1" to MarkdownEditorCommand.HEADING1,
+                            "List" to MarkdownEditorCommand.UNORDERED_LIST,
+                            "Task" to MarkdownEditorCommand.TASK_LIST,
+                            (if (controller.mode == MarkdownEditorMode.FORMATTED) "Inline code" else "Code") to
+                                (if (controller.mode == MarkdownEditorMode.FORMATTED) MarkdownEditorCommand.INLINE_CODE else MarkdownEditorCommand.CODE_BLOCK),
+                            "Link" to MarkdownEditorCommand.LINK,
+                            "Table" to MarkdownEditorCommand.TABLE,
+                            "Wikilink" to MarkdownEditorCommand.WIKILINK,
+                        )
+                        val buttons = toolbarCommands?.map { editorToolbarLabel(it) to it } ?: defaultCommands
+                        buttons.filter { capabilities.supports(it.second) }.forEach { (label, command) ->
+                            TextButton(onClick = {
+                                if (command == MarkdownEditorCommand.IMAGE && onPickImage != null) {
+                                    onCommand?.invoke(command)
+                                    runHostAction("Image") {
+                                        MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
+                                    }
+                                } else applyEditorCommand(command)
+                            }, enabled = (command != MarkdownEditorCommand.WIKILINK || enableWikilinks) &&
+                                (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(label) }
+                        }
+                        if (onPickImage != null && (toolbarCommands == null || MarkdownEditorCommand.IMAGE !in toolbarCommands) &&
+                            capabilities.supports(MarkdownEditorCommand.IMAGE)) {
+                            TextButton(onClick = {
+                                onCommand?.invoke(MarkdownEditorCommand.IMAGE)
+                                runHostAction("Image") {
+                                    MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
+                                }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-pick-image")) { Text("Image") }
+                        }
+                        if (onImportMarkdown != null) {
+                            TextButton(onClick = {
+                                runHostAction("Import") {
+                                    MarkdownEditorHostActions.importMarkdown(controller, onImportMarkdown, onHostActionError)
+                                }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-import-markdown")) { Text("Import") }
+                        }
+                        if (onExportMarkdown != null) {
+                            TextButton(onClick = {
+                                runHostAction("Export") {
+                                    MarkdownEditorHostActions.exportMarkdown(controller, onExportMarkdown, onHostActionError)
+                                }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text("Export") }
+                        }
+                        if (onExportPdf != null) {
+                            TextButton(onClick = {
+                                runHostAction("PDF export") {
+                                    MarkdownEditorHostActions.exportPdf(controller, onExportPdf, onHostActionError)
+                                }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-pdf")) { Text("Export PDF") }
                         }
                     }
                 }
-            if (onSave != null) {
-                Button(onClick = {
-                    onSave(controller.text)
-                    controller.markSaved()
-                }, enabled = controller.isDirty) { Text("Save") }
             }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag(if (focusMode) "editor-exit-focus" else "editor-focus-mode")) {
-                Text(if (focusMode) "Exit focus" else "Focus mode")
-            }
-            if (!focusMode) {
-                TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
-                    Text(if (searchOpen) "Close find" else "Find")
+            if (toolbarBuilder == null) defaultToolbar() else toolbarBuilder(defaultToolbar)
+        } else if (showToolbar && focusMode) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-exit-focus")) {
+                    Text("Exit focus")
                 }
             }
         }
@@ -284,64 +369,6 @@ fun SmoothMarkdownEditor(
                         modifier = Modifier.testTag("editor-slash-suggestion-$index"),
                     ) { Text(item.title) }
                 }
-            }
-        }
-        if (!focusMode) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text("Undo") }
-            TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text("Redo") }
-            val defaultCommands = listOf(
-                "B" to MarkdownEditorCommand.BOLD,
-                "I" to MarkdownEditorCommand.ITALIC,
-                "H1" to MarkdownEditorCommand.HEADING1,
-                "List" to MarkdownEditorCommand.UNORDERED_LIST,
-                "Task" to MarkdownEditorCommand.TASK_LIST,
-                (if (controller.mode == MarkdownEditorMode.FORMATTED) "Inline code" else "Code") to
-                    (if (controller.mode == MarkdownEditorMode.FORMATTED) MarkdownEditorCommand.INLINE_CODE else MarkdownEditorCommand.CODE_BLOCK),
-                "Link" to MarkdownEditorCommand.LINK,
-                "Table" to MarkdownEditorCommand.TABLE,
-                "Wikilink" to MarkdownEditorCommand.WIKILINK,
-            )
-            val buttons = toolbarCommands?.map { editorToolbarLabel(it) to it } ?: defaultCommands
-            buttons.filter { capabilities.supports(it.second) }.forEach { (label, command) ->
-                TextButton(onClick = {
-                    if (command == MarkdownEditorCommand.IMAGE && onPickImage != null) {
-                        onCommand?.invoke(command)
-                        runHostAction("Image") {
-                            MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
-                        }
-                    } else applyEditorCommand(command)
-                }, enabled = (command != MarkdownEditorCommand.WIKILINK || enableWikilinks) &&
-                    (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(label) }
-            }
-            if (onPickImage != null && (toolbarCommands == null || MarkdownEditorCommand.IMAGE !in toolbarCommands) &&
-                capabilities.supports(MarkdownEditorCommand.IMAGE)) {
-                TextButton(onClick = {
-                    onCommand?.invoke(MarkdownEditorCommand.IMAGE)
-                    runHostAction("Image") {
-                        MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
-                    }
-                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-pick-image")) { Text("Image") }
-            }
-            if (onImportMarkdown != null) {
-                TextButton(onClick = {
-                    runHostAction("Import") {
-                        MarkdownEditorHostActions.importMarkdown(controller, onImportMarkdown, onHostActionError)
-                    }
-                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-import-markdown")) { Text("Import") }
-            }
-            if (onExportMarkdown != null) {
-                TextButton(onClick = {
-                    runHostAction("Export") {
-                        MarkdownEditorHostActions.exportMarkdown(controller, onExportMarkdown, onHostActionError)
-                    }
-                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text("Export") }
-            }
-            if (onExportPdf != null) {
-                TextButton(onClick = {
-                    runHostAction("PDF export") {
-                        MarkdownEditorHostActions.exportPdf(controller, onExportPdf, onHostActionError)
-                    }
-                }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-pdf")) { Text("Export PDF") }
             }
         }
         if (hostStatus.isNotEmpty()) Text(hostStatus, modifier = Modifier.testTag("editor-host-status"))
