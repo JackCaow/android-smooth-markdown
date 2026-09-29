@@ -41,6 +41,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -377,8 +378,9 @@ private fun DemoHome(
                         modifier = Modifier.testTag("open-navigation")) {
                         Icon(Icons.Filled.Menu, contentDescription = localizations.chrome(language, "examples"))
                     }
-                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f))
+                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).testTag("demo-app-title"))
                     IconButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
                         Icon(Icons.Filled.EditNote, contentDescription = localizations.chrome(language, "edit"))
                     }
@@ -404,32 +406,6 @@ private fun DemoHome(
                         }
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.primaryContainer)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val titleColor = if (isDark) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                    val exampleIndex = examples.indexOfFirst { it.id == exampleId }.coerceAtLeast(0)
-                    Icon(exampleIcon(exampleIndex), contentDescription = null, tint = titleColor)
-                    Spacer(Modifier.width(12.dp))
-                    Text(currentTitle, style = MaterialTheme.typography.titleLarge, color = titleColor,
-                        modifier = Modifier.weight(1f).testTag("current-title"))
-                    Row(
-                        Modifier.background(if (isDark) Color(0xFF21262D) else Color.White.copy(alpha = 0.3f),
-                            RoundedCornerShape(12.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .testTag("current-theme"),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                            contentDescription = null, tint = titleColor, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(localizations.theme(language, themeIndex), fontSize = 12.sp, color = titleColor)
-                    }
-                }
-                HorizontalDivider(color = if (isDark) Color(0xFF30363D) else Color(0xFFE0E0E0))
             } else {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back")) {
