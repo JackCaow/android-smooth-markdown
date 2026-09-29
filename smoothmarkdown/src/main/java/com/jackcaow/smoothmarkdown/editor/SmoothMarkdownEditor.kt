@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -524,6 +525,9 @@ private fun FormattedBlockPane(
     val listSelection = controller.formattedListItemSelection?.takeIf { it.source == controller.text }
     val tableSelection = controller.formattedTableCellSelection?.takeIf { it.source == controller.text }
     val dragSelection = remember(controller, controller.text) { FormattedDragSelection(controller) }
+    var textEndpoints by remember(controller, controller.text) { mutableStateOf<FormattedTextEndpoints?>(null) }
+    var textSelectionError by remember(controller, controller.text) { mutableStateOf(false) }
+    var textReplacement by remember(controller) { mutableStateOf("") }
     var blockReplacement by remember(controller) { mutableStateOf("") }
     var tableReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
@@ -595,6 +599,7 @@ private fun FormattedBlockPane(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         TextButton(onClick = {
+                            textEndpoints = null
                             controller.selectFormattedBlock(block.id)
                             blockSelectionError = false
                         }, modifier = Modifier.testTag("formatted-block-select-${block.id}").semantics {
@@ -644,8 +649,15 @@ private fun FormattedBlockPane(
                         val dragModifier = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
                             Modifier.formattedDragSelectionTarget(dragSelection, FormattedDragTarget.Block(block.id))
                                 .testTag("formatted-block-drag-${block.id}") else Modifier
+                        val decorated = AnnotatedString.Builder(inline?.annotated(MaterialTheme.colorScheme.primary)
+                            ?: AnnotatedString(editableText)).apply {
+                            textEndpoints?.visibleRange(blocks, block.id, visibleLength)?.let { range ->
+                                addStyle(SpanStyle(background = editorTheme.selectionColor
+                                    ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
+                            }
+                        }.toAnnotatedString()
                         BasicTextField(
-                            value = TextFieldValue(inline?.annotated(MaterialTheme.colorScheme.primary) ?: androidx.compose.ui.text.AnnotatedString(editableText), fieldSelection, fieldComposition),
+                            value = TextFieldValue(decorated, fieldSelection, fieldComposition),
                             onValueChange = { next ->
                                 selectedSuggestion = 0
                                 dismissedQuery = null
@@ -694,6 +706,25 @@ private fun FormattedBlockPane(
                             },
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         )
+                        if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) &&
+                            controller.activeFormattedBlockId == block.id) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = {
+                                    controller.clearFormattedBlockSelection()
+                                    controller.clearFormattedListItemSelection()
+                                    controller.resetFormattedTableCellSelection()
+                                    textEndpoints = FormattedTextEndpoints(controller.text,
+                                        MarkdownFormattedTextPosition(block.id, controller.formattedSelection.start))
+                                    textSelectionError = false
+                                }, modifier = Modifier.testTag("formatted-text-start-${block.id}")) { Text("Set start") }
+                                TextButton(onClick = {
+                                    textEndpoints = textEndpoints?.withFocus(
+                                        MarkdownFormattedTextPosition(block.id, controller.formattedSelection.end))
+                                    textSelectionError = false
+                                }, enabled = textEndpoints != null,
+                                    modifier = Modifier.testTag("formatted-text-end-${block.id}")) { Text("Set end") }
+                            }
+                        }
                         if (showSuggestions) {
                             Column(Modifier.fillMaxWidth()
                                 .background(editorTheme.suggestionPanelColor ?: MaterialTheme.colorScheme.surface)
@@ -726,6 +757,38 @@ private fun FormattedBlockPane(
         }
         if (pendingExit != null && !pendingRendered) {
             PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(bottom = 10.dp))
+        }
+        if (textEndpoints != null) {
+            val range = textEndpoints?.selection()
+            Text(if (range == null) "Start set. Place the caret in a paragraph or heading, then tap End."
+                else "Text range selected. Copy Markdown, delete, or replace it below.",
+                modifier = Modifier.testTag("formatted-text-selection-status"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    val copied = range?.let(controller::copyFormattedTextSelectionAsMarkdown)
+                    textSelectionError = copied == null
+                    if (copied != null) clipboard.setText(AnnotatedString(copied))
+                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-copy")) { Text("Copy Markdown") }
+                TextButton(onClick = {
+                    textSelectionError = range?.let(controller::deleteFormattedTextSelection) != true
+                    if (!textSelectionError) textEndpoints = null
+                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-delete")) { Text("Delete text") }
+                TextButton(onClick = {
+                    textSelectionError = range?.let { controller.replaceFormattedTextSelectionWithMarkdown(it, textReplacement) } != true
+                    if (!textSelectionError) { textEndpoints = null; textReplacement = "" }
+                }, enabled = range != null && textReplacement.isNotBlank(),
+                    modifier = Modifier.testTag("formatted-text-replace")) { Text("Replace text") }
+                TextButton(onClick = { textEndpoints = null; textSelectionError = false },
+                    modifier = Modifier.testTag("formatted-text-clear")) { Text("Clear") }
+            }
+            if (range != null) {
+                OutlinedTextField(value = textReplacement,
+                    onValueChange = { textReplacement = it; textSelectionError = false },
+                    label = { Text("Replacement Markdown") },
+                    modifier = Modifier.fillMaxWidth().testTag("formatted-text-replacement"))
+            }
+            if (textSelectionError) Text("Cannot preserve this selection's Markdown structure. Use full blocks or Source.",
+                modifier = Modifier.testTag("formatted-text-edit-error"))
         }
         if (blockSelection != null) {
             Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
