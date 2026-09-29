@@ -142,6 +142,8 @@ fun SmoothMarkdownEditor(
     editorTheme: MarkdownEditorTheme? = null,
     /** Custom node renderers for Preview and Split, overriding built-in reader rendering. */
     builderRegistry: MarkdownBuilderRegistry? = null,
+    /** Resolves host-owned image sources in Preview, Split, and formatted image blocks. */
+    imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
 ) {
     val effectiveTheme = LocalMarkdownEditorTheme.current.merge(editorTheme)
     val colors = MaterialTheme.colorScheme
@@ -429,7 +431,7 @@ fun SmoothMarkdownEditor(
                 .background(effectiveTheme.previewColor ?: colors.surface)
                 .padding(effectiveTheme.previewPadding ?: 16.dp),
                 plugins = previewPlugins, onWikilinkClick = onTapWikilink,
-                builderRegistry = builderRegistry)
+                builderRegistry = builderRegistry, imageBuilder = imageBuilder)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f)) { focused ->
                     sourceFocus.setFocused(focused, latestOnFocusChanged.value)
@@ -440,11 +442,12 @@ fun SmoothMarkdownEditor(
                     .background(effectiveTheme.previewColor ?: colors.surface)
                     .padding(effectiveTheme.previewPadding ?: 16.dp),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink,
-                    builderRegistry = builderRegistry)
+                    builderRegistry = builderRegistry, imageBuilder = imageBuilder)
             }
             MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
                 controller, Modifier.weight(1f), wikilinkSuggestions,
                 customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
+                imageBuilder,
                 onSourcePaste = { onModeChanged?.invoke(MarkdownEditorMode.SOURCE) },
             )
         }
@@ -526,6 +529,7 @@ private fun FormattedBlockPane(
     customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)?,
     customBlockBuilder: MarkdownEditorCustomBlockBuilder?,
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder?,
+    imageBuilder: (@Composable (String, String?, String?) -> Unit)?,
     onSourcePaste: () -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
@@ -743,6 +747,9 @@ private fun FormattedBlockPane(
                                 focusManager.clearFocus()
                             })
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                    } else if (block.kind == MarkdownBlockKind.IMAGE) {
+                        SmoothMarkdown(block.source, Modifier.fillMaxWidth().testTag("formatted-image-${block.id}"),
+                            imageBuilder = imageBuilder)
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
                         val rawSelection = if (controller.activeFormattedBlockId == block.id) controller.formattedSelection else TextRange.Zero

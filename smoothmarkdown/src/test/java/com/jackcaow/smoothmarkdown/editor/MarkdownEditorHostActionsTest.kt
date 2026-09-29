@@ -26,24 +26,32 @@ class MarkdownEditorHostActionsTest {
         assertEquals("Intro", controller.text)
         assertEquals(TextRange(0, 5), controller.selection)
         assertFalse(controller.canUndo)
+        assertTrue(controller.redo())
+        assertEquals("![Intro](assets/local.png \"Local asset\")", controller.text)
+        assertEquals(TextRange(controller.text.length), controller.selection)
     }
 
     @Test fun imageCancellationFailureAndStaleResultPreserveDocument() = runBlocking {
         val controller = MarkdownEditorController("Intro")
+        controller.setSelection(1, 4)
+        val before = controller.value
         val events = mutableListOf<MarkdownEditorImagePickEvent>()
+        val errors = mutableListOf<Pair<MarkdownEditorHostAction, Throwable>>()
         assertEquals(MarkdownEditorHostResult.CANCELLED,
             MarkdownEditorHostActions.pickAndInsertImage(controller, { null }, { events += it }))
-        assertEquals("Intro", controller.text)
+        assertEquals(before, controller.value)
         assertFalse(controller.canUndo)
 
         val failure = IllegalStateException("upload failed")
         assertEquals(MarkdownEditorHostResult.FAILED,
-            MarkdownEditorHostActions.pickAndInsertImage(controller, { throw failure }, { events += it }))
+            MarkdownEditorHostActions.pickAndInsertImage(controller, { throw failure }, { events += it },
+                { action, error -> errors += action to error }))
         assertEquals(failure, events.last().error)
+        assertEquals(listOf(MarkdownEditorHostAction.IMAGE to failure), errors)
         assertEquals(MarkdownEditorHostResult.FAILED,
             MarkdownEditorHostActions.pickAndInsertImage(controller,
                 { MarkdownEditorImageSelection("javascript:alert(1)") }, { events += it }))
-        assertEquals("Intro", controller.text)
+        assertEquals(before, controller.value)
         assertFalse(controller.canUndo)
 
         assertEquals(MarkdownEditorHostResult.STALE,
@@ -52,19 +60,23 @@ class MarkdownEditorHostActionsTest {
                 MarkdownEditorImageSelection("assets/local.png")
             }, { events += it }))
         assertEquals("Intro", controller.text)
+        assertEquals(TextRange(0), controller.selection)
         assertFalse(controller.canUndo)
     }
 
     @Test fun importCancelsOnBlankOrFailureAndInsertsAsOneUndoStep() = runBlocking {
         val controller = MarkdownEditorController("Intro")
+        controller.setSelection(5)
+        val before = controller.value
         val errors = mutableListOf<Throwable>()
         assertEquals(MarkdownEditorHostResult.CANCELLED,
             MarkdownEditorHostActions.importMarkdown(controller, { "  " }))
+        assertEquals(before, controller.value)
         assertEquals(MarkdownEditorHostResult.FAILED,
             MarkdownEditorHostActions.importMarkdown(controller, { error("picker failed") },
                 { _, error -> errors += error }))
         assertEquals(1, errors.size)
-        assertEquals("Intro", controller.text)
+        assertEquals(before, controller.value)
         assertFalse(controller.canUndo)
 
         assertEquals(MarkdownEditorHostResult.SUCCESS,
@@ -73,6 +85,8 @@ class MarkdownEditorHostActionsTest {
         assertTrue(controller.undo())
         assertEquals("Intro", controller.text)
         assertFalse(controller.canUndo)
+        assertTrue(controller.redo())
+        assertEquals("Intro\n\n# Imported\n\nBody", controller.text)
     }
 
     @Test fun exportReceivesExactSnapshotAndNeverMutatesSource() = runBlocking {

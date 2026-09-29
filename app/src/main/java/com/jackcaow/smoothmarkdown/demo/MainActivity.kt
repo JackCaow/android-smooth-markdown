@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -85,6 +86,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schema
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material.icons.filled.Title
+import coil.compose.AsyncImage
 import com.jackcaow.smoothmarkdown.AdmonitionPlugin
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.EmojiPlugin
@@ -97,9 +99,13 @@ import com.jackcaow.smoothmarkdown.SmoothMarkdown
 import com.jackcaow.smoothmarkdown.ThinkingPlugin
 import com.jackcaow.smoothmarkdown.ToolCallPlugin
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorHostAction
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImagePickEvent
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImagePickStatus
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
+import java.io.File
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -190,6 +196,7 @@ internal fun demoColorScheme(themeIndex: Int): ColorScheme = if (demoThemeIsDark
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val editorHost = DemoEditorActivityHost(this)
         val examples = runCatching { loadExamples(assets) }
         val staticPages = runCatching { loadDemoPageMarkdown(assets) }
         val streamingFixture = runCatching { loadStreamingDemoFixture(assets) }
@@ -223,6 +230,10 @@ class MainActivity : ComponentActivity() {
                     openAIChat = { startActivity(Intent(this, AIChatActivity::class.java)) },
                     openConversationList = { startActivity(Intent(this, ConversationListActivity::class.java)) },
                     openLink = { url -> Toast.makeText(this, "Link tapped: $url", Toast.LENGTH_SHORT).show() },
+                    pickEditorImage = editorHost::pickImage,
+                    importEditorMarkdown = editorHost::importMarkdown,
+                    exportEditorMarkdown = editorHost::exportMarkdown,
+                    resolveEditorImage = editorHost::resolveImage,
                 )
             }
         }
@@ -245,6 +256,10 @@ private fun DemoHome(
     openAIChat: () -> Unit,
     openConversationList: () -> Unit,
     openLink: (String) -> Unit,
+    pickEditorImage: suspend () -> MarkdownEditorImageSelection?,
+    importEditorMarkdown: suspend () -> String?,
+    exportEditorMarkdown: suspend (String) -> Unit,
+    resolveEditorImage: (String) -> File?,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -256,6 +271,8 @@ private fun DemoHome(
     var themeMenu by remember { mutableStateOf(false) }
     var showSource by remember { mutableStateOf(false) }
     var exportedLength by remember { mutableStateOf<Int?>(null) }
+    var imagePickStatus by remember { mutableStateOf<MarkdownEditorImagePickStatus?>(null) }
+    var hostActionError by remember { mutableStateOf<String?>(null) }
     var pdfExportLength by remember { mutableStateOf<Int?>(null) }
     var tappedWikilink by remember { mutableStateOf<String?>(null) }
     val example = examples.first { it.id == exampleId }
@@ -428,6 +445,12 @@ private fun DemoHome(
                     Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
                 }
+                imagePickStatus?.let {
+                    Text("Image: ${it.name.lowercase()}", modifier = Modifier.testTag("image-pick-status"))
+                }
+                hostActionError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("editor-host-error"))
+                }
                 pdfExportLength?.let {
                     Text("PDF export requested for $it characters",
                         modifier = Modifier.testTag("pdf-export-status"))
@@ -436,9 +459,26 @@ private fun DemoHome(
                 SmoothMarkdownEditor(
                     controller = controller,
                     modifier = Modifier.weight(1f),
-                    onPickImage = { MarkdownEditorImageSelection("https://picsum.photos/640/360", "Sample image", "Demo image") },
-                    onImportMarkdown = { "## Imported markdown\n\nThis came from the host callback." },
-                    onExportMarkdown = { exportedLength = it.length },
+                    onPickImage = pickEditorImage,
+                    onImagePickEvent = { event: MarkdownEditorImagePickEvent ->
+                        imagePickStatus = event.status
+                        if (event.status == MarkdownEditorImagePickStatus.PICKING) hostActionError = null
+                    },
+                    onImportMarkdown = importEditorMarkdown,
+                    onExportMarkdown = { markdown ->
+                        exportEditorMarkdown(markdown)
+                        exportedLength = markdown.length
+                    },
+                    onHostActionError = { action: MarkdownEditorHostAction, error: Throwable ->
+                        hostActionError = "${action.name.lowercase().replace('_', ' ')}: ${error.message ?: "failed"}"
+                    },
+                    imageBuilder = { source, alt, title ->
+                        val model = resolveEditorImage(source)
+                            ?: if (source.contains(':')) source else "file:///android_asset/${source.trimStart('/')}"
+                        AsyncImage(model = model, contentDescription = alt?.ifBlank { title ?: "Image" } ?: title,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 240.dp),
+                            contentScale = ContentScale.Fit)
+                    },
                     onExportPdf = { markdown, _ -> pdfExportLength = markdown.length },
                     wikilinkSuggestions = listOf("Daily Notes", "Project Plan", "Research Index", "Scratch Reference"),
                     onTapWikilink = { tappedWikilink = it },
