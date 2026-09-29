@@ -61,4 +61,27 @@ class MarkdownDocumentTest {
         assertTrue(controller.undo())
         assertEquals("before\n\n# Title\n\nafter", controller.text)
     }
+
+    @Test fun hostCustomBlockCanChangeSyntaxWithoutTouchingNeighborsAndUndoOnce() {
+        val original = "Before\r\n\r\n<div>Old</div>\r\n\r\nAfter"
+        val controller = MarkdownEditorController(original)
+        val raw = controller.semanticDocument().blocks[1]
+        assertEquals(MarkdownBlockKind.RAW, raw.kind)
+        assertTrue(controller.replaceCustomBlockMarkdown(original, raw, "## Edited"))
+        assertEquals("Before\r\n\r\n## Edited\r\n\r\nAfter", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun hostCustomBlockRejectsStaleAndUncontainedEdits() {
+        val original = "Before\n\n<div>Old</div>\n\nAfter"
+        val controller = MarkdownEditorController(original)
+        val raw = controller.semanticDocument().blocks[1]
+        assertFalse(controller.replaceCustomBlockMarkdown(original, raw, "## Edited\n"))
+        assertEquals(original, controller.text)
+        controller.text = original + "!"
+        assertFalse(controller.replaceCustomBlockMarkdown(original, raw, "## Edited"))
+        assertEquals(original + "!", controller.text)
+    }
 }

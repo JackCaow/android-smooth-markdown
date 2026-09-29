@@ -235,6 +235,30 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         return true
     }
 
+    /** Replaces one host-owned block, allowing its syntax to change while preserving neighbors. */
+    fun replaceCustomBlockMarkdown(expectedSource: String, block: MarkdownDocumentBlock, markdown: String): Boolean {
+        if (text != expectedSource) return false
+        val current = semanticDocument()
+        val index = current.blocks.indexOfFirst { it.id == block.id }
+        if (index < 0 || current.blocks[index] != block) return false
+        val replacement = if (markdown.isEmpty()) emptyList() else {
+            MarkdownDocumentCodec.parse(markdown).blocks.also {
+                if (it.isEmpty() || it.first().range.min != 0 || it.last().range.max != markdown.length) return false
+            }
+        }
+        val candidate = text.replaceRange(block.range.min, block.range.max, markdown)
+        val reparsed = MarkdownDocumentCodec.parse(candidate).blocks
+        val before = current.blocks.take(index)
+        val after = current.blocks.drop(index + 1)
+        if (reparsed.size != before.size + replacement.size + after.size) return false
+        if (before.zip(reparsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (replacement.zip(reparsed.drop(before.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (after.zip(reparsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (candidate == text) return true
+        replaceRange(block.range.min, block.range.max, markdown)
+        return true
+    }
+
     /** Changes the visible text of a supported formatted block using source history. */
     fun replaceFormattedBlockText(blockId: String, visibleText: String): Boolean {
         val block = semanticDocument().blockById(blockId) ?: return false

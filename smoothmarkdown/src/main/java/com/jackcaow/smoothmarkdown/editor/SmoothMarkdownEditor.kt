@@ -78,6 +78,9 @@ fun SmoothMarkdownEditor(
     customSlashCommands: List<MarkdownEditorSlashCommand> = emptyList(),
     capabilities: MarkdownEditorCapabilities = MarkdownEditorCapabilities.All,
     toolbarCommands: List<MarkdownEditorCommand>? = null,
+    customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)? = null,
+    customBlockBuilder: MarkdownEditorCustomBlockBuilder? = null,
+    customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder? = null,
 ) {
     SideEffect { controller.enableWikilinks = enableWikilinks }
     val previewPlugins = remember(enableWikilinks) {
@@ -258,7 +261,10 @@ fun SmoothMarkdownEditor(
                 SmoothMarkdown(controller.text, Modifier.weight(1f),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             }
-            MarkdownEditorMode.FORMATTED -> FormattedBlockPane(controller, Modifier.weight(1f), wikilinkSuggestions)
+            MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
+                controller, Modifier.weight(1f), wikilinkSuggestions,
+                customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
+            )
         }
     }
 }
@@ -289,13 +295,21 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier)
 
 /** Paragraphs, ATX headings, fenced code, and GFM tables expose source-backed content. */
 @Composable
-private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: Modifier, wikilinkSuggestions: List<String>) {
+private fun FormattedBlockPane(
+    controller: MarkdownEditorController,
+    modifier: Modifier,
+    wikilinkSuggestions: List<String>,
+    customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)?,
+    customBlockBuilder: MarkdownEditorCustomBlockBuilder?,
+    customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder?,
+) {
     val blocks = controller.semanticDocument().blocks
     val pendingExit = controller.pendingListExit
     val clipboard = LocalClipboardManager.current
     val blockSelection = controller.formattedBlockSelection?.takeIf { it.source == controller.text }
     var blockReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
+    var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         if (blockSelection != null) {
             Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
@@ -331,6 +345,37 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
             }
             if (pendingExit != null && pendingExit.offset > block.range.min && pendingExit.offset < block.range.max &&
                 block.kind in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST)) pendingRendered = true
+            val custom = customBlockMatcher?.invoke(block) == true &&
+                (customBlockBuilder != null || customBlockEditorBuilder != null)
+            if (custom) {
+                val sourceSnapshot = controller.text
+                val replace: (String) -> Boolean = { markdown ->
+                    controller.replaceCustomBlockMarkdown(sourceSnapshot, block, markdown).also { changed ->
+                        if (changed) activeCustomBlock = null
+                    }
+                }
+                val delete: () -> Boolean = { replace("") }
+                val edit: () -> Unit = { activeCustomBlock = block.id to sourceSnapshot }
+                val active = activeCustomBlock == (block.id to sourceSnapshot)
+                val plainText = MarkdownFormattedBlock.text(block) ?: block.source
+                if (active && customBlockEditorBuilder != null) {
+                    customBlockEditorBuilder(MarkdownEditorCustomBlockEditorContext(
+                        block.id, block.kind, block.source, plainText,
+                        replace, { activeCustomBlock = null }, delete,
+                    ))
+                } else if (customBlockBuilder != null) {
+                    customBlockBuilder(MarkdownEditorCustomBlockContext(
+                        block.id, block.kind, block.source, plainText, edit, replace, delete,
+                    ))
+                } else {
+                    Surface(Modifier.fillMaxWidth().padding(bottom = 10.dp), tonalElevation = 1.dp) {
+                        Row(Modifier.padding(12.dp)) {
+                            Text(block.source, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                            TextButton(onClick = edit) { Text("Edit custom") }
+                        }
+                    }
+                }
+            } else {
             val editableText = MarkdownFormattedBlock.text(block)
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
@@ -460,6 +505,7 @@ private fun FormattedBlockPane(controller: MarkdownEditorController, modifier: M
                         )
                     }
                 }
+            }
             }
         }
         if (pendingExit != null && !pendingRendered) {
