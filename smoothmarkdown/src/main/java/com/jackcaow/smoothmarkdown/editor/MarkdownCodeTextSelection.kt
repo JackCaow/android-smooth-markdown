@@ -68,9 +68,13 @@ internal class MarkdownCodeTextSelection private constructor(
         val right = last.after() ?: return null
         val expected = mutableListOf<Pair<MarkdownBlockKind, String>>()
         val pieces = mutableListOf<String>()
-        // Deleting within one code block edits its body and retains the original fence.
-        if (firstIndex == lastIndex && markdown.isEmpty()) {
-            val combined = left + right
+        // A plain partial edit belongs to the existing code body. A whole-body Markdown
+        // replacement may intentionally replace the fenced block with parsed blocks.
+        val editsCodeBody = firstIndex == lastIndex && first.block.kind == MarkdownBlockKind.CODE &&
+            (markdown.isEmpty() || first.offset > 0 || last.offset < first.visible.length) &&
+            (markdown.isEmpty() || (inserted.size == 1 && inserted.single().kind == MarkdownBlockKind.PARAGRAPH))
+        if (editsCodeBody) {
+            val combined = left + markdown + right
             val replacement = first.markdown(combined) ?: return null
             expected += first.block.kind to replacement
             pieces += replacement
@@ -103,7 +107,7 @@ internal class MarkdownCodeTextSelection private constructor(
             expected.zip(parsed.drop(before.size)).any { (want, next) -> want.first != next.kind || want.second != next.source } ||
             after.zip(parsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return null
         val caret = when {
-            firstIndex == lastIndex && markdown.isEmpty() -> replacement.length - (left + right).length + left.length
+            editsCodeBody -> replacement.length - (left + markdown + right).length + left.length + markdown.length
             markdown.isNotEmpty() -> (if (left.isNotEmpty()) pieces.first().length + separator.length else 0) + markdown.length
             left.isNotEmpty() -> pieces.first().length
             else -> 0
