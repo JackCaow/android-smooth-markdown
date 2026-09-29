@@ -84,7 +84,8 @@ class MarkdownInlineEditingTest {
         val controller = MarkdownEditorController(original)
         controller.mode = MarkdownEditorMode.FORMATTED
         val id = controller.semanticDocument().blocks.single().id
-        controller.setFormattedSelection(id, TextRange(0, 5), TextRange(0, 5))
+        controller.setFormattedSelection(id, TextRange(0, 5), composition = TextRange(0, 5))
+        assertEquals(TextRange(0, 5), controller.formattedComposition)
         controller.applyCommand(MarkdownEditorCommand.STRIKETHROUGH)
         assertEquals(original, controller.text)
         assertFalse(controller.canUndo)
