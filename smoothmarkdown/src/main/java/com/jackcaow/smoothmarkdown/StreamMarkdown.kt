@@ -30,6 +30,13 @@ fun StreamMarkdown(
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     scrollable: Boolean = true,
+    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
+    onCodeCopied: ((String) -> Unit)? = null,
+    selectable: Boolean = false,
+    selectionController: SmoothSelectionController? = null,
+    loadingContent: (@Composable () -> Unit)? = null,
+    errorContent: (@Composable (Throwable) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     // HTML is a rendering option, not a new stream. Keep collecting the same
@@ -38,34 +45,37 @@ fun StreamMarkdown(
         value = StreamSnapshot()
         val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis())
         var pending: Job? = null
+        var hasReceivedData = false
         try {
             chunks.collect { chunk ->
+                hasReceivedData = true
                 val wait = buffer.append(chunk, SystemClock.uptimeMillis())
                 pending?.cancel()
                 if (wait == null) {
-                    value = StreamSnapshot(buffer.visibleText)
+                    value = StreamSnapshot(buffer.visibleText, hasReceivedData = true)
                 } else {
                     pending = launch {
                         delay(wait)
                         buffer.flush(SystemClock.uptimeMillis())
-                        value = StreamSnapshot(buffer.visibleText)
+                        value = StreamSnapshot(buffer.visibleText, hasReceivedData = true)
                     }
                 }
             }
             pending?.cancel()
             buffer.finish(SystemClock.uptimeMillis())
-            value = StreamSnapshot(buffer.visibleText, complete = true)
+            value = StreamSnapshot(buffer.visibleText, complete = true, hasReceivedData = hasReceivedData)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
             errorHandler(error)
+            value = StreamSnapshot(buffer.visibleText, hasReceivedData = hasReceivedData, error = error)
         } finally {
             pending?.cancel()
         }
     }
-    SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
-        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
-        imageBuilder = imageBuilder, scrollable = scrollable)
+    StreamMarkdownContent(snapshot, modifier, onLinkClick, onImageClick, enableHtml, styleSheet,
+        plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
+        onCodeCopied, selectable, selectionController, loadingContent, errorContent)
 }
 
 /** Renders a cumulative streaming source. A late-composed chat bubble receives the latest
@@ -85,6 +95,13 @@ fun StreamMarkdown(
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     scrollable: Boolean = true,
+    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
+    onCodeCopied: ((String) -> Unit)? = null,
+    selectable: Boolean = false,
+    selectionController: SmoothSelectionController? = null,
+    loadingContent: (@Composable () -> Unit)? = null,
+    errorContent: (@Composable (Throwable) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val snapshot by produceState(initialValue = StreamSnapshot(), key1 = prefixes, key2 = throttleMillis) {
@@ -96,12 +113,12 @@ fun StreamMarkdown(
                 val wait = buffer.appendPrefix(prefix, SystemClock.uptimeMillis())
                 pending?.cancel()
                 if (wait == null) {
-                    value = StreamSnapshot(buffer.visibleText)
+                    value = StreamSnapshot(buffer.visibleText, hasReceivedData = true)
                 } else {
                     pending = launch {
                         delay(wait)
                         buffer.flush(SystemClock.uptimeMillis())
-                        value = StreamSnapshot(buffer.visibleText)
+                        value = StreamSnapshot(buffer.visibleText, hasReceivedData = true)
                     }
                 }
             }
@@ -109,16 +126,54 @@ fun StreamMarkdown(
             throw cancelled
         } catch (error: Throwable) {
             errorHandler(error)
+            value = StreamSnapshot(buffer.visibleText, hasReceivedData = true, error = error)
         } finally {
             pending?.cancel()
         }
     }
-    SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
-        styleSheet = styleSheet, plugins = plugins, onImageClickWithMetadata = onImageClickWithMetadata,
-        imageBuilder = imageBuilder, scrollable = scrollable)
+    StreamMarkdownContent(snapshot, modifier, onLinkClick, onImageClick, enableHtml, styleSheet,
+        plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
+        onCodeCopied, selectable, selectionController, loadingContent, errorContent)
 }
 
-internal data class StreamSnapshot(val text: String = "", val complete: Boolean = false) {
+@Composable
+private fun StreamMarkdownContent(
+    snapshot: StreamSnapshot,
+    modifier: Modifier,
+    onLinkClick: (String) -> Unit,
+    onImageClick: (String) -> Unit,
+    enableHtml: Boolean,
+    styleSheet: MarkdownStyleSheet,
+    plugins: ParserPluginRegistry?,
+    onImageClickWithMetadata: ((String, String?, String?) -> Unit)?,
+    imageBuilder: (@Composable (String, String?, String?) -> Unit)?,
+    scrollable: Boolean,
+    codeBlockOptions: CodeBlockOptions,
+    codeBlockBuilder: (@Composable (String, String?) -> Unit)?,
+    onCodeCopied: ((String) -> Unit)?,
+    selectable: Boolean,
+    selectionController: SmoothSelectionController?,
+    loadingContent: (@Composable () -> Unit)?,
+    errorContent: (@Composable (Throwable) -> Unit)?,
+) {
+    when {
+        snapshot.error != null && errorContent != null -> errorContent(snapshot.error)
+        !snapshot.hasReceivedData && !snapshot.complete && loadingContent != null -> loadingContent()
+        else -> SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
+            codeBlockOptions = codeBlockOptions, codeBlockBuilder = codeBlockBuilder,
+            onCodeCopied = onCodeCopied, styleSheet = styleSheet, plugins = plugins,
+            onImageClickWithMetadata = onImageClickWithMetadata, imageBuilder = imageBuilder,
+            scrollable = scrollable, enableCache = false, selectable = selectable,
+            selectionController = selectionController)
+    }
+}
+
+internal data class StreamSnapshot(
+    val text: String = "",
+    val complete: Boolean = false,
+    val hasReceivedData: Boolean = false,
+    val error: Throwable? = null,
+) {
     fun renderText(enableHtml: Boolean): String =
         if (enableHtml && !complete) SafeHtml.safeRenderPrefix(text) else text
 }
