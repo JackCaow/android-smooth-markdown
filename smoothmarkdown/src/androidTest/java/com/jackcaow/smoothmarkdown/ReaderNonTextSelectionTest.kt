@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -82,7 +83,9 @@ class ReaderNonTextSelectionTest {
             assertTrue("long-press drag missed next table cell: $selected", selected.contains("Two"))
             assertTrue("long-press drag missed following paragraph: $selected", selected.contains("After the table"))
         }
-        compose.onRoot().performKeyInput {
+        // Long-press selection opens Compose's toolbar/handle popups, each with
+        // its own semantics root. Send the shortcut to the content root.
+        compose.onAllNodes(isRoot())[0].performKeyInput {
             keyDown(Key.CtrlLeft)
             keyDown(Key.C)
             keyUp(Key.C)
