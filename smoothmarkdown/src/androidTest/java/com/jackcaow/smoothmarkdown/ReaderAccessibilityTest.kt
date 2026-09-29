@@ -99,7 +99,8 @@ class ReaderAccessibilityTest {
 
     @Test fun footnoteAndCodeRemainReadableAndCopyIsClickable() {
         compose.setContent {
-            MaterialTheme { SmoothMarkdown("A note[^x].\n\n[^x]: Footnote body\n\n```kotlin\nval x = 1\n```") }
+            MaterialTheme { SmoothMarkdown("A note[^x].\n\n[^x]: Footnote body\n\n```kotlin\nval x = 1\n```",
+                useEnhancedComponents = true) }
         }
         compose.onNodeWithText("A note[x].").assertExists()
         compose.onNodeWithText("Footnote body").assertExists()

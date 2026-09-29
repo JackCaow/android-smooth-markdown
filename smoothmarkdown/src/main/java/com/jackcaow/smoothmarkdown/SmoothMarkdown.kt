@@ -202,6 +202,7 @@ private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { nul
 private val LocalMarkdownBuilders = compositionLocalOf<MarkdownBuilderRegistry?> { null }
 private val LocalReaderSelectionController = compositionLocalOf<SmoothSelectionController?> { null }
 private val LocalMarkdownEnableHtml = compositionLocalOf { false }
+private val LocalEnhancedComponents = compositionLocalOf { false }
 private val LocalOnImageClickWithMetadata = compositionLocalOf<((String, String?, String?) -> Unit)?> { null }
 private val LocalImageBuilder = compositionLocalOf<(@Composable (String, String?, String?) -> Unit)?> { null }
 private val LocalOnMentionClick = compositionLocalOf<((String) -> Unit)?> { null }
@@ -263,6 +264,8 @@ fun SmoothMarkdown(
     showDefaultCopyAction: Boolean = true,
     /** Custom renderers for parsed CommonMark nodes; these override built-in rendering. */
     builderRegistry: MarkdownBuilderRegistry? = null,
+    /** Match Flutter's opt-in decorative headers, quotes, links and code controls. */
+    useEnhancedComponents: Boolean = false,
 ) {
     val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
@@ -300,7 +303,8 @@ fun SmoothMarkdown(
         activeController?.let { controller -> { key: Any -> controller.removeTarget(key) } }
     }
     CompositionLocalProvider(
-        LocalCodeBlockOptions provides codeBlockOptions,
+        LocalCodeBlockOptions provides if (useEnhancedComponents) codeBlockOptions else CodeBlockOptions(
+            showCopyButton = false, showLanguageTag = false, enableSyntaxHighlighting = false),
         LocalCodeBlockBuilder provides codeBlockBuilder,
         LocalOnCodeCopied provides onCodeCopied,
         LocalMarkdownStyleSheet provides styleSheet,
@@ -308,6 +312,7 @@ fun SmoothMarkdown(
         LocalMarkdownBuilders provides builderRegistry,
         LocalReaderSelectionController provides activeController,
         LocalMarkdownEnableHtml provides enableHtml,
+        LocalEnhancedComponents provides useEnhancedComponents,
         LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
         LocalImageBuilder provides imageBuilder,
         LocalOnMentionClick provides onMentionClick,
@@ -612,12 +617,19 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             )
             val resolvedStyle = baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
                 ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface)
-            val primary = MaterialTheme.colorScheme.primary
-            val decorated = node.level <= 2
-            val barHeight = with(LocalDensity.current) {
-                if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
-            }
-            Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
+            if (!LocalEnhancedComponents.current) {
+                MarkdownInlineText(
+                    inlineRender(node, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                    resolvedStyle, onLinkClick, onImageClick, textAlign,
+                    modifier = Modifier.semantics { heading() },
+                )
+            } else {
+                val primary = MaterialTheme.colorScheme.primary
+                val decorated = node.level <= 2
+                val barHeight = with(LocalDensity.current) {
+                    if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
+                }
+                Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -650,6 +662,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         ),
                     )
                 }
+                }
             }
         }
         is Paragraph -> {
@@ -678,7 +691,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         }
         is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
         is IndentedCodeBlock -> EnhancedCodeBlock(node.literal, null)
-        is BlockQuote -> MarkdownBlockquote(sheet) {
+        is BlockQuote -> MarkdownBlockquote(sheet, LocalEnhancedComponents.current) {
             Column {
                 node.children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml, textAlign) }
             }
@@ -767,9 +780,13 @@ internal fun resolveBlockquoteDecoration(sheet: MarkdownStyleSheet, defaultBorde
 }
 
 @Composable
-private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, content: @Composable () -> Unit) {
+private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, enhanced: Boolean = false, content: @Composable () -> Unit) {
     val decoration = resolveBlockquoteDecoration(sheet, MaterialTheme.colorScheme.primary)
-    val background = decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
+    val primary = MaterialTheme.colorScheme.primary
+    val background = if (enhanced) Modifier.background(Brush.linearGradient(
+        listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))))
+    else decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
     Column(
         Modifier.fillMaxWidth()
             .padding(bottom = sheet.blockSpacing)
@@ -778,14 +795,22 @@ private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, content: @Composable (
             .drawBehind {
                 if (decoration.borderWidth.value > 0) {
                     drawRect(
-                        color = decoration.borderColor,
+                        color = if (enhanced) primary.copy(alpha = 0.6f) else decoration.borderColor,
                         size = Size(decoration.borderWidth.toPx().coerceAtMost(size.width), size.height),
                     )
                 }
             }
             .padding(sheet.blockquotePadding),
     ) {
-        content()
+        if (enhanced) {
+            Row(verticalAlignment = Alignment.Top) {
+                DisableSelection {
+                    Text("❝", color = primary.copy(alpha = 0.4f), fontSize = 24.sp)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { content() }
+            }
+        } else content()
     }
 }
 

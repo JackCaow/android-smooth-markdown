@@ -517,7 +517,8 @@ private fun DemoHome(
             } else {
                 SmoothMarkdown(currentMarkdown, Modifier.weight(1f).testTag("reader-scroll"), onLinkClick = openLink,
                     enableHtml = pageId == "html" || pageId == "details-summary",
-                    styleSheet = themeOptions[themeIndex].second, plugins = plugins)
+                    styleSheet = themeOptions[themeIndex].second, plugins = plugins,
+                    useEnhancedComponents = true)
             }
         }
         if (isHome) FloatingActionButton(onClick = { showSource = true },

@@ -132,6 +132,7 @@ fun StreamingDemo(
                 onLinkClick = onLinkClick,
                 styleSheet = styleSheet,
                 plugins = plugins,
+                useEnhancedComponents = true,
             )
         }
     }

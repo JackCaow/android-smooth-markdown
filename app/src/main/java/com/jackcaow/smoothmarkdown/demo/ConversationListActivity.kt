@@ -350,6 +350,7 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                 val content: @Composable () -> Unit = {
                     SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
                         enableHtml = true, plugins = plugins, onLinkClick = onLinkClick,
+                        useEnhancedComponents = true,
                         selectableAsSingleRegion = true,
                         onTextPositioned = { textTargets[it.key] = it })
                 }

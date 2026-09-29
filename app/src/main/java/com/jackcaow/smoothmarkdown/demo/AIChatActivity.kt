@@ -568,10 +568,12 @@ private fun AIMessageBubble(
                         plugins = plugins,
                         onLinkClick = onLinkClick,
                         scrollable = false,
+                        useEnhancedComponents = !message.user,
                     )
                 } else if (message.content.isNotEmpty()) {
                     SmoothMarkdown(markdown = message.content, styleSheet = style,
-                        scrollable = false, plugins = plugins, onLinkClick = onLinkClick)
+                        scrollable = false, plugins = plugins, onLinkClick = onLinkClick,
+                        useEnhancedComponents = !message.user)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(aiTimestamp(message.timestamp), color = if (message.user) Color.White.copy(alpha = 0.7f)
