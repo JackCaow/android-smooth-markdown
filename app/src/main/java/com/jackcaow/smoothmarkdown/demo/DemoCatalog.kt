@@ -55,7 +55,7 @@ val dedicatedPages = listOf(
     DemoPage("footnote", "Footnotes", "References and definitions"),
     DemoPage("html", "HTML Tags Demo", "Whitelisted HTML rendering"),
     DemoPage("chat-list", "Chat List Demo", "Performance optimizations"),
-    DemoPage("ai", "AI Chat Demo", "Qwen API + Thinking/Artifact/Tool"),
+    DemoPage("ai", "AI Chat Demo", "DeepSeek API + Thinking/Artifact/Tool"),
     DemoPage("conversation-list", "Conversation List", "长按菜单 · 滑动操作 · 多选"),
     DemoPage("plugin", "Plugin System", "@mention #hashtag :emoji:"),
     DemoPage("mermaid", "Mermaid 图表", "流程图、时序图"),

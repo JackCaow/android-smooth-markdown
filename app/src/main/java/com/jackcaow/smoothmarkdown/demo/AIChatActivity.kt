@@ -33,6 +33,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -56,11 +59,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
@@ -90,8 +96,6 @@ private val deepSeekModels = listOf(
     "deepseek-flash" to "DeepSeek Flash",
     "deepseek-v4-pro" to "DeepSeek V4 Pro",
 )
-
-private enum class AIProvider { QWEN, DEEPSEEK }
 
 private data class AIQuickPrompt(
     val id: String,
@@ -169,7 +173,7 @@ private fun AIChatScreen(
     onBack: () -> Unit,
     onLinkClick: (String) -> Unit,
 ) {
-    val messages = remember(fixture) { mutableStateListOf(AIChatMessage(0L, fixture.welcome, false)) }
+    val messages = remember(fixture) { mutableStateListOf<AIChatMessage>() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val qwen = remember { QwenChatClient() }
@@ -186,11 +190,14 @@ private fun AIChatScreen(
     var streamJob by remember { mutableStateOf<Job?>(null) }
     var conversationEpoch by remember { mutableIntStateOf(0) }
     var showSettings by remember { mutableStateOf(false) }
+    var showPrompts by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    var showGuide by remember { mutableStateOf(false) }
     var sourceMessage by remember { mutableStateOf<AIChatMessage?>(null) }
-    // Match Flutter's in-memory settings; never bundle or persist a credential.
-    var provider by remember { mutableStateOf(AIProvider.QWEN) }
+    // The debug build can supply a local-only key; user edits remain in memory.
+    var provider by remember { mutableStateOf(defaultAIProvider) }
     var qwenApiKey by remember { mutableStateOf("") }
-    var deepSeekApiKey by remember { mutableStateOf("") }
+    var deepSeekApiKey by remember { mutableStateOf(BuildConfig.DEEPSEEK_API_KEY) }
     var qwenModel by remember { mutableStateOf(qwenModels.first().first) }
     var deepSeekModel by remember { mutableStateOf(deepSeekModels.first().first) }
     var enableThinking by remember { mutableStateOf(true) }
@@ -213,7 +220,9 @@ private fun AIChatScreen(
         val useNetwork = useRealAPI && networkKey.isNotEmpty()
         val response = if (useNetwork) "" else (fixture.quickPrompts.firstOrNull {
             text.contains(it.prompt) || it.prompt.contains(text)
-        }?.response ?: fixture.genericResponseTemplate.replace("{{prompt}}", text))
+        }?.response ?: aiChatProviderCopy(
+            fixture.genericResponseTemplate.replace("{{prompt}}", text), networkProvider,
+        ))
         val id = nextId++
         val epoch = conversationEpoch
         val session = MarkdownStreamSession()
@@ -287,7 +296,6 @@ private fun AIChatScreen(
         streaming = false
         input = ""
         messages.clear()
-        messages += AIChatMessage(nextId++, fixture.welcome, false)
     }
 
     LaunchedEffect(messages.size, messages.lastOrNull()?.content?.length) {
@@ -296,59 +304,103 @@ private fun AIChatScreen(
 
     val chrome = if (dark) Color(0xFF2C2C2E) else Color.White
     val background = if (dark) Color(0xFF1C1C1E) else Color(0xFFF2F2F7)
+    val selectedModelLabel = (if (provider == AIProvider.QWEN) qwenModels else deepSeekModels)
+        .firstOrNull { it.first == selectedModel }?.second ?: selectedModel
     MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
         Surface(color = background, contentColor = if (dark) Color.White else Color.Black) {
             Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                 Row(
-                    Modifier.fillMaxWidth().background(chrome).padding(horizontal = 12.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().background(chrome).padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = onBack, modifier = Modifier.testTag("ai-back")) { Text("‹") }
-                    Text("✨", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("ai-back")
+                        .semantics { contentDescription = "返回" }) { Text("‹") }
                     Column(Modifier.weight(1f)) {
-                        Text("AI Chat Demo", style = MaterialTheme.typography.titleMedium)
+                        Text("AI Chat", style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(if (streaming) "正在输入..." else if (useRealAPI && apiKey.isNotBlank()) {
-                            selectedModel + if (enableThinking &&
+                            selectedModelLabel + if (enableThinking &&
                                 (provider == AIProvider.DEEPSEEK || selectedModel.startsWith("qwen3"))) " (思考)" else ""
-                        } else "模拟模式",
+                        } else "$selectedModelLabel · 模拟",
                             color = if (streaming) aiBlue else if (useRealAPI && apiKey.isNotBlank())
                                 Color(0xFF34C759) else Color(0xFFFF9500),
                             style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.testTag("ai-status"))
+                            modifier = Modifier.testTag("ai-status"),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    TextButton(onClick = { newChat() }, modifier = Modifier.testTag("ai-new-chat")) {
-                        Text("新对话")
+                    Box {
+                        IconButton(onClick = { showPrompts = true }, modifier = Modifier.testTag("ai-prompts-menu")
+                            .semantics { contentDescription = "快捷测试" }) {
+                            Text("测试")
+                        }
+                        DropdownMenu(expanded = showPrompts, onDismissRequest = { showPrompts = false }) {
+                            fixture.quickPrompts.forEach { prompt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(prompt.label)
+                                            Text(prompt.description, style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    },
+                                    onClick = {
+                                        showPrompts = false
+                                        sendMessage(prompt.prompt)
+                                    },
+                                    enabled = !streaming,
+                                    modifier = Modifier.testTag("ai-prompt-${prompt.id}"),
+                                )
+                            }
+                        }
                     }
-                    TextButton(onClick = { dark = !dark }, modifier = Modifier.testTag("ai-theme")) {
-                        Text(if (dark) "☀️" else "🌙")
-                    }
-                    TextButton(onClick = { showSettings = true }, modifier = Modifier.testTag("ai-settings")) {
+                    IconButton(onClick = { showSettings = true }, modifier = Modifier.testTag("ai-settings")
+                        .semantics { contentDescription = "API 设置" }) {
                         Text("⚙️")
                     }
-                }
-                Row(
-                    Modifier.fillMaxWidth().background(chrome).horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    fixture.quickPrompts.forEach { prompt ->
-                        AssistChip(
-                            onClick = { sendMessage(prompt.prompt) },
-                            label = { Text(prompt.label) },
-                            enabled = !streaming,
-                            modifier = Modifier.testTag("ai-prompt-${prompt.id}"),
-                        )
+                    Box {
+                        IconButton(onClick = { showMore = true }, modifier = Modifier.testTag("ai-more-menu")
+                            .semantics { contentDescription = "更多选项" }) {
+                            Text("⋮")
+                        }
+                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                            DropdownMenuItem(
+                                text = { Text("新对话") },
+                                onClick = { showMore = false; newChat() },
+                                modifier = Modifier.testTag("ai-new-chat"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (dark) "浅色主题" else "深色主题") },
+                                onClick = { showMore = false; dark = !dark },
+                                modifier = Modifier.testTag("ai-theme"),
+                            )
+                            DropdownMenuItem(
+                                text = { Text("使用说明") },
+                                onClick = { showMore = false; showGuide = true },
+                                modifier = Modifier.testTag("ai-guide"),
+                            )
+                        }
                     }
                 }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("ai-messages"),
-                    contentPadding = PaddingValues(vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(messages, key = { it.id }) { message ->
-                        AIMessageBubble(message, dark, plugins, onLinkClick, onShowSource = { sourceMessage = message })
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (messages.isEmpty()) {
+                        Column(Modifier.align(Alignment.Center).padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("开始对话", style = MaterialTheme.typography.titleMedium)
+                            Text("输入消息，或从顶部选择快捷测试",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().testTag("ai-messages"),
+                            contentPadding = PaddingValues(vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(messages, key = { it.id }) { message ->
+                                AIMessageBubble(message, dark, plugins, onLinkClick,
+                                    onShowSource = { sourceMessage = message })
+                            }
+                        }
                     }
                 }
                 Row(
@@ -383,11 +435,11 @@ private fun AIChatScreen(
                 Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
                     Text("服务商", style = MaterialTheme.typography.titleSmall)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(AIProvider.QWEN to "Qwen", AIProvider.DEEPSEEK to "DeepSeek")
-                            .forEach { (choice, label) ->
+                        listOf(AIProvider.DEEPSEEK, AIProvider.QWEN)
+                            .forEach { choice ->
                                 AssistChip(
                                     onClick = { provider = choice },
-                                    label = { Text(if (provider == choice) "✓ $label" else label) },
+                                    label = { Text(if (provider == choice) "✓ ${choice.displayName}" else choice.displayName) },
                                     modifier = Modifier.testTag("ai-provider-${choice.name.lowercase()}"),
                                 )
                             }
@@ -440,6 +492,20 @@ private fun AIChatScreen(
             },
             confirmButton = { TextButton(onClick = { showSettings = false }) { Text("关闭") } },
         )
+        if (showGuide) AlertDialog(
+            onDismissRequest = { showGuide = false },
+            title = { Text("使用说明") },
+            text = {
+                Box(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                    SmoothMarkdown(
+                        markdown = aiChatProviderCopy(fixture.welcome, provider),
+                        scrollable = false,
+                        plugins = plugins,
+                    )
+                }
+            },
+            confirmButton = { TextButton(onClick = { showGuide = false }) { Text("关闭") } },
+        )
         sourceMessage?.let { message ->
             AlertDialog(
                 onDismissRequest = { sourceMessage = null },
@@ -447,7 +513,8 @@ private fun AIChatScreen(
                 text = {
                     SelectionContainer {
                         Text(message.content, modifier = Modifier.heightIn(max = 480.dp)
-                                .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()),
+                                .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
+                                .testTag("ai-source-content"),
                             fontFamily = FontFamily.Monospace)
                     }
                 },

@@ -1,7 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// local.properties is ignored by Git. Keep this value in the debug variant only.
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.isFile) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val debugDeepSeekApiKey = localProperties.getProperty("DEEPSEEK_API_KEY").orEmpty().trim()
+
+fun javaStringLiteral(value: String): String = "\"" + value
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+    .replace("\n", "\\n")
+    .replace("\r", "\\r")
+    .replace("\t", "\\t") + "\""
 
 android {
     namespace = "com.jackcaow.smoothmarkdown.demo"
@@ -14,7 +31,18 @@ android {
         versionCode = 1
         versionName = "0.1.0"
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+    buildTypes {
+        getByName("debug") {
+            buildConfigField("String", "DEEPSEEK_API_KEY", javaStringLiteral(debugDeepSeekApiKey))
+        }
+        getByName("release") {
+            buildConfigField("String", "DEEPSEEK_API_KEY", "\"\"")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
