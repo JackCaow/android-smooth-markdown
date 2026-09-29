@@ -206,7 +206,7 @@ class MermaidFlowchartParser {
     )
 
     private companion object {
-        val arrowPattern = Regex("""\s*(====|---->|==>|===|-\.->|-->|---)\s*(\|[^|]*\|)?\s*""")
+        val arrowPattern = Regex("""\s*(====|---->|==>|===|-\.->|\.\.\.|-->|---)\s*(\|[^|]*\|)?\s*""")
         val shapePatterns = listOf(
             Regex("""^(\w+)\(\((.+)\)\)$""") to MermaidShape.Circle,
             Regex("""^(\w+)\{\{(.+)\}\}$""") to MermaidShape.Hexagon,
