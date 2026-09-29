@@ -1,6 +1,7 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.AnnotatedString
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
 import org.commonmark.node.Image
@@ -11,6 +12,54 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderDocumentTextTest {
+    @Test fun builtInRenderersProjectExactSemanticCopyInDisplayOrder() {
+        val source = """
+            Intro ![inline](https://example.com/in.png) and MONEYx+1MONEY.
+
+            ![standalone](https://example.com/out.png)
+
+            ~~~kotlin
+            val x = 1
+            ~~~
+
+            | Name | Value |
+            | --- | --- |
+            | Cell | ![table](https://example.com/cell.png) |
+
+            MONEYMONEYE=mc^2MONEYMONEY
+
+            <details open>
+            <summary>Summary</summary>
+            Detail body.
+            </details>
+        """.trimIndent().replace("MONEY", "$")
+        val projection = readerDocumentText(parseMarkdown(source), false, null, null, emptyMap())
+        assertTrue(projection.complete)
+        assertTrue(projection.text.contains("Intro inline and \$x+1\$."))
+        assertTrue(projection.text.contains("\nstandalone\nval x = 1\n\n"))
+        assertTrue(projection.text.contains("Name\tValue\nCell\ttable"))
+        assertTrue(projection.text.contains("\$\$E=mc^2\$\$"))
+        assertTrue(projection.text.indexOf("\$\$E=mc^2\$\$") < projection.text.indexOf("Summary"))
+        assertTrue(projection.text.contains("Summary\nDetail body."))
+        assertFalse(projection.text.contains("https://example.com"))
+        assertFalse(projection.text.contains("KOTLIN"))
+
+        val html = readerDocumentText(parseMarkdown(
+            "Before <img src='https://example.com/a.png' alt='HTML inline'> after\n\n" +
+                "<img src='https://example.com/b.png' alt='HTML block'>",
+            enableHtml = true,
+        ), true, null, null, emptyMap())
+        assertEquals("Before HTML inline after\nHTML block", html.text)
+    }
+
+    @Test fun semanticCopyRequiresUnchangedNativeWholeSelectionSnapshot() {
+        val full = listOf(AnnotatedString("first"), AnnotatedString("last"))
+        val projection = ReaderDocumentText("first\nimage alt\nlast", emptyList(), complete = true)
+        assertEquals(projection.text, exactWholeDocumentCopyText(full, full.toList(), projection))
+        assertNull(exactWholeDocumentCopyText(full, listOf(AnnotatedString("first")), projection))
+        assertNull(exactWholeDocumentCopyText(null, full, projection))
+        assertNull(exactWholeDocumentCopyText(full, full, projection.copy(complete = false)))
+    }
     @Test fun offscreenBlocksHaveStablePathsAndUtf16Offsets() {
         val source = "# Intro\n\n😀 one\n\n😀 one\n\n| Name | Value |\n| --- | --- |\n| A | B |\n\n" +
             "~~~kotlin\nval x = 1\n~~~"
@@ -24,14 +73,14 @@ class ReaderDocumentTextTest {
         assertEquals(listOf("0", "1", "2", "3/0", "3/1", "4"), first.blocks.map { it.id })
         assertTrue(first.text.contains("Intro\n😀 one\n😀 one"))
         assertTrue(first.text.contains("Name\tValue\nA\tB"))
-        assertTrue(first.text.endsWith("val x = 1"))
+        assertTrue(first.text.endsWith("val x = 1\n"))
         val duplicate = first.blocks[2]
         assertEquals("😀 one", first.text.substring(duplicate.start, duplicate.end))
         assertEquals(duplicate, first.blockAt(duplicate.start + 2)) // emoji occupies two UTF-16 units.
         assertNull(first.blockAt(duplicate.end))
     }
 
-    @Test fun projectionFollowsCollapsedDetailsAndOmitsNontextGeometry() {
+    @Test fun projectionFollowsCollapsedDetailsAndCopiesImageAltWithoutAnchorGeometry() {
         val document = parseMarkdown(
             "Before ![photo](https://example.com/photo.png) after\n\n" +
                 "<details>\n<summary>Open me</summary>\nHidden **body**\n</details>\n\n---\n\nAfter",
@@ -40,9 +89,8 @@ class ReaderDocumentTextTest {
         val details = document.children().filterIsInstance<DetailsNode>().single()
         val opened = readerDocumentText(document, false, null, null, mapOf(details to true))
         assertTrue(closed.complete)
-        assertEquals("Before  after\nOpen me\nAfter", closed.text)
-        assertEquals("Before  after\nOpen me\nHidden body\nAfter", opened.text)
-        assertFalse(closed.text.contains("photo"))
+        assertEquals("Before photo after\nOpen me\nAfter", closed.text)
+        assertEquals("Before photo after\nOpen me\nHidden body\nAfter", opened.text)
 
         val controller = SmoothSelectionController()
         controller.bindDocument(document, false, null, null)

@@ -363,12 +363,14 @@ private fun MarkdownSelectionRegion(
     // SelectionState captures LocalClipboard when it is created. Keep a stable
     // reference so the clipboard can inspect annotated ranges at Copy time.
     val stateHolder = remember { ReaderSelectionStateHolder() }
-    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry) {
+    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry, controller) {
         object : Clipboard {
             override suspend fun getClipEntry(): ClipEntry? = clipboard.getClipEntry()
             override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
                 clipboard.setClipEntry(readerCopyClipEntry(
-                    clipEntry, stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()))
+                    clipEntry, selectedTexts, anchorRegistry.snapshot(),
+                    controller?.fullDocumentSemanticText(selectedTexts)))
             }
         }
     }
@@ -380,25 +382,29 @@ private fun MarkdownSelectionRegion(
         stateHolder.state?.clear()
         controller?.exitFullDocumentSelection()
     }
+    val selectionForCopy: () -> VisibleSelection = remember(controller, stateHolder, anchorRegistry) {
+        {
+            val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
+            val semantic = controller?.fullDocumentSemanticText(selectedTexts)
+            if (semantic != null) VisibleSelection(semantic, hadAnchor = true)
+            else visibleSelectedText(selectedTexts, anchorRegistry.snapshot())
+        }
+    }
     val toolbarProvider = LocalTextContextMenuToolbarProvider.current
     val dropdownProvider = LocalTextContextMenuDropdownProvider.current
     val legacyToolbar = LocalTextToolbar.current
-    val wrappedToolbar = remember(toolbarProvider, stateHolder, anchorRegistry, clipboard) {
+    val wrappedToolbar = remember(toolbarProvider, selectionForCopy, clipboard) {
         toolbarProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
+            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
         }
     }
-    val wrappedDropdown = remember(dropdownProvider, stateHolder, anchorRegistry, clipboard) {
+    val wrappedDropdown = remember(dropdownProvider, selectionForCopy, clipboard) {
         dropdownProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
+            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
         }
     }
-    val wrappedLegacyToolbar = remember(legacyToolbar, stateHolder, anchorRegistry, clipboard, showDefaultCopyAction) {
-        ReaderCopyTextToolbar(legacyToolbar,
-            { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) },
-            copyVisible, showDefaultCopyAction)
+    val wrappedLegacyToolbar = remember(legacyToolbar, selectionForCopy, clipboard, showDefaultCopyAction) {
+        ReaderCopyTextToolbar(legacyToolbar, selectionForCopy, copyVisible, showDefaultCopyAction)
     }
     CompositionLocalProvider(
         LocalNonTextAnchorRegistry provides anchorRegistry,
@@ -428,7 +434,7 @@ private fun MarkdownSelectionRegion(
                     controller.fullDocumentSelectionMode) {
                     state.selectAll()
                     if (state.selectedTexts.isEmpty()) controller.exitFullDocumentSelection()
-                    else controller.markFullDocumentSelected(fullRequest)
+                    else controller.markFullDocumentSelected(fullRequest, state.selectedTexts)
                 }
             }
         }
@@ -447,7 +453,7 @@ private fun MarkdownSelectionRegion(
                 separator()
                 for (action in menuActions) {
                     item(key = action.key, label = action.label) {
-                        action.onClick(visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()).text)
+                        action.onClick(selectionForCopy().text)
                         close()
                     }
                 }
@@ -456,7 +462,7 @@ private fun MarkdownSelectionRegion(
         val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
                 (event.isCtrlPressed || event.isMetaPressed)) {
-                val selected = visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot())
+                val selected = selectionForCopy()
                 if (selected.hadAnchor) {
                     copyVisible(selected.text)
                     true
@@ -478,9 +484,14 @@ internal fun readerCopyClipEntry(
     entry: ClipEntry?,
     selectedTexts: List<AnnotatedString>,
     anchors: Set<String>,
+    fullDocumentSemanticText: String? = null,
 ): ClipEntry? {
     if (entry == null || entry.clipData.itemCount != 1) return entry
     val incoming = entry.clipData.getItemAt(0).text?.toString() ?: return entry
+    if (fullDocumentSemanticText != null && incoming == selectedTexts.joinToString("\n") { it.text }) {
+        return ClipEntry(ClipData.newPlainText(
+            entry.clipData.description.label ?: "selection", fullDocumentSemanticText))
+    }
     val selected = visibleSelectedText(selectedTexts, anchors)
     if (!selected.hadAnchor || incoming != selectedTexts.joinToString("\n") { it.text }) return entry
     return ClipEntry(ClipData.newPlainText(entry.clipData.description.label ?: "selection", selected.text))

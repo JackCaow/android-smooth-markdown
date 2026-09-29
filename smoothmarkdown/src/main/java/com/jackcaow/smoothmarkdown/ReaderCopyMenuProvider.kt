@@ -11,7 +11,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 
-/** Preserve the platform Copy label and placement while replacing its action only for anchors. */
+/** Preserve the platform Copy label and placement while replacing anchor or full-document copy. */
 internal class ReaderCopyMenuProvider(
     private val delegate: TextContextMenuProvider,
     private val selection: () -> VisibleSelection,
