@@ -32,6 +32,39 @@ class EditorControlsUiTest {
         }
     }
 
+    @Test fun configuredToolbarOrderAndCapabilitiesReachCommand() {
+        val controller = MarkdownEditorController("Plain")
+        val capabilities = MarkdownEditorCapabilities(setOf(MarkdownEditorCommand.BOLD))
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(),
+                    capabilities = capabilities,
+                    toolbarCommands = listOf(MarkdownEditorCommand.BLOCKQUOTE, MarkdownEditorCommand.BOLD))
+            }
+        }
+        compose.onNodeWithText("Blockquote").assertExists().performClick()
+        compose.onNodeWithText("B").assertDoesNotExist()
+        compose.runOnIdle { assertEquals("> Plain", controller.text) }
+    }
+
+    @Test fun customSlashCommandAppearsAndEditsSource() {
+        val controller = MarkdownEditorController("/ca")
+        controller.setSelection(3)
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(),
+                    customSlashCommands = listOf(MarkdownEditorSlashCommand("Callout", "note", markdown = "> Hello")))
+            }
+        }
+        compose.onNodeWithText("Callout").performClick()
+        compose.waitUntil(5_000) { controller.text == "> Hello" }
+        compose.runOnIdle {
+            assertEquals("> Hello", controller.text)
+            check(controller.undo())
+            assertEquals("/ca", controller.text)
+        }
+    }
+
     @Test fun findNavigatesSourceAndFocusModeCanBeExited() {
         val controller = MarkdownEditorController("Alpha beta alpha")
         compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }

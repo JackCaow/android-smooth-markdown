@@ -1,6 +1,7 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.ui.text.TextRange
+import kotlinx.coroutines.CancellationException
 
 /** A slash trigger at the beginning of a source-backed paragraph line. */
 internal data class MarkdownSlashTrigger(val range: TextRange, val query: String)
@@ -9,6 +10,12 @@ internal data class MarkdownSlashCommand(
     val title: String,
     val searchText: String,
     val command: MarkdownEditorCommand,
+)
+
+internal data class MarkdownSlashSuggestion(
+    val title: String,
+    val command: MarkdownEditorCommand? = null,
+    val customCommand: MarkdownEditorSlashCommand? = null,
 )
 
 internal object MarkdownSlashCommands {
@@ -61,15 +68,38 @@ internal object MarkdownSlashCommands {
         return MarkdownSlashTrigger(TextRange(lineStart, cursor), prefix.drop(1))
     }
 
-    fun suggestions(trigger: MarkdownSlashTrigger, enableWikilinks: Boolean = true): List<MarkdownSlashCommand> =
+    fun suggestions(
+        trigger: MarkdownSlashTrigger,
+        enableWikilinks: Boolean = true,
+        capabilities: MarkdownEditorCapabilities = MarkdownEditorCapabilities.All,
+    ): List<MarkdownSlashCommand> =
         commands.filter { item ->
             if (item.command == MarkdownEditorCommand.WIKILINK && !enableWikilinks) return@filter false
+            if (!capabilities.supports(item.command)) return@filter false
             val query = trigger.query
             item.title.contains(query, ignoreCase = true) || item.searchText.contains(query, ignoreCase = true)
         }
 
-    fun apply(controller: MarkdownEditorController, trigger: MarkdownSlashTrigger, command: MarkdownEditorCommand): Boolean {
+    fun allSuggestions(
+        trigger: MarkdownSlashTrigger,
+        enableWikilinks: Boolean,
+        capabilities: MarkdownEditorCapabilities,
+        customCommands: List<MarkdownEditorSlashCommand>,
+    ): List<MarkdownSlashSuggestion> =
+        suggestions(trigger, enableWikilinks, capabilities).map { MarkdownSlashSuggestion(it.title, command = it.command) } +
+            customCommands.filter {
+                it.title.contains(trigger.query, ignoreCase = true) ||
+                    it.searchText.contains(trigger.query, ignoreCase = true)
+            }.map { MarkdownSlashSuggestion(it.title, customCommand = it) }
+
+    fun apply(
+        controller: MarkdownEditorController,
+        trigger: MarkdownSlashTrigger,
+        command: MarkdownEditorCommand,
+        capabilities: MarkdownEditorCapabilities = MarkdownEditorCapabilities.All,
+    ): Boolean {
         if (commands.none { it.command == command } ||
+            !capabilities.supports(command) ||
             (command == MarkdownEditorCommand.WIKILINK && !controller.enableWikilinks) ||
             match(controller) != trigger) return false
         val formattedBlock = if (controller.mode == MarkdownEditorMode.FORMATTED) {
@@ -85,6 +115,28 @@ internal object MarkdownSlashCommands {
                 controller.replaceRange(trigger.range.min, trigger.range.max, "")
                 controller.applyCommand(command)
             }
+        }
+        return true
+    }
+
+    /** Resolve the host callback before editing, then reject a stale slash trigger. */
+    suspend fun applyCustom(
+        controller: MarkdownEditorController,
+        trigger: MarkdownSlashTrigger,
+        command: MarkdownEditorSlashCommand,
+    ): Boolean {
+        if (match(controller) != trigger) return false
+        val markdown = try {
+            command.markdown ?: command.onSelected?.invoke(trigger.query)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return false
+        }
+        if (markdown.isNullOrBlank() || match(controller) != trigger) return false
+        controller.transaction {
+            controller.replaceRange(trigger.range.min, trigger.range.max, "")
+            controller.insertMarkdownBlock(markdown)
         }
         return true
     }

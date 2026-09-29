@@ -74,6 +74,10 @@ fun SmoothMarkdownEditor(
     enableWikilinks: Boolean = true,
     wikilinkSuggestions: List<String> = emptyList(),
     onTapWikilink: ((String) -> Unit)? = null,
+    enableSlashCommands: Boolean = true,
+    customSlashCommands: List<MarkdownEditorSlashCommand> = emptyList(),
+    capabilities: MarkdownEditorCapabilities = MarkdownEditorCapabilities.All,
+    toolbarCommands: List<MarkdownEditorCommand>? = null,
 ) {
     SideEffect { controller.enableWikilinks = enableWikilinks }
     val previewPlugins = remember(enableWikilinks) {
@@ -91,8 +95,10 @@ fun SmoothMarkdownEditor(
         if (searchOpen) searchFocusRequester.requestFocus()
     }
     val searchMatches = if (searchOpen) controller.findMatches(searchQuery) else emptyList()
-    val slashTrigger = if (controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
-    val slashSuggestions = slashTrigger?.let { MarkdownSlashCommands.suggestions(it, enableWikilinks) }.orEmpty()
+    val slashTrigger = if (!enableSlashCommands || controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
+    val slashSuggestions = slashTrigger?.let {
+        MarkdownSlashCommands.allSuggestions(it, enableWikilinks, capabilities, customSlashCommands)
+    }.orEmpty()
     fun runHostAction(label: String, action: suspend () -> MarkdownEditorHostResult) {
         if (hostActionBusy) return
         hostActionBusy = true
@@ -172,7 +178,12 @@ fun SmoothMarkdownEditor(
             Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).testTag("editor-slash-suggestions")) {
                 slashSuggestions.forEachIndexed { index, item ->
                     TextButton(
-                        onClick = { MarkdownSlashCommands.apply(controller, slashTrigger, item.command) },
+                        onClick = {
+                            item.command?.let { MarkdownSlashCommands.apply(controller, slashTrigger, it, capabilities) }
+                            item.customCommand?.let { command ->
+                                scope.launch { MarkdownSlashCommands.applyCustom(controller, slashTrigger, command) }
+                            }
+                        },
                         modifier = Modifier.testTag("editor-slash-suggestion-$index"),
                     ) { Text(item.title) }
                 }
@@ -181,7 +192,7 @@ fun SmoothMarkdownEditor(
         if (!focusMode) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
             TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text("Undo") }
             TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text("Redo") }
-            listOf(
+            val defaultCommands = listOf(
                 "B" to MarkdownEditorCommand.BOLD,
                 "I" to MarkdownEditorCommand.ITALIC,
                 "H1" to MarkdownEditorCommand.HEADING1,
@@ -192,11 +203,22 @@ fun SmoothMarkdownEditor(
                 "Link" to MarkdownEditorCommand.LINK,
                 "Table" to MarkdownEditorCommand.TABLE,
                 "Wikilink" to MarkdownEditorCommand.WIKILINK,
-            ).forEach { (label, command) ->
-                TextButton(onClick = { controller.applyCommand(command) },
-                    enabled = command != MarkdownEditorCommand.WIKILINK || enableWikilinks) { Text(label) }
+            )
+            val buttons = toolbarCommands?.map { editorToolbarLabel(it) to it } ?: defaultCommands
+            buttons.filter { capabilities.supports(it.second) }.forEach { (label, command) ->
+                TextButton(onClick = {
+                    if (command == MarkdownEditorCommand.IMAGE && onPickImage != null) {
+                        runHostAction("Image") {
+                            MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
+                        }
+                    } else {
+                        controller.applyCommand(command)
+                    }
+                }, enabled = (command != MarkdownEditorCommand.WIKILINK || enableWikilinks) &&
+                    (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(label) }
             }
-            if (onPickImage != null) {
+            if (onPickImage != null && (toolbarCommands == null || MarkdownEditorCommand.IMAGE !in toolbarCommands) &&
+                capabilities.supports(MarkdownEditorCommand.IMAGE)) {
                 TextButton(onClick = {
                     runHostAction("Image") {
                         MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
@@ -239,6 +261,16 @@ fun SmoothMarkdownEditor(
             MarkdownEditorMode.FORMATTED -> FormattedBlockPane(controller, Modifier.weight(1f), wikilinkSuggestions)
         }
     }
+}
+
+private fun editorToolbarLabel(command: MarkdownEditorCommand): String = when (command) {
+    MarkdownEditorCommand.BOLD -> "B"
+    MarkdownEditorCommand.ITALIC -> "I"
+    MarkdownEditorCommand.INLINE_CODE -> "Inline code"
+    MarkdownEditorCommand.CODE_BLOCK -> "Code"
+    MarkdownEditorCommand.UNORDERED_LIST -> "List"
+    MarkdownEditorCommand.TASK_LIST -> "Task"
+    else -> command.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercaseChar)
 }
 
 @Composable

@@ -7,6 +7,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
 
 class MarkdownSlashCommandsTest {
     @Test fun sourceSlashCommandReplacesOnlyTriggerAndUndoRestoresCaret() {
@@ -99,5 +100,60 @@ class MarkdownSlashCommandsTest {
         stale.text = "/different"
         assertFalse(MarkdownSlashCommands.apply(stale, trigger, MarkdownEditorCommand.HEADING1))
         assertEquals("/different", stale.text)
+    }
+
+    @Test fun capabilitiesFilterBuiltInsAndRejectDisabledExecution() {
+        val capabilities = MarkdownEditorCapabilities(setOf(MarkdownEditorCommand.HEADING1))
+        val controller = MarkdownEditorController("/he")
+        controller.setSelection(3)
+        val trigger = MarkdownSlashCommands.match(controller)!!
+        assertFalse(MarkdownSlashCommands.suggestions(trigger, capabilities = capabilities)
+            .any { it.command == MarkdownEditorCommand.HEADING1 })
+        assertFalse(MarkdownSlashCommands.apply(controller, trigger, MarkdownEditorCommand.HEADING1, capabilities))
+        assertEquals("/he", controller.text)
+        assertTrue(MarkdownSlashCommands.apply(controller, trigger, MarkdownEditorCommand.HEADING2, capabilities))
+        assertEquals("## ", controller.text)
+    }
+
+    @Test fun customCommandFiltersAndInsertsAsOneUndoStep() = runBlocking {
+        val controller = MarkdownEditorController("Before\n\n/ca\n\nAfter")
+        controller.setSelection(controller.text.indexOf("/ca") + 3)
+        val trigger = MarkdownSlashCommands.match(controller)!!
+        val command = MarkdownEditorSlashCommand("Callout", "admonition note", onSelected = { query ->
+            assertEquals("ca", query)
+            "> Note"
+        })
+        val suggestions = MarkdownSlashCommands.allSuggestions(
+            trigger, true, MarkdownEditorCapabilities.All, listOf(command))
+        assertEquals(listOf("Callout"), suggestions.map { it.title })
+        assertTrue(MarkdownSlashCommands.applyCustom(controller, trigger, command))
+        assertEquals("Before\n\n> Note\n\nAfter", controller.text)
+        assertTrue(controller.undo())
+        assertEquals("Before\n\n/ca\n\nAfter", controller.text)
+    }
+
+    @Test fun customCallbackCannotOverwriteChangedTrigger() = runBlocking {
+        val controller = MarkdownEditorController("/insert")
+        controller.setSelection(controller.text.length)
+        val trigger = MarkdownSlashCommands.match(controller)!!
+        val command = MarkdownEditorSlashCommand("Insert", "", onSelected = {
+            controller.text = "changed while waiting"
+            "# Replaced"
+        })
+        assertFalse(MarkdownSlashCommands.applyCustom(controller, trigger, command))
+        assertEquals("changed while waiting", controller.text)
+    }
+
+    @Test fun formattedCustomSlashCommandReplacesPlainParagraph() = runBlocking {
+        val controller = MarkdownEditorController("Before\n\n/ca\n\nAfter")
+        controller.mode = MarkdownEditorMode.FORMATTED
+        val block = controller.semanticDocument().blocks.first { it.source == "/ca" }
+        controller.setFormattedSelection(block.id, TextRange(3))
+        val trigger = MarkdownSlashCommands.match(controller)!!
+        val command = MarkdownEditorSlashCommand("Callout", "note", markdown = "> Note")
+        assertTrue(MarkdownSlashCommands.applyCustom(controller, trigger, command))
+        assertEquals("Before\n\n> Note\n\nAfter", controller.text)
+        assertTrue(controller.undo())
+        assertEquals("Before\n\n/ca\n\nAfter", controller.text)
     }
 }
