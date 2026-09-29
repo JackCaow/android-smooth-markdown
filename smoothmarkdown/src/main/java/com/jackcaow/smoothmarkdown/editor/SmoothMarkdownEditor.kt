@@ -165,6 +165,8 @@ fun SmoothMarkdownEditor(
     builderRegistry: MarkdownBuilderRegistry? = null,
     /** Resolves host-owned image sources in Preview, Split, and formatted image blocks. */
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
+    /** Flutter's editor enables enhanced Preview/Split components by default. */
+    useEnhancedComponents: Boolean = true,
 ) {
     val effectiveTheme = LocalMarkdownEditorTheme.current.merge(editorTheme)
     val colors = MaterialTheme.colorScheme
@@ -485,7 +487,8 @@ fun SmoothMarkdownEditor(
                 .background(effectiveTheme.previewColor ?: colors.surface)
                 .padding(effectiveTheme.previewPadding ?: 16.dp),
                 plugins = previewPlugins, onWikilinkClick = onTapWikilink,
-                builderRegistry = builderRegistry, imageBuilder = imageBuilder)
+                builderRegistry = builderRegistry, imageBuilder = imageBuilder,
+                useEnhancedComponents = useEnhancedComponents)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f)) { focused ->
                     sourceFocus.setFocused(focused, latestOnFocusChanged.value)
@@ -496,7 +499,8 @@ fun SmoothMarkdownEditor(
                     .background(effectiveTheme.previewColor ?: colors.surface)
                     .padding(effectiveTheme.previewPadding ?: 16.dp),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink,
-                    builderRegistry = builderRegistry, imageBuilder = imageBuilder)
+                    builderRegistry = builderRegistry, imageBuilder = imageBuilder,
+                    useEnhancedComponents = useEnhancedComponents)
             }
             MarkdownEditorMode.FORMATTED -> CompositionLocalProvider(LocalFormattedSearch provides FormattedSearchUi(
                 formattedSearch, formattedSearch.matches.getOrNull(currentSearchIndex), searchNavigationId,

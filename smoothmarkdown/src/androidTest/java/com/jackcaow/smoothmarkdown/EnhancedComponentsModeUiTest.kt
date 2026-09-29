@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
+import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
 import org.junit.Rule
 import org.junit.Test
 
@@ -26,5 +29,20 @@ class EnhancedComponentsModeUiTest {
 
         compose.runOnIdle { enhanced = true }
         compose.onNodeWithText("Copy").assertHasClickAction()
+    }
+
+    @Test fun editorPreviewDefaultsToEnhancedAndCanUseStandardMode() {
+        val controller = MarkdownEditorController("```kotlin\nval x = 1\n```").also {
+            it.mode = MarkdownEditorMode.PREVIEW
+        }
+        var enhanced by mutableStateOf(true)
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, useEnhancedComponents = enhanced)
+            }
+        }
+        compose.onNodeWithText("Copy").assertHasClickAction()
+        compose.runOnIdle { enhanced = false }
+        compose.onNodeWithText("Copy").assertDoesNotExist()
     }
 }
