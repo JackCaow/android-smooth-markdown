@@ -17,6 +17,16 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
+/** UTF-16 offset in the visible text of a formatted paragraph or heading. */
+data class MarkdownFormattedTextPosition(val blockId: String, val offset: Int)
+
+/** A source-revision-bound text selection across contiguous top-level prose blocks. */
+data class MarkdownFormattedTextSelection(
+    val source: String,
+    val anchor: MarkdownFormattedTextPosition,
+    val focus: MarkdownFormattedTextPosition,
+)
+
 /** A contiguous selection of sibling list items in one source revision. */
 data class MarkdownListItemSelection(
     val source: String,
@@ -463,20 +473,70 @@ class MarkdownEditorController(
         command: MarkdownEditorCommand,
         destination: String? = null,
     ): Boolean {
-        val kind = inlineMarkKind(command) ?: return false
         val document = selectedFormattedDocument() ?: return false
         val selection = formattedBlockSelection ?: return false
         val blocks = document.blocks.subList(selection.firstIndex, selection.lastIndex + 1)
-        if (blocks.any { it.kind !in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) }) return false
-        val replacements = blocks.map { block ->
+        val ranges = blocks.map { block ->
             val source = MarkdownFormattedBlock.text(block) ?: return false
-            val wrapped = wrapCompleteInlineSource(source, kind, destination) ?: return false
+            val visibleLength = MarkdownInlineEditing.parse(source, enableWikilinks).visible.length
+            block to TextRange(0, visibleLength)
+        }
+        return applyInlineToFormattedTextRanges(document, ranges, command, destination)
+    }
+
+    /** Applies one inline command to visible text across paragraph/heading blocks in one undo step. */
+    fun applyInlineCommandToFormattedTextSelection(
+        selected: MarkdownFormattedTextSelection,
+        command: MarkdownEditorCommand,
+        destination: String? = null,
+    ): Boolean {
+        if (selected.source != text) return false
+        val document = semanticDocument()
+        val anchorIndex = document.blocks.indexOfFirst { it.id == selected.anchor.blockId }
+        val focusIndex = document.blocks.indexOfFirst { it.id == selected.focus.blockId }
+        if (anchorIndex < 0 || focusIndex < 0) return false
+        val firstIndex = minOf(anchorIndex, focusIndex)
+        val lastIndex = maxOf(anchorIndex, focusIndex)
+        val bounds = listOf(anchorIndex to selected.anchor.offset, focusIndex to selected.focus.offset)
+            .sortedWith(compareBy({ it.first }, { it.second }))
+        if (bounds[0] == bounds[1]) return false
+        val ranges = (firstIndex..lastIndex).map { index ->
+            val block = document.blocks[index]
+            val source = MarkdownFormattedBlock.text(block) ?: return false
+            val visibleLength = MarkdownInlineEditing.parse(source, enableWikilinks).visible.length
+            val start = if (index == firstIndex) bounds[0].second else 0
+            val end = if (index == lastIndex) bounds[1].second else visibleLength
+            if (start !in 0..visibleLength || end !in start..visibleLength) return false
+            block to TextRange(start, end)
+        }
+        return applyInlineToFormattedTextRanges(document, ranges, command, destination)
+    }
+
+    private fun applyInlineToFormattedTextRanges(
+        document: MarkdownDocument,
+        ranges: List<Pair<MarkdownDocumentBlock, TextRange>>,
+        command: MarkdownEditorCommand,
+        destination: String?,
+    ): Boolean {
+        val kind = inlineMarkKind(command) ?: return false
+        if (ranges.isEmpty() || ranges.any { (block, _) ->
+                block.kind !in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING)
+            }) return false
+        val replacements = ranges.mapNotNull { (block, range) ->
+            if (range.collapsed) return@mapNotNull null
+            val source = MarkdownFormattedBlock.text(block) ?: return false
+            val inline = MarkdownInlineEditing.parse(source, enableWikilinks)
+            val wrapped = if (range.min == 0 && range.max == inline.visible.length)
+                wrapCompleteInlineSource(source, kind, destination, allowMixed = true)
+            else inline.wrap(range, kind, destination)
+            if (wrapped == null || MarkdownInlineEditing.parse(wrapped, enableWikilinks).visible != inline.visible) return false
             val markdown = MarkdownFormattedBlock.markdown(block, wrapped) ?: return false
             block to markdown
         }
+        if (replacements.isEmpty()) return false
         if (replacements.all { (block, markdown) -> block.source == markdown }) return false
-        val first = blocks.first()
-        val last = blocks.last()
+        val first = ranges.first().first
+        val last = ranges.last().first
         val replacement = replacements.asReversed().fold(text.substring(first.range.min, last.range.max)) { current, (block, markdown) ->
             current.replaceRange(block.range.min - first.range.min, block.range.max - first.range.min, markdown)
         }
@@ -487,17 +547,17 @@ class MarkdownEditorController(
                 val selected = old.range.min >= first.range.min && old.range.max <= last.range.max
                 old.kind != next.kind || (!selected && old.source != next.source)
             }) return false
-        if (replacements.zip(reparsed.drop(selection.firstIndex)).any { (replacementBlock, parsed) ->
-                replacementBlock.second != parsed.source
+        if (replacements.any { (block, markdown) ->
+                reparsed.getOrNull(document.blocks.indexOf(block))?.source != markdown
             }) return false
         replaceRange(first.range.min, last.range.max, replacement)
         return true
     }
 
     /** Complete-line wrap with a bounded nested emphasis/link case. */
-    private fun wrapCompleteInlineSource(source: String, kind: InlineMarkKind, destination: String?): String? {
+    private fun wrapCompleteInlineSource(source: String, kind: InlineMarkKind, destination: String?, allowMixed: Boolean = false): String? {
         val inline = MarkdownInlineEditing.parse(source, enableWikilinks)
-        val wrapped = inline.wrapComplete(kind, destination) ?: return null
+        val wrapped = inline.wrapComplete(kind, destination, allowMixed) ?: return null
         if (MarkdownInlineEditing.parse(wrapped, enableWikilinks).visible != inline.visible) return null
         return wrapped
     }
