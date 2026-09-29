@@ -656,6 +656,77 @@ class MarkdownEditorController(
         return true
     }
 
+    /**
+     * A multi-line Markdown paste into a formatted paragraph becomes sibling parsed blocks.
+     * Unchanged inline Markdown on either side is split into valid standalone fragments, and
+     * untouched top-level blocks must reparse identically before the single source edit commits.
+     */
+    internal fun replaceFormattedTextWithBlocks(blockId: String, nextVisible: String): Boolean {
+        if (mode != MarkdownEditorMode.FORMATTED) return false
+        if ('\n' !in nextVisible && '\r' !in nextVisible) return false
+        var utf16Index = 0
+        while (utf16Index < nextVisible.length) {
+            when {
+                nextVisible[utf16Index].isHighSurrogate() -> {
+                    if (utf16Index + 1 >= nextVisible.length || !nextVisible[utf16Index + 1].isLowSurrogate()) return false
+                    utf16Index += 2
+                }
+                nextVisible[utf16Index].isLowSurrogate() -> return false
+                else -> utf16Index++
+            }
+        }
+        val document = semanticDocument()
+        val index = document.blocks.indexOfFirst { it.id == blockId }
+        val block = document.blocks.getOrNull(index) ?: return false
+        if (block.kind != MarkdownBlockKind.PARAGRAPH && block.kind != MarkdownBlockKind.HEADING) return false
+        val inline = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return false
+        val commonPrefix = inline.visible.commonPrefixWith(nextVisible).length
+        val oldTail = inline.visible.substring(commonPrefix)
+        val newTail = nextVisible.substring(commonPrefix)
+        val commonSuffix = oldTail.commonSuffixWith(newTail).length
+        val replacedRange = TextRange(commonPrefix, inline.visible.length - commonSuffix)
+        val pasted = nextVisible.substring(commonPrefix, nextVisible.length - commonSuffix)
+        if ('\n' !in pasted && '\r' !in pasted) return false
+        val markdown = pasted.trim('\r', '\n')
+        if (markdown.isBlank()) return false
+        val pastedDocument = MarkdownDocumentCodec.parse(markdown, parserPlugins)
+        if (pastedDocument.blocks.isEmpty() || pastedDocument.blocks.first().range.min != 0 ||
+            pastedDocument.blocks.last().range.max != markdown.length ||
+            pastedDocument.blocks.all { it.kind == MarkdownBlockKind.PARAGRAPH }) return false
+        val split = inline.splitVisibleRange(replacedRange) ?: return false
+        val before = split.before.takeIf(String::isNotEmpty)?.let { MarkdownFormattedBlock.markdown(block, it) }
+        val after = split.after.takeIf(String::isNotEmpty)?.let { MarkdownFormattedBlock.markdown(block, it) }
+        if ((split.before.isNotEmpty() && before == null) || (split.after.isNotEmpty() && after == null)) return false
+        val replacement = listOfNotNull(before, markdown, after).joinToString("\n\n")
+        val candidate = text.replaceRange(block.range.min, block.range.max, replacement)
+        val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        val expectedSources = listOfNotNull(before, after)
+        val beforeBlocks = document.blocks.take(index)
+        val afterBlocks = document.blocks.drop(index + 1)
+        if (parsed.size != beforeBlocks.size + pastedDocument.blocks.size + expectedSources.size + afterBlocks.size) return false
+        if (beforeBlocks.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val replacedBlocks = parsed.drop(beforeBlocks.size).take(pastedDocument.blocks.size + expectedSources.size)
+        var cursor = 0
+        if (before != null) {
+            if (replacedBlocks[cursor].source != before || replacedBlocks[cursor].kind != block.kind) return false
+            cursor++
+        }
+        if (pastedDocument.blocks.zip(replacedBlocks.drop(cursor)).any { (old, next) ->
+                old.kind != next.kind || old.source != next.source
+            }) return false
+        cursor += pastedDocument.blocks.size
+        if (after != null && (replacedBlocks[cursor].source != after || replacedBlocks[cursor].kind != block.kind)) return false
+        if (afterBlocks.zip(parsed.takeLast(afterBlocks.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val selectionOffset = (before?.length?.plus(2) ?: 0) + markdown.length
+        replaceRange(block.range.min, block.range.max, replacement, selectedStart = selectionOffset)
+        activeFormattedBlockId = null
+        activeFormattedListPath = null
+        formattedSelection = TextRange.Zero
+        formattedComposition = null
+        formattedBlockFocusTarget = null
+        return true
+    }
+
     internal fun applyFormattedInlineMark(command: MarkdownEditorCommand, destination: String? = null): Boolean {
         val blockId = activeFormattedBlockId ?: return false
         val block = semanticDocument().blockById(blockId) ?: return false

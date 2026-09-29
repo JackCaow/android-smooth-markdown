@@ -465,8 +465,13 @@ private fun FormattedBlockPane(
                                 selectedSuggestion = 0
                                 dismissedQuery = null
                                 if (inline != null) {
-                                    controller.setFormattedSelection(block.id, next.selection, next.composition)
-                                    if (next.text != inline.visible) controller.replaceFormattedInlineText(block.id, next.text, next.selection, next.composition)
+                                    if (next.text == inline.visible || next.composition != null ||
+                                        !controller.replaceFormattedTextWithBlocks(block.id, next.text)) {
+                                        controller.setFormattedSelection(block.id, next.selection, next.composition)
+                                        if (next.text != inline.visible) {
+                                            controller.replaceFormattedInlineText(block.id, next.text, next.selection, next.composition)
+                                        }
+                                    }
                                 } else {
                                     controller.replaceFormattedBlockText(block.id, next.text)
                                 }
