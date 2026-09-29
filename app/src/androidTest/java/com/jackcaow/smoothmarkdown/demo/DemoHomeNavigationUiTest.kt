@@ -7,16 +7,28 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 class DemoHomeNavigationUiTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    @Test fun appBarTitleDoesNotWrapIntoReaderContent() {
+        val results = mutableListOf<TextLayoutResult>()
+        val action = rule.onNodeWithTag("demo-app-title").fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult].action
+        assertTrue(action?.invoke(results) == true)
+        assertEquals(1, results.single().lineCount)
+    }
 
     @Test fun drawerUsesFlutterExampleTitlesAndStillNavigatesToSource() {
         rule.onNodeWithTag("open-navigation").performClick()

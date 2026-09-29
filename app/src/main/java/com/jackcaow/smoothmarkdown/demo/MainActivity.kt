@@ -41,6 +41,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
@@ -377,8 +378,9 @@ private fun DemoHome(
                         modifier = Modifier.testTag("open-navigation")) {
                         Icon(Icons.Filled.Menu, contentDescription = localizations.chrome(language, "examples"))
                     }
-                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.weight(1f))
+                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).testTag("demo-app-title"))
                     IconButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
                         Icon(Icons.Filled.EditNote, contentDescription = localizations.chrome(language, "edit"))
                     }
