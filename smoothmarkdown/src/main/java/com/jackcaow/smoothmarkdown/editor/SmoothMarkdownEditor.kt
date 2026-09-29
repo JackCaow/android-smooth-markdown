@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -97,6 +98,10 @@ fun SmoothMarkdownEditor(
     onModeChanged: ((MarkdownEditorMode) -> Unit)? = null,
     /** Source offsets use UTF-16 and are reported when the selection changes. */
     onSelectionChanged: ((TextRange) -> Unit)? = null,
+    /** Reports focus transitions of the source field, not formatted or search fields. */
+    onFocusChanged: ((Boolean) -> Unit)? = null,
+    /** Reports an after-frame snapshot of native editor state. */
+    onPerformanceSnapshot: ((MarkdownEditorPerformanceSnapshot) -> Unit)? = null,
     initialFocusMode: Boolean = false,
     onFocusModeChanged: ((Boolean) -> Unit)? = null,
 ) {
@@ -106,13 +111,20 @@ fun SmoothMarkdownEditor(
     }
     val latestOnChanged = rememberUpdatedState(onChanged)
     val latestOnSelectionChanged = rememberUpdatedState(onSelectionChanged)
+    val latestOnFocusChanged = rememberUpdatedState(onFocusChanged)
+    val latestOnPerformanceSnapshot = rememberUpdatedState(onPerformanceSnapshot)
     val hostEvents = remember(controller) { MarkdownEditorHostEvents(controller.value) }
+    val sourceFocus = remember(controller) { MarkdownEditorSourceFocusTracker() }
+    val performanceReporter = remember(controller) { MarkdownEditorPerformanceReporter() }
     DisposableEffect(controller, hostEvents) {
         val observer: (TextFieldValue) -> Unit = { value ->
             hostEvents.accept(value, latestOnChanged.value, latestOnSelectionChanged.value)
         }
         controller.addValueObserver(observer)
         onDispose { controller.removeValueObserver(observer) }
+    }
+    DisposableEffect(controller, sourceFocus) {
+        onDispose { sourceFocus.setFocused(false, latestOnFocusChanged.value) }
     }
     val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
         controller.parserPlugins?.copy()?.also { registry ->
@@ -136,6 +148,17 @@ fun SmoothMarkdownEditor(
     val slashSuggestions = slashTrigger?.let {
         MarkdownSlashCommands.allSuggestions(it, enableWikilinks, capabilities, customSlashCommands)
     }.orEmpty()
+    val slashSuggestionsVisible = slashTrigger != null && slashSuggestions.isNotEmpty()
+    LaunchedEffect(controller, controller.value, controller.mode, searchOpen, searchQuery,
+        slashSuggestionsVisible, onPerformanceSnapshot != null) {
+        if (onPerformanceSnapshot != null) {
+            // Consecutive synchronous edits settle into one snapshot of the final frame.
+            withFrameNanos { }
+            latestOnPerformanceSnapshot.value?.invoke(performanceReporter.capture(
+                controller, searchQuery, searchOpen, slashSuggestionsVisible,
+            ))
+        }
+    }
     fun requestMode(next: MarkdownEditorMode) {
         if (next == controller.mode) return
         if (mode == null) controller.mode = next
@@ -324,11 +347,15 @@ fun SmoothMarkdownEditor(
         if (hostStatus.isNotEmpty()) Text(hostStatus, modifier = Modifier.testTag("editor-host-status"))
         Spacer(Modifier.height(8.dp))
         when (controller.mode) {
-            MarkdownEditorMode.SOURCE -> SourcePane(controller, Modifier.weight(1f))
+            MarkdownEditorMode.SOURCE -> SourcePane(controller, Modifier.weight(1f)) { focused ->
+                sourceFocus.setFocused(focused, latestOnFocusChanged.value)
+            }
             MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f),
                 plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
-                SourcePane(controller, Modifier.weight(1f))
+                SourcePane(controller, Modifier.weight(1f)) { focused ->
+                    sourceFocus.setFocused(focused, latestOnFocusChanged.value)
+                }
                 SmoothMarkdown(controller.text, Modifier.weight(1f),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             }
@@ -351,11 +378,13 @@ private fun editorToolbarLabel(command: MarkdownEditorCommand): String = when (c
 }
 
 @Composable
-private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier) {
+private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier, onFocusChanged: (Boolean) -> Unit) {
+    DisposableEffect(controller) { onDispose { onFocusChanged(false) } }
     BasicTextField(
         value = controller.value,
         onValueChange = controller::updateFromInput,
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(12.dp).testTag("editor-source-input"),
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(12.dp)
+            .onFocusChanged { onFocusChanged(it.isFocused) }.testTag("editor-source-input"),
         textStyle = MaterialTheme.typography.bodyMedium.copy(
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = FontFamily.Monospace,
