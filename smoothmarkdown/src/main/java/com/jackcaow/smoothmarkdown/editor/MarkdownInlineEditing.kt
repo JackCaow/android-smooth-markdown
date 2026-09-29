@@ -68,6 +68,19 @@ internal class MarkdownInlineEditing private constructor(
         return SplitRange(before, after)
     }
 
+    /** A standalone Markdown fragment for exactly this rendered range. */
+    fun sliceVisibleRange(range: TextRange): String? {
+        val lower = range.min
+        val upper = range.max
+        if (lower < 0 || upper > visible.length || lower == upper ||
+            !validUtf16Boundary(lower) || !validUtf16Boundary(upper)) return null
+        val start = boundary(lower) ?: return null
+        val end = boundary(upper) ?: return null
+        if (start.offset > end.offset) return null
+        val fragment = start.openTokens + source.substring(start.offset, end.offset) + end.closeTokens
+        return fragment.takeIf { parse(it, enableWikilinks).visible == visible.substring(lower, upper) }
+    }
+
     fun annotated(linkColor: Color): AnnotatedString = buildAnnotatedString {
         append(visible)
         marks.forEach { mark ->

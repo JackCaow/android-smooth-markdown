@@ -473,6 +473,127 @@ class MarkdownEditorController(
         return text.substring(first.range.min, last.range.max)
     }
 
+    /** Serializes rendered characters, retaining their original inline Markdown syntax. */
+    fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
+        val resolved = resolveFormattedTextSelection(selected) ?: return null
+        val slices = resolved.slices.mapNotNull { slice ->
+            if (slice.start == slice.end) null else {
+                val fragment = slice.inline.sliceVisibleRange(TextRange(slice.start, slice.end)) ?: return null
+                val markdown = MarkdownFormattedBlock.markdown(slice.block, fragment) ?: return null
+                slice.block to markdown
+            }
+        }
+        if (slices.isEmpty()) return null
+        return buildString {
+            slices.forEachIndexed { index, (block, markdown) ->
+                if (index > 0) append(text.substring(slices[index - 1].first.range.max, block.range.min))
+                append(markdown)
+            }
+        }
+    }
+
+    /** Deletes one rendered text range across sibling prose blocks in one undo step. */
+    fun deleteFormattedTextSelection(selected: MarkdownFormattedTextSelection): Boolean =
+        replaceFormattedTextSelectionWithMarkdown(selected, "")
+
+    /** Replaces one rendered range with complete parsed Markdown blocks. */
+    fun replaceFormattedTextSelectionWithMarkdown(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (!hasWellFormedUtf16(markdown)) return false
+        val resolved = resolveFormattedTextSelection(selected) ?: return false
+        val first = resolved.slices.first()
+        val last = resolved.slices.last()
+        val left = first.inline.splitVisibleRange(TextRange(first.start, first.inline.visible.length))?.before ?: return false
+        val right = last.inline.splitVisibleRange(TextRange(0, last.end))?.after ?: return false
+        val leftVisible = first.inline.visible.substring(0, first.start)
+        val rightVisible = last.inline.visible.substring(last.end)
+        val expected = mutableListOf<Pair<MarkdownBlockKind, String>>()
+        val between = if (first.block.id == last.block.id) "" else text.substring(first.block.range.max, last.block.range.min)
+        val separator = if (between.contains("\r\n")) "\r\n\r\n" else "\n\n"
+        val replacement = if (markdown.isEmpty()) {
+            val merged = left + right
+            if (merged.isNotEmpty()) {
+                if (MarkdownInlineEditing.parse(merged, enableWikilinks).visible != leftVisible + rightVisible) return false
+                val block = MarkdownFormattedBlock.markdown(first.block, merged) ?: return false
+                expected += first.block.kind to block
+                block
+            } else ""
+        } else {
+            val inserted = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return false
+            val pieces = mutableListOf<String>()
+            if (left.isNotEmpty()) {
+                val block = MarkdownFormattedBlock.markdown(first.block, left) ?: return false
+                expected += first.block.kind to block
+                pieces += block
+            }
+            inserted.forEach { expected += it.kind to it.source }
+            pieces += markdown
+            if (right.isNotEmpty()) {
+                val block = if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING) right
+                    else MarkdownFormattedBlock.markdown(last.block, right) ?: return false
+                expected += (if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING)
+                    MarkdownBlockKind.PARAGRAPH else last.block.kind) to block
+                pieces += block
+            }
+            pieces.joinToString(separator)
+        }
+        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return false
+        val candidate = text.replaceRange(first.block.range.min, last.block.range.max, replacement)
+        val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        val before = resolved.document.blocks.take(resolved.firstIndex)
+        val after = resolved.document.blocks.drop(resolved.lastIndex + 1)
+        if (parsed.size != before.size + expected.size + after.size) return false
+        if (before.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (expected.zip(parsed.drop(before.size)).any { (want, next) -> want.first != next.kind || want.second != next.source }) return false
+        if (after.zip(parsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val caret = if (markdown.isEmpty()) {
+            val bodyOffset = MarkdownInlineEditing.parse(left + right, enableWikilinks).sourceOffsetAtVisible(leftVisible.length) ?: left.length
+            (expected.firstOrNull()?.second?.length ?: 0) - (left + right).length + bodyOffset
+        } else {
+            (if (left.isNotEmpty()) expected.first().second.length + separator.length else 0) +
+                markdown.length + if (right.isNotEmpty()) separator.length else 0
+        }
+        replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret.coerceIn(0, replacement.length))
+        return true
+    }
+
+    private data class ResolvedFormattedTextSlice(
+        val block: MarkdownDocumentBlock,
+        val inline: MarkdownInlineEditing,
+        val start: Int,
+        val end: Int,
+    )
+
+    private data class ResolvedFormattedTextSelection(
+        val document: MarkdownDocument,
+        val firstIndex: Int,
+        val lastIndex: Int,
+        val slices: List<ResolvedFormattedTextSlice>,
+    )
+
+    private fun resolveFormattedTextSelection(selected: MarkdownFormattedTextSelection): ResolvedFormattedTextSelection? {
+        if (selected.source != text) return null
+        val document = semanticDocument()
+        val anchorIndex = document.blocks.indexOfFirst { it.id == selected.anchor.blockId }
+        val focusIndex = document.blocks.indexOfFirst { it.id == selected.focus.blockId }
+        if (anchorIndex < 0 || focusIndex < 0) return null
+        val bounds = listOf(anchorIndex to selected.anchor.offset, focusIndex to selected.focus.offset)
+            .sortedWith(compareBy({ it.first }, { it.second }))
+        if (bounds[0] == bounds[1]) return null
+        val firstIndex = bounds[0].first
+        val lastIndex = bounds[1].first
+        val slices = (firstIndex..lastIndex).map { index ->
+            val block = document.blocks[index]
+            val inline = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return null
+            val start = if (index == firstIndex) bounds[0].second else 0
+            val end = if (index == lastIndex) bounds[1].second else inline.visible.length
+            if (start !in 0..inline.visible.length || end !in start..inline.visible.length ||
+                inline.splitVisibleRange(TextRange(start, end)) == null) return null
+            ResolvedFormattedTextSlice(block, inline, start, end)
+        }
+        return ResolvedFormattedTextSelection(document, firstIndex, lastIndex, slices)
+    }
+
     /** Applies an inline mark to complete visible text in selected prose blocks. */
     fun applyInlineCommandToFormattedBlockSelection(
         command: MarkdownEditorCommand,
