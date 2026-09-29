@@ -73,6 +73,48 @@ class MermaidStructuredTest {
         assertEquals("1", klass.edges.single().targetLabel)
     }
 
+    @Test fun flutterFrontmatterAndInlineCommentsKeepStructuredDiagramsNative() {
+        val klass = MermaidParser.parse("""
+            ---
+            title: Class model
+            ---
+            classDiagram
+            Animal <|-- Duck %% inheritance
+            class Duck { %% members
+              +String name %% attribute
+              +swim() %% method
+            }
+        """.trimIndent())!!
+        assertEquals(MermaidKind.ClassDiagram, klass.kind)
+        assertEquals(listOf(listOf("+String name"), listOf("+swim()")), klass.node("Duck")!!.compartments)
+        assertEquals(MermaidEdgeMarker.Inheritance, klass.edges.single().sourceMarker)
+
+        val state = MermaidParser.parse("""
+            ---
+            title: Checkout
+            ---
+            stateDiagram-v2
+            [*] --> Pending %% initial state
+            Pending --> Done: paid %% successful transition
+            Done --> [*] %% terminal state
+        """.trimIndent())!!
+        assertEquals(MermaidKind.StateDiagram, state.kind)
+        assertEquals("paid", state.edges[1].label)
+        assertEquals(MermaidShape.StateStart, state.node("\$state:start")?.shape)
+        assertEquals(MermaidShape.StateEnd, state.node("\$state:end")?.shape)
+        assertTrue(MermaidLayout.compute(state).nodes.values.all { it.width > 0f })
+
+        val er = MermaidParser.parse("""
+            ---
+            title: Orders
+            ---
+            erDiagram
+            CUSTOMER ||--o{ ORDER : places %% relationship
+        """.trimIndent())!!
+        assertEquals(MermaidKind.ERDiagram, er.kind)
+        assertEquals("places", er.er!!.relationships.single().label)
+    }
+
     @Test fun selfLoopsHaveVisibleRoutesAndLabelsOutsideNodesInEveryDirection() {
         val source = """
             stateDiagram-v2
@@ -152,6 +194,8 @@ class MermaidStructuredTest {
             "classDiagram\nA --> B\nunsupported token",
             "classDiagram",
             "stateDiagram-v2\nstate A {\nB\n}",
+            "---\ntitle: invalid\nclassDiagram\nA --> B",
+            "---\ntitle: invalid\n---\nclassDiagram\nA --> B\nunknown statement",
         ).forEach { assertNull(it, MermaidParser.parse(it)) }
     }
 }

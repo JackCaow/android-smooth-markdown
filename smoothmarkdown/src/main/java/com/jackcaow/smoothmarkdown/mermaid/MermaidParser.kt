@@ -4,12 +4,16 @@ package com.jackcaow.smoothmarkdown.mermaid
 object MermaidParser {
     fun parse(source: String): MermaidDiagram? {
         val rawLines = source.lineSequence().toList()
-        val lines = source.lineSequence().map(String::trim).filter { it.isNotEmpty() && !it.startsWith("%%") }.toList()
-        val header = if (lines.firstOrNull() == "---") {
+        // Flutter removes trailing Mermaid comments before diagram dispatch, including comments
+        // on an otherwise valid relation or state transition.
+        val lines = rawLines.map { it.substringBefore("%%").trim() }.filter(String::isNotEmpty)
+        val headerIndex = if (lines.firstOrNull() == "---") {
             val end = lines.drop(1).indexOf("---")
             if (end < 0) return null
-            lines.getOrNull(end + 2) ?: return null
-        } else lines.firstOrNull() ?: return null
+            end + 2
+        } else 0
+        val header = lines.getOrNull(headerIndex) ?: return null
+        val diagramLines = lines.drop(headerIndex)
         return when {
             Regex("^(graph|flowchart)\\s+(TD|TB|BT|LR|RL)$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidFlowchartParser().parse(lines)
@@ -20,12 +24,12 @@ object MermaidParser {
             header.equals("kanban", ignoreCase = true) -> MermaidKanbanParser().parse(rawLines)
             header.equals("radar-beta", ignoreCase = true) -> MermaidRadarParser().parse(lines)
             header.equals("classDiagram", ignoreCase = true) ->
-                MermaidStructuredParser(MermaidKind.ClassDiagram).parse(lines)
+                MermaidStructuredParser(MermaidKind.ClassDiagram).parse(diagramLines)
             Regex("^stateDiagram(?:-v2)?$", RegexOption.IGNORE_CASE).matches(header) ->
-                MermaidStructuredParser(MermaidKind.StateDiagram).parse(lines)
+                MermaidStructuredParser(MermaidKind.StateDiagram).parse(diagramLines)
             Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidXYChartParser().parse(lines)
-            header.equals("erDiagram", ignoreCase = true) -> MermaidERParser().parse(lines)
+            header.equals("erDiagram", ignoreCase = true) -> MermaidERParser().parse(diagramLines)
             else -> null
         }
     }
