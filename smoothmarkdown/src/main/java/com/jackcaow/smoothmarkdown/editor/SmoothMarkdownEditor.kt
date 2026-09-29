@@ -525,6 +525,7 @@ private fun FormattedBlockPane(
     val listSelection = controller.formattedListItemSelection?.takeIf { it.source == controller.text }
     val tableSelection = controller.formattedTableCellSelection?.takeIf { it.source == controller.text }
     val dragSelection = remember(controller, controller.text) { FormattedDragSelection(controller) }
+    val textPositions = remember(controller, controller.text) { FormattedTextPositionRegistry() }
     var textEndpoints by remember(controller, controller.text) { mutableStateOf<FormattedTextEndpoints?>(null) }
     var textSelectionError by remember(controller, controller.text) { mutableStateOf(false) }
     var textReplacement by remember(controller) { mutableStateOf("") }
@@ -649,6 +650,9 @@ private fun FormattedBlockPane(
                         val dragModifier = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
                             Modifier.formattedDragSelectionTarget(dragSelection, FormattedDragTarget.Block(block.id))
                                 .testTag("formatted-block-drag-${block.id}") else Modifier
+                        val textTracker = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
+                            rememberFormattedTextFieldTracker(textPositions, block.id, controller.text, inline?.visible ?: editableText)
+                            else null
                         val decorated = AnnotatedString.Builder(inline?.annotated(MaterialTheme.colorScheme.primary)
                             ?: AnnotatedString(editableText)).apply {
                             textEndpoints?.visibleRange(blocks, block.id, visibleLength)?.let { range ->
@@ -674,6 +678,7 @@ private fun FormattedBlockPane(
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp).then(dragModifier)
+                                .then(textTracker?.modifier ?: Modifier)
                                 .focusRequester(blockFocusRequester).onPreviewKeyEvent { event ->
                                 if (!showSuggestions || event.type != KeyEventType.KeyDown) false else when (event.key) {
                                     Key.DirectionDown -> {
@@ -705,6 +710,7 @@ private fun FormattedBlockPane(
                                 else -> MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                             },
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            onTextLayout = { textTracker?.onTextLayout(it) },
                         )
                         if (block.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) &&
                             controller.activeFormattedBlockId == block.id) {
