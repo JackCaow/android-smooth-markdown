@@ -37,6 +37,9 @@ open class DelimitedBlockPlugin(val type: String, override val priority: Int = 0
         (node as DelimitedBlockNode).contentLines = contentLines.toList()
     }
 
+    override fun documentText(node: PluginBlockNode): String? =
+        (node as? DelimitedBlockNode)?.contentLines?.joinToString("\n")
+
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         Text((node as DelimitedBlockNode).contentLines.joinToString("\n"))

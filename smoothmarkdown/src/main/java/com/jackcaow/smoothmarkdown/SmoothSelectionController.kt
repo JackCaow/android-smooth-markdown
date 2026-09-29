@@ -4,18 +4,43 @@ import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import org.commonmark.node.Node
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
     private var region: SelectionState? = null
     private var anchors: NonTextAnchorRegistry? = null
     private val targets = mutableMapOf<Any, MarkdownSelectionTarget>()
+    private var document: Node? = null
+    private var documentHtml = false
+    private var documentPlugins: ParserPluginRegistry? = null
+    private var documentBuilders: MarkdownBuilderRegistry? = null
+    private val detailsExpanded = mutableMapOf<DetailsNode, Boolean>()
+    private var copyDocumentText: ((String) -> Unit)? = null
 
     /** The currently selected visible text, omitting non-text selection anchors. */
     val selectedText: String
         get() = region?.let { visibleSelectedText(it.selectedTexts, anchors?.snapshot().orEmpty()).text }.orEmpty()
 
-    /** Select all text currently registered with the Compose selection region. */
+    /**
+     * Full document text for explicit copying, including offscreen blocks but excluding collapsed
+     * details and nontext images/rules. Null when a custom renderer has no known text projection.
+     * This does not represent a native selection or selection handles.
+     */
+    val documentText: String?
+        get() = document?.let { readerDocumentText(
+            it, documentHtml, documentPlugins, documentBuilders, detailsExpanded,
+        ).takeIf { projection -> projection.complete }?.text }
+
+    /** Copy the whole projected document. Returns false if unattached or projection is incomplete. */
+    fun copyAllDocumentText(): Boolean {
+        val text = documentText?.takeIf { it.isNotEmpty() } ?: return false
+        val copy = copyDocumentText ?: return false
+        copy(text)
+        return true
+    }
+
+    /** Select all text currently registered with the Compose selection region (viewport scope). */
     fun selectAll() { region?.selectAll() }
 
     /** Select a range in the region's currently registered text. */
@@ -48,9 +73,29 @@ class SmoothSelectionController {
 
     internal fun removeTarget(key: Any) { targets.remove(key) }
 
-    internal fun attach(state: SelectionState, anchorRegistry: NonTextAnchorRegistry) {
+    internal fun bindDocument(node: Node, enableHtml: Boolean, plugins: ParserPluginRegistry?, builders: MarkdownBuilderRegistry?) {
+        if (document !== node) detailsExpanded.clear()
+        document = node
+        documentHtml = enableHtml
+        documentPlugins = plugins
+        documentBuilders = builders
+    }
+
+    internal fun unbindDocument(node: Node) {
+        if (document === node) {
+            document = null
+            detailsExpanded.clear()
+        }
+    }
+
+    internal fun setDetailsExpanded(node: DetailsNode, expanded: Boolean) {
+        if (document != null) detailsExpanded[node] = expanded
+    }
+
+    internal fun attach(state: SelectionState, anchorRegistry: NonTextAnchorRegistry, copyAll: (String) -> Unit) {
         region = state
         anchors = anchorRegistry
+        copyDocumentText = copyAll
     }
 
     internal fun detach(state: SelectionState) {
@@ -58,6 +103,7 @@ class SmoothSelectionController {
             region = null
             anchors = null
             targets.clear()
+            copyDocumentText = null
         }
     }
 }

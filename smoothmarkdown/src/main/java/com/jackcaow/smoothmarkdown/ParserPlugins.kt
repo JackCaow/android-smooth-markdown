@@ -56,6 +56,8 @@ interface BlockParserPlugin : ParserPlugin {
     fun complete(node: PluginBlockNode, contentLines: List<String>) = Unit
     /** Converts a CommonMark fenced code block after parsing; return null for ordinary code. */
     fun parseFencedCodeBlock(block: FencedCodeBlock): PluginBlockNode? = null
+    /** Text for whole-document copy when [RenderBlock] replaces a block; null means it is unknown. */
+    fun documentText(node: PluginBlockNode): String? = null
     @Composable fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit)
 }
 

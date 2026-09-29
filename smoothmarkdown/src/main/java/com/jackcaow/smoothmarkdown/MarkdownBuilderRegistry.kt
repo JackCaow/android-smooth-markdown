@@ -52,6 +52,8 @@ interface MarkdownNodeBuilder {
     fun canBuild(node: Node): Boolean
     @Composable fun Render(node: Node, context: MarkdownBuilderContext)
     fun renderInline(node: Node): MarkdownInlinePresentation? = null
+    /** Text for whole-document copy when [Render] replaces a block; null means it is unknown. */
+    fun documentText(node: Node): String? = null
 }
 
 /**
