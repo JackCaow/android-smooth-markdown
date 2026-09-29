@@ -26,6 +26,10 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.rememberSelectionState
+import androidx.compose.foundation.text.contextmenu.builder.item
+import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
+import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
+import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMenuComponents
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
@@ -210,12 +215,28 @@ fun SmoothMarkdown(
     selectable: Boolean = false,
     /** Controls the selectable region when [selectable] is true. */
     selectionController: SmoothSelectionController? = null,
+    /** Native selection-menu actions; each receives filtered visible text. */
+    selectionMenuActions: List<SmoothSelectionMenuAction> = emptyList(),
+    /** Hide the native Copy item when the host supplies its own copy action. */
+    showDefaultCopyAction: Boolean = true,
 ) {
     val document = if (enableCache) remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
         else parseMarkdown(markdown, plugins, enableCache = false)
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
         groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
+    }
+    val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
+    val targetCallback = remember(activeController, onTextPositioned) {
+        if (activeController == null) onTextPositioned
+        else { target: MarkdownSelectionTarget ->
+            activeController.track(target)
+            onTextPositioned?.invoke(target)
+            Unit
+        }
+    }
+    val targetDisposed = remember(activeController) {
+        activeController?.let { controller -> { key: Any -> controller.removeTarget(key) } }
     }
     CompositionLocalProvider(
         LocalCodeBlockOptions provides codeBlockOptions,
@@ -232,7 +253,8 @@ fun SmoothMarkdown(
             selectable = selectable || selectableAsSingleRegion,
             outerRegion = selectable || selectableAsSingleRegion,
             nonTextSelectionAnchor = selectable && !selectableAsSingleRegion,
-            onTextPositioned = onTextPositioned,
+            onTextPositioned = targetCallback,
+            onTextDisposed = targetDisposed,
         ),
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
@@ -255,7 +277,7 @@ fun SmoothMarkdown(
             }
         }
         if (selectable && !selectableAsSingleRegion) {
-            MarkdownSelectionRegion(selectionController, content)
+            MarkdownSelectionRegion(activeController, selectionMenuActions, showDefaultCopyAction, content)
         } else content()
     }
 }
@@ -263,22 +285,35 @@ fun SmoothMarkdown(
 @Composable
 private fun MarkdownSelectionRegion(
     controller: SmoothSelectionController?,
+    menuActions: List<SmoothSelectionMenuAction>,
+    showDefaultCopyAction: Boolean,
     content: @Composable () -> Unit,
 ) {
     val clipboard = LocalClipboard.current
     val anchorRegistry = remember { NonTextAnchorRegistry() }
     val filteringClipboard = remember(clipboard, anchorRegistry) { OverlayFilteringClipboard(clipboard, anchorRegistry) }
-    CompositionLocalProvider(LocalClipboard provides filteringClipboard, LocalNonTextAnchorRegistry provides anchorRegistry) {
-        if (controller == null) {
-            SelectionContainer { content() }
-        } else {
-            val state = rememberSelectionState()
-            DisposableEffect(controller, state) {
-                controller.attach(state)
-                onDispose { controller.detach(state) }
+    val state = rememberSelectionState()
+    DisposableEffect(controller, state) {
+        controller?.attach(state)
+        onDispose { controller?.detach(state) }
+    }
+    val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
+        it.key != TextContextMenuKeys.CopyKey
+    }
+    val menuModifier = if (menuActions.isEmpty()) filterModifier else filterModifier.appendTextContextMenuComponents {
+        if (state.selectedTexts.any { it.isNotEmpty() }) {
+            separator()
+            for (action in menuActions) {
+                item(key = action.key, label = action.label) {
+                    val raw = state.selectedTexts.joinToString("") { it.text }
+                    action.onClick(removeNonTextSelectionOverlayLines(raw, anchorRegistry.snapshot()))
+                    close()
+                }
             }
-            SelectionContainer(state = state) { content() }
         }
+    }
+    CompositionLocalProvider(LocalClipboard provides filteringClipboard, LocalNonTextAnchorRegistry provides anchorRegistry) {
+        SelectionContainer(state = state, modifier = menuModifier) { content() }
     }
 }
 
@@ -576,11 +611,26 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
     val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val selectionOptions = LocalMarkdownSelectionOptions.current
     val selectionKey = remember { Any() }
+    DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
+        onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
+    }
     val tracking = selectionOptions.onTextPositioned?.let { callback ->
         Modifier.onGloballyPositioned { coordinates ->
             val bounds = coordinates.boundsInWindow()
-            callback(MarkdownSelectionTarget(selectionKey, bounds, text) { windowPoint ->
-                layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+            callback(MarkdownSelectionTarget(
+                selectionKey, bounds, text,
+                offsetAtWindowPosition = { windowPoint ->
+                    layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+                },
+            ).apply {
+                wordBoundaryAtWindowPosition = { windowPoint ->
+                    layout.value?.let { result ->
+                        result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
+                    } ?: TextRange(0)
+                }
+                containsTextAtWindowPosition = { windowPoint ->
+                    textLayoutContainsWindowPoint(layout.value, windowPoint, bounds)
+                }
             })
         }
     } ?: Modifier
@@ -622,11 +672,26 @@ private fun MarkdownInlineText(
     val selectionOptions = LocalMarkdownSelectionOptions.current
     val selectionKey = remember { Any() }
     val layout = remember(render.text) { mutableStateOf<TextLayoutResult?>(null) }
+    DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
+        onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
+    }
     val tracking = selectionOptions.onTextPositioned?.let { callback ->
         Modifier.onGloballyPositioned { coordinates ->
             val bounds = coordinates.boundsInWindow()
-            callback(MarkdownSelectionTarget(selectionKey, bounds, render.text) { windowPoint ->
-                layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+            callback(MarkdownSelectionTarget(
+                selectionKey, bounds, render.text,
+                offsetAtWindowPosition = { windowPoint ->
+                    layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+                },
+            ).apply {
+                wordBoundaryAtWindowPosition = { windowPoint ->
+                    layout.value?.let { result ->
+                        result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
+                    } ?: TextRange(0)
+                }
+                containsTextAtWindowPosition = { windowPoint ->
+                    textLayoutContainsWindowPoint(layout.value, windowPoint, bounds)
+                }
             })
         }
     } ?: Modifier
