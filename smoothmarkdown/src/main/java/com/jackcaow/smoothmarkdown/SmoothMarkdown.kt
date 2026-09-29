@@ -210,7 +210,9 @@ fun SmoothMarkdown(
     val document = if (enableCache) remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
         else parseMarkdown(markdown, plugins, enableCache = false)
     val blocks = remember(document) { document.children().toList() }
-    val selectionGroups = remember(blocks) { groupSelectableBlocks(blocks) }
+    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
+        groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
+    }
     CompositionLocalProvider(
         LocalCodeBlockOptions provides codeBlockOptions,
         LocalCodeBlockBuilder provides codeBlockBuilder,
@@ -292,14 +294,15 @@ private fun MarkdownSelectionGroup(
     }
 }
 
-/** Adjacent prose shares one selection registrar; LazyColumn still recycles other blocks. */
-internal fun groupSelectableBlocks(blocks: List<Node>): List<List<Node>> {
+/** Keep text around visible nontext blocks mounted in one lazy item for a shared selection range. */
+internal fun groupSelectableBlocks(blocks: List<Node>, bridgeVisibleNonText: Boolean = false): List<List<Node>> {
     val groups = mutableListOf<List<Node>>()
     val pending = mutableListOf<Node>()
     fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
     for (block in blocks) {
         val prose = block is Heading || block is Paragraph || block is BlockQuote ||
-            block is BulletList || block is OrderedList
+            block is BulletList || block is OrderedList ||
+            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak))
         if (prose) pending += block else { flush(); groups += listOf(block) }
     }
     flush()
