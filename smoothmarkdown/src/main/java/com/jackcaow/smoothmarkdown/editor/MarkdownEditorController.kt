@@ -951,6 +951,36 @@ class MarkdownEditorController(
         destination: String? = null,
     ): Boolean {
         if (selected.source != text) return false
+        val kind = inlineMarkKind(command) ?: return false
+        val anchor = selected.anchor
+        val focus = selected.focus
+        if (anchor.listPath != null || focus.listPath != null ||
+            anchor.tableCell != null || focus.tableCell != null ||
+            anchor.quoteLineIndex != null || focus.quoteLineIndex != null) {
+            if (anchor.blockId != focus.blockId) return false
+            val current = semanticDocument()
+            val blockIndex = current.blocks.indexOfFirst { it.id == anchor.blockId }
+            val block = current.blocks.getOrNull(blockIndex) ?: return false
+            val replacement = when {
+                anchor.listPath != null && focus.listPath != null ->
+                    FormattedStructuredInlineMarks.list(block, anchor, focus, kind, destination, enableWikilinks)
+                anchor.tableCell != null && focus.tableCell != null && command in setOf(
+                    MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                    MarkdownEditorCommand.STRIKETHROUGH, MarkdownEditorCommand.INLINE_CODE,
+                ) -> FormattedStructuredInlineMarks.table(block, anchor, focus, kind, destination, enableWikilinks)
+                anchor.quoteLineIndex != null && focus.quoteLineIndex != null ->
+                    FormattedStructuredInlineMarks.quote(block, anchor, focus, kind, destination, enableWikilinks)
+                else -> null
+            } ?: return false
+            val candidate = text.replaceRange(block.range.min, block.range.max, replacement)
+            val reparsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+            if (reparsed.size != current.blocks.size || current.blocks.indices.any { index ->
+                    val old = current.blocks[index]
+                    val next = reparsed[index]
+                    old.kind != next.kind || next.source != (if (index == blockIndex) replacement else old.source)
+                }) return false
+            return replaceSemanticBlock(block.id, replacement)
+        }
         val document = semanticDocument()
         val anchorIndex = document.blocks.indexOfFirst { it.id == selected.anchor.blockId }
         val focusIndex = document.blocks.indexOfFirst { it.id == selected.focus.blockId }

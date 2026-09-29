@@ -138,9 +138,19 @@ internal data class FormattedTextEndpoints(
         val index = blocks.indexOfFirst { it.id == blockId }
         if (anchorIndex < 0 || focusIndex < 0 || index < 0) return null
         if (anchorIndex == focusIndex) {
-            if (index != anchorIndex || anchor.tableCell != cell || end.tableCell != cell) return null
-            val start = minOf(anchor.offset, end.offset)
-            val finish = maxOf(anchor.offset, end.offset)
+            if (index != anchorIndex || anchor.tableCell == null || end.tableCell == null) return null
+            val table = MarkdownSourceTable.parse(blocks[index].source) ?: return null
+            fun key(position: MarkdownTableCellPosition) = position.rowIndex * table.columnCount + position.columnIndex
+            val anchorKey = key(anchor.tableCell)
+            val endKey = key(end.tableCell)
+            val currentKey = key(cell)
+            if (anchorKey !in 0 until (table.rows.size + 1) * table.columnCount ||
+                endKey !in 0 until (table.rows.size + 1) * table.columnCount ||
+                currentKey !in minOf(anchorKey, endKey)..maxOf(anchorKey, endKey)) return null
+            val first = if (anchorKey < endKey || anchorKey == endKey && anchor.offset <= end.offset) anchor else end
+            val last = if (first == anchor) end else anchor
+            val start = if (currentKey == key(first.tableCell!!)) first.offset else 0
+            val finish = if (currentKey == key(last.tableCell!!)) last.offset else length
             return if (start in 0..length && finish in start..length && start != finish)
                 TextRange(start, finish) else null
         }
