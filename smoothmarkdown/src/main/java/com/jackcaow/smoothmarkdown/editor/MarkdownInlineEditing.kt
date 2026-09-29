@@ -362,9 +362,9 @@ internal class MarkdownInlineEditing private constructor(
     }
 
     companion object {
-        internal fun escapedPlainText(text: String, enableWikilinks: Boolean): String = buildString {
+        internal fun escapedPlainText(text: String): String = buildString {
             text.forEach { char ->
-                if (char in "\\*_`~<>&" || (!enableWikilinks && char in "[]")) append('\\')
+                if (char in "\\*_`~<>&[]") append('\\')
                 append(char)
             }
         }

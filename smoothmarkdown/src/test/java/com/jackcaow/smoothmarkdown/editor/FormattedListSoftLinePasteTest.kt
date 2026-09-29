@@ -1,6 +1,12 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.ui.text.TextRange
+import com.jackcaow.smoothmarkdown.parseMarkdown
+import org.commonmark.node.HtmlInline
+import org.commonmark.node.Image
+import org.commonmark.node.Link
+import org.commonmark.node.Node
+import org.commonmark.node.Text
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -94,13 +100,29 @@ class FormattedListSoftLinePasteTest {
 
     @Test fun plainHtmlImageAndEntitySyntaxStayLiteral() {
         for (firstLine in listOf("![image](url)", "<span>", "&copy;", "![image](url) <span> &copy;")) {
-            val controller = MarkdownEditorController("- target\n- Keep").apply { mode = MarkdownEditorMode.FORMATTED }
+            val controller = MarkdownEditorController("- target\n- Keep").apply {
+                mode = MarkdownEditorMode.FORMATTED
+                enableWikilinks = true
+            }
             val id = controller.semanticDocument().blocks.single().id
             assertTrue(firstLine, controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
                 "$firstLine\nnext", TextRange(0, "target".length)))
             val list = MarkdownSourceList.parse(controller.semanticDocument().blocks.single())!!
-            assertEquals(firstLine, MarkdownInlineEditing.parse(list.lineContent(listOf(0), 0)!!, false).visible)
+            assertEquals(firstLine, MarkdownInlineEditing.parse(list.lineContent(listOf(0), 0)!!, true).visible)
             assertEquals("- Keep", list.copySiblingItems(emptyList(), 1, 1))
+            val literals = mutableListOf<String>()
+            fun visit(node: Node) {
+                assertFalse("$firstLine became ${node.javaClass.simpleName}",
+                    node is Image || node is Link || node is HtmlInline)
+                if (node is Text) literals += node.literal
+                var child = node.firstChild
+                while (child != null) {
+                    visit(child)
+                    child = child.next
+                }
+            }
+            visit(parseMarkdown(controller.text))
+            assertTrue(literals.joinToString("").contains(firstLine))
         }
     }
 }

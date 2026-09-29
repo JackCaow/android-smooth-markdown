@@ -93,7 +93,7 @@ internal class MarkdownSourceList private constructor(
         val indent = " ".repeat(markerMatch.groupValues[1].length + markerMatch.groupValues[2].length +
             markerMatch.groupValues[3].length)
         val newline = if ("\r\n" in source) "\r\n" else "\n"
-        val escaped = pasted.map { MarkdownInlineEditing.escapedPlainText(it, enableWikilinks) }
+        val escaped = pasted.map { MarkdownInlineEditing.escapedPlainText(it) }
         val inserted = escaped.joinToString(newline + indent)
         val replacement = before + inserted + after
         val candidate = source.replaceRange(line.start, line.end, replacement)
