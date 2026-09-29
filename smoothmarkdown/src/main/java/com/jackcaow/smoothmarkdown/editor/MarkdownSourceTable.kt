@@ -203,3 +203,21 @@ internal fun findSourceTable(source: String, offset: Int): MarkdownSourceTableAt
     }
     return null
 }
+
+/** Exact source content of one displayed cell, excluding only surrounding cell padding. */
+internal fun sourceTableCellContentRange(source: String, rowIndex: Int, columnIndex: Int): TextRange? {
+    val table = MarkdownSourceTable.parse(source) ?: return null
+    val cell = if (rowIndex == 0) table.headers.getOrNull(columnIndex)
+        else table.rows.getOrNull(rowIndex - 1)?.getOrNull(columnIndex)
+    if (cell == null) return null
+    val lineIndex = if (rowIndex == 0) 0 else rowIndex + 1
+    val lines = source.split('\n')
+    val line = lines.getOrNull(lineIndex) ?: return null
+    val range = sourceCellRanges(line).getOrNull(columnIndex) ?: return null
+    val raw = line.substring(range.min, range.max)
+    if (raw.trim() != cell) return null
+    val leading = raw.indexOfFirst { !it.isWhitespace() }.let { if (it < 0) raw.length / 2 else it }
+    val trailing = raw.indexOfLast { !it.isWhitespace() }.let { if (it < 0) leading else it + 1 }
+    val lineStart = lines.take(lineIndex).sumOf { it.length + 1 }
+    return TextRange(lineStart + range.min + leading, lineStart + range.min + trailing)
+}

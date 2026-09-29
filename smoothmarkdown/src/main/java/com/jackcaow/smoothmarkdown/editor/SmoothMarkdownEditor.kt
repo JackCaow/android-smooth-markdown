@@ -715,7 +715,18 @@ private fun FormattedBlockPane(
                     }
                     if (block.kind == MarkdownBlockKind.TABLE) {
                         val table = controller.semanticTable(block.id)
-                        if (table != null) FormattedTable(controller, block.id, table, dragSelection)
+                        if (table != null) FormattedTable(controller, block.id, table, dragSelection, textPositions,
+                            textEndpoints, { position ->
+                                controller.clearFormattedBlockSelection()
+                                controller.clearFormattedListItemSelection()
+                                controller.resetFormattedTableCellSelection()
+                                textEndpoints = FormattedTextEndpoints(controller.text, position)
+                                textSelectionError = false
+                            }, { position ->
+                                textEndpoints = textEndpoints?.withFocus(position)
+                                textSelectionError = false
+                                focusManager.clearFocus()
+                            })
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (block.kind == MarkdownBlockKind.BULLET_LIST || block.kind == MarkdownBlockKind.ORDERED_LIST) {
                         val list = MarkdownSourceList.parse(block)
@@ -1210,13 +1221,30 @@ private fun FormattedListTextField(
 
 @Composable
 private fun FormattedTable(controller: MarkdownEditorController, blockId: String, table: MarkdownSourceTable,
-                           dragSelection: FormattedDragSelection) {
+                           dragSelection: FormattedDragSelection, textPositions: FormattedTextPositionRegistry,
+                           textEndpoints: FormattedTextEndpoints?,
+                           onSetStart: (MarkdownFormattedTextPosition) -> Unit,
+                           onSetEnd: (MarkdownFormattedTextPosition) -> Unit) {
     val editorTheme = LocalMarkdownEditorTheme.current
+    val blocks = controller.semanticDocument().blocks
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
         .padding(editorTheme.tablePadding ?: 12.dp)) {
         fun displayCell(raw: String) = raw.replace("\\|", "|")
         @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
             val selectedRow = if (header) 0 else rowIndex + 1
+            val cellPosition = MarkdownTableCellPosition(selectedRow, columnIndex)
+            val visible = displayCell(raw)
+            var cellSelection by remember(blockId, selectedRow, columnIndex) { mutableStateOf(TextRange(visible.length)) }
+            var focused by remember(blockId, selectedRow, columnIndex) { mutableStateOf(false) }
+            val safeSelection = TextRange(cellSelection.start.coerceIn(0, visible.length),
+                cellSelection.end.coerceIn(0, visible.length))
+            val textTracker = rememberFormattedTextFieldTracker(textPositions, blockId, controller.text, visible, cellPosition)
+            val decorated = AnnotatedString.Builder(visible).apply {
+                textEndpoints?.tableVisibleRange(blocks, blockId, cellPosition, visible.length)?.let { range ->
+                    addStyle(SpanStyle(background = editorTheme.selectionColor
+                        ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
+                }
+            }.toAnnotatedString()
             val selected = controller.formattedTableCellSelection?.let {
                 it.source == controller.text && it.blockId == blockId &&
                     selectedRow in it.firstRow..it.lastRow && columnIndex in it.firstColumn..it.lastColumn
@@ -1231,21 +1259,40 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                 .formattedDragSelectionTarget(dragSelection, FormattedDragTarget.TableCell(blockId, selectedRow, columnIndex))
                 .testTag("formatted-table-drag-$blockId-$selectedRow-$columnIndex")) {
                 TextButton(
-                    onClick = { controller.selectFormattedTableCell(blockId, if (header) 0 else rowIndex + 1, columnIndex) },
-                    modifier = Modifier.testTag("formatted-table-select-$blockId-${if (header) 0 else rowIndex + 1}-$columnIndex"),
+                    onClick = { controller.selectFormattedTableCell(blockId, selectedRow, columnIndex) },
+                    modifier = Modifier.testTag("formatted-table-select-$blockId-$selectedRow-$columnIndex"),
                 ) { Text("Select") }
                 BasicTextField(
-                    value = displayCell(raw),
+                    value = TextFieldValue(decorated, safeSelection),
                     onValueChange = { next ->
-                        controller.editSemanticTable(blockId) { it.replaceCell(rowIndex, columnIndex, next, header) }
+                        if (next.text == visible || controller.editSemanticTable(blockId) {
+                                it.replaceCell(rowIndex, columnIndex, next.text, header)
+                            }) cellSelection = next.selection
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().then(textTracker.modifier)
+                        .onFocusChanged { focused = it.isFocused }
+                        .testTag("formatted-table-text-$blockId-$selectedRow-$columnIndex"),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
                     ),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    onTextLayout = { textTracker.onTextLayout(it) },
                 )
+                if (focused) {
+                    Row {
+                        TextButton(onClick = { onSetStart(MarkdownFormattedTextPosition(blockId,
+                            safeSelection.start, tableCell = cellPosition)) },
+                            modifier = Modifier.testTag("formatted-table-text-start-$blockId-$selectedRow-$columnIndex")) {
+                            Text("Set start")
+                        }
+                        TextButton(onClick = { onSetEnd(MarkdownFormattedTextPosition(blockId,
+                            safeSelection.end, tableCell = cellPosition)) }, enabled = textEndpoints != null,
+                            modifier = Modifier.testTag("formatted-table-text-end-$blockId-$selectedRow-$columnIndex")) {
+                            Text("Set end")
+                        }
+                    }
+                }
             }
         }
         Row {
