@@ -107,7 +107,7 @@ class FormattedSemanticTextSelectionTest {
         assertEquals(source, editor.text)
     }
 
-    @Test fun listEndpointRejectsStaleUnsafeAndUnsupportedNestedPositions() {
+    @Test fun listEndpointRejectsStaleAndUnsafeButAcceptsSourceBackedNestedPositions() {
         val source = "- 😀 first\n  - nested\n- last\n\nend"
         val editor = MarkdownEditorController(source)
         val halfEmoji = MarkdownFormattedTextSelection(source, listPosition(0, 0, 1), listPosition(0, 1, 2))
@@ -115,7 +115,10 @@ class FormattedSemanticTextSelectionTest {
         assertFalse(editor.deleteFormattedTextSelection(halfEmoji))
         val nested = MarkdownFormattedTextSelection(source, listPosition(0, 0, 2),
             MarkdownFormattedTextPosition("block-0", 2, listOf(0, 0)))
-        assertFalse(editor.deleteFormattedTextSelection(nested))
+        assertEquals("-  first\n  - ne", editor.copyFormattedTextSelectionAsMarkdown(nested))
+        assertTrue(editor.deleteFormattedTextSelection(nested))
+        assertEquals("- 😀sted\n- last\n\nend", editor.text)
+        assertTrue(editor.undo())
         val stale = MarkdownFormattedTextSelection("older", listPosition(0, 1, 1),
             MarkdownFormattedTextPosition("block-1", 1))
         assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(stale, "New"))

@@ -48,29 +48,44 @@ internal data class FormattedTextEndpoints(
     }
 
     fun listVisibleRange(blocks: List<MarkdownDocumentBlock>, blockId: String, path: List<Int>,
-                         lineIndex: Int, length: Int): TextRange? {
+                         lineIndex: Int, length: Int, sourceList: MarkdownSourceList? = null): TextRange? {
         val end = focus ?: return null
         val blockIndex = blocks.indexOfFirst { it.id == blockId }
         val anchorIndex = blocks.indexOfFirst { it.id == anchor.blockId }
         val focusIndex = blocks.indexOfFirst { it.id == end.blockId }
-        if (blockIndex < 0 || anchorIndex < 0 || focusIndex < 0 || lineIndex != 0 || path.size != 1) return null
-        fun key(position: MarkdownFormattedTextPosition, index: Int) =
-            Triple(index, position.listPath?.firstOrNull() ?: -1, position.offset)
-        val forward = compareValuesBy(key(anchor, anchorIndex), key(end, focusIndex),
-            { it.first }, { it.second }, { it.third }) <= 0
+        if (blockIndex < 0 || anchorIndex < 0 || focusIndex < 0) return null
+        val block = blocks[blockIndex]
+        val list = sourceList ?: MarkdownSourceList.parse(block) ?: return null
+        val current = list.item(path)?.lines?.getOrNull(lineIndex) ?: return null
+        fun key(position: MarkdownFormattedTextPosition, index: Int): Pair<Int, Int>? {
+            val positionBlock = blocks[index]
+            val local = if (position.listPath == null) position.offset else {
+                val endpointList = if (index == blockIndex) list else MarkdownSourceList.parse(positionBlock) ?: return null
+                val line = endpointList.item(position.listPath)?.lines?.getOrNull(position.listLineIndex) ?: return null
+                line.start + position.offset
+            }
+            return index to local
+        }
+        val anchorKey = key(anchor, anchorIndex) ?: return null
+        val focusKey = key(end, focusIndex) ?: return null
+        val forward = compareValuesBy(anchorKey, focusKey, { it.first }, { it.second }) <= 0
         val first = if (forward) anchor else end
         val last = if (forward) end else anchor
         val firstIndex = minOf(anchorIndex, focusIndex)
         val lastIndex = maxOf(anchorIndex, focusIndex)
         if (blockIndex !in firstIndex..lastIndex) return null
-        val itemIndex = path.first()
+        val currentStart = current.start
+        fun lineStart(position: MarkdownFormattedTextPosition): Int? =
+            position.listPath?.let { list.item(it)?.lines?.getOrNull(position.listLineIndex)?.start }
         val start = if (blockIndex == firstIndex && first.listPath != null) {
-            if (itemIndex < first.listPath.first()) return null
-            if (itemIndex == first.listPath.first()) first.offset else 0
+            val firstStart = lineStart(first) ?: return null
+            if (currentStart < firstStart) return null
+            if (currentStart == firstStart) first.offset else 0
         } else 0
         val finish = if (blockIndex == lastIndex && last.listPath != null) {
-            if (itemIndex > last.listPath.first()) return null
-            if (itemIndex == last.listPath.first()) last.offset else length
+            val lastStart = lineStart(last) ?: return null
+            if (currentStart > lastStart) return null
+            if (currentStart == lastStart) last.offset else length
         } else length
         if (start !in 0..length || finish !in start..length || start == finish) return null
         return TextRange(start, finish)
