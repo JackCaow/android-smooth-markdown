@@ -53,12 +53,12 @@ val dedicatedPages = listOf(
     DemoPage("math", "Math", "Inline and display equations"),
     DemoPage("stream", "Streaming", "Incremental Markdown chunks"),
     DemoPage("footnote", "Footnotes", "References and definitions"),
-    DemoPage("html", "HTML Tags", "Whitelisted HTML rendering"),
-    DemoPage("chat-list", "Chat List", "Virtualized Markdown conversation with streamed replies"),
-    DemoPage("ai", "AI Chat", "Offline Thinking, Artifact, ToolCall sample"),
-    DemoPage("conversation-list", "Conversation List", "Twelve conversations and message actions"),
-    DemoPage("plugin", "Plugin System", "Mentions, emoji, admonitions"),
-    DemoPage("mermaid", "Mermaid diagrams", "Native diagram gallery"),
+    DemoPage("html", "HTML Tags Demo", "Whitelisted HTML rendering"),
+    DemoPage("chat-list", "Chat List Demo", "Performance optimizations"),
+    DemoPage("ai", "AI Chat Demo", "Qwen API + Thinking/Artifact/Tool"),
+    DemoPage("conversation-list", "Conversation List", "长按菜单 · 滑动操作 · 多选"),
+    DemoPage("plugin", "Plugin System", "@mention #hashtag :emoji:"),
+    DemoPage("mermaid", "Mermaid 图表", "流程图、时序图"),
     DemoPage("performance", "Long document benchmark"),
 )
 

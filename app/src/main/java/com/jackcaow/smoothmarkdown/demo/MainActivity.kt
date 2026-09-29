@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -37,7 +39,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -134,6 +135,41 @@ private fun demoIcon(id: String): ImageVector = when (id) {
     "plugin" -> Icons.Filled.Extension
     "mermaid" -> Icons.Filled.Schema
     else -> Icons.Filled.Article
+}
+
+/** Flutter's Drawer uses flat ListTiles (56/72 dp), rather than M3 navigation pills. */
+@Composable
+private fun DemoDrawerItem(
+    title: String,
+    icon: ImageVector,
+    selected: Boolean,
+    isDark: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+) {
+    val iconColor = if (selected) {
+        if (isDark) Color(0xFF90CAF9) else Color(0xFF2196F3)
+    } else if (isDark) Color.White.copy(alpha = 0.70f) else Color.Black.copy(alpha = 0.54f)
+    Row(
+        modifier = modifier.fillMaxWidth()
+            .heightIn(min = if (subtitle == null) 56.dp else 72.dp)
+            .background(if (selected && isDark) Color(0xFF161B22) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = iconColor)
+        Spacer(Modifier.width(32.dp))
+        Column {
+            Text(title, fontSize = 16.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (isDark) Color.White else if (selected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface)
+            if (subtitle != null) Text(subtitle, fontSize = 11.sp,
+                color = if (isDark) Color.White.copy(alpha = 0.38f) else Color.Gray)
+        }
+    }
 }
 
 // Flutter's six presets share two chrome palettes: each preset selects its own
@@ -256,7 +292,10 @@ private fun DemoHome(
         drawerState = drawerState,
         gesturesEnabled = isHome,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = if (isDark) Color(0xFF0D1117) else MaterialTheme.colorScheme.surface) {
+            ModalDrawerSheet(
+                modifier = Modifier.width(304.dp),
+                drawerContainerColor = if (isDark) Color(0xFF0D1117) else MaterialTheme.colorScheme.surface,
+            ) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     Column(
                         modifier = Modifier.fillMaxWidth().height(160.dp)
@@ -272,66 +311,56 @@ private fun DemoHome(
                         Text(localizations.text(language, "drawer_header_title"),
                             fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                    NavigationDrawerItem(label = {
-                        Column {
-                            Text("Markdown Editor", color = if (isDark) Color.White else Color.Unspecified)
-                            Text("Scratch-style editing preview", fontSize = 11.sp,
-                                color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray)
-                        }
-                    }, icon = { Icon(Icons.Filled.EditNote, contentDescription = null) },
-                        selected = isEditor, onClick = { select("editor") },
-                        modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-editor"))
+                    Spacer(Modifier.height(8.dp))
+                    DemoDrawerItem(
+                        title = "Markdown Editor", subtitle = "Scratch-style editing preview",
+                        icon = Icons.Filled.EditNote, selected = false, isDark = isDark,
+                        onClick = { select("editor") }, modifier = Modifier.testTag("nav-editor"),
+                    )
                     HorizontalDivider()
-                    Text(localizations.chrome(language, "examples"),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
                     examples.forEachIndexed { index, item ->
-                        NavigationDrawerItem(label = { Text(localizations.example(language, item)) },
-                            icon = { Icon(exampleIcon(index), contentDescription = null) },
-                            selected = pageId == item.id,
-                            onClick = { select(item.id) },
-                            modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
+                        DemoDrawerItem(
+                            // Flutter's example titles are fixed strings across all demo languages.
+                            title = item.title,
+                            icon = exampleIcon(index), selected = pageId == item.id,
+                            isDark = isDark, onClick = { select(item.id) },
+                            modifier = Modifier.testTag("nav-${item.id}"),
+                        )
                     }
                     HorizontalDivider()
                     Text(localizations.text(language, "drawer_demos"),
-                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp))
                     dedicatedPages.forEach { item ->
-                        NavigationDrawerItem(label = {
-                            Column {
-                                Text(localizations.page(language, item))
-                                if (item.id in setOf("html", "chat-list", "ai", "conversation-list", "plugin", "mermaid")) {
-                                    Text(item.subtitle, fontSize = 11.sp,
-                                        color = if (isDark) Color.White.copy(alpha = 0.38f) else Color.Gray)
-                                }
-                            }
-                        }, icon = { Icon(demoIcon(item.id), contentDescription = null) },
-                            selected = pageId == item.id,
-                            onClick = {
+                        DemoDrawerItem(
+                            title = localizations.page(language, item),
+                            subtitle = item.subtitle.takeIf { item.id in setOf("html", "chat-list", "ai", "conversation-list", "plugin", "mermaid") },
+                            icon = demoIcon(item.id), selected = pageId == item.id,
+                            isDark = isDark, onClick = {
                                 if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
                                 else if (item.id == "performance") scope.launch { drawerState.close(); openPerformance() }
                                 else if (item.id == "chat-list") scope.launch { drawerState.close(); openChatList() }
                                 else if (item.id == "ai") scope.launch { drawerState.close(); openAIChat() }
                                 else if (item.id == "conversation-list") scope.launch { drawerState.close(); openConversationList() }
                                 else select(item.id)
-                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
+                            }, modifier = Modifier.testTag("nav-${item.id}"),
+                        )
                     }
                     HorizontalDivider()
                     Text(localizations.text(language, "language"),
-                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
-                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp))
                     DemoLanguage.entries.forEach { option ->
-                        NavigationDrawerItem(label = { Text(option.nativeName) },
-                            icon = { Icon(Icons.Filled.Language, contentDescription = null) },
-                            selected = language == option,
-                            onClick = {
+                        DemoDrawerItem(
+                            title = option.nativeName, icon = Icons.Filled.Language,
+                            selected = false, isDark = isDark, onClick = {
                                 languageCode = option.code
                                 onLanguageChange(option)
                                 scope.launch { drawerState.close() }
-                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("language-${option.code}"))
+                            }, modifier = Modifier.testTag("language-${option.code}"),
+                        )
                     }
                 }
             }
