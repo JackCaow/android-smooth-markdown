@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -147,7 +148,8 @@ private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
                                 modifier = Modifier.fillMaxWidth().selectable(
                                     selected = selectedIndex == index,
                                     onClick = { selectedIndex = index; scope.launch { drawerState.close() } },
-                                ).padding(horizontal = 20.dp, vertical = 12.dp),
+                                ).padding(horizontal = 20.dp, vertical = 12.dp)
+                                    .testTag("mermaid-nav-${item.index}"),
                                 fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Normal,
                                 color = if (selectedIndex == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             )
@@ -158,9 +160,11 @@ private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
         ) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().background(MaterialTheme.colorScheme.background)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { scope.launch { drawerState.open() } }) { Text("☰ 目录") }
+                    TextButton(onClick = { scope.launch { drawerState.open() } },
+                        modifier = Modifier.testTag("mermaid-open-navigation")) { Text("☰ 目录") }
                     Text("Mermaid 图表测试", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { darkMode = !darkMode }) { Text(if (darkMode) "☀ 浅色" else "☾ 深色") }
+                    TextButton(onClick = { darkMode = !darkMode },
+                        modifier = Modifier.testTag("mermaid-theme")) { Text(if (darkMode) "☀ 浅色" else "☾ 深色") }
                 }
                 HorizontalDivider()
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -199,7 +203,8 @@ private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
                     horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = { selectedIndex-- }, enabled = selectedIndex > 0) { Text("← 上一个") }
                     Text("${selectedIndex + 1} / ${examples.size}", style = MaterialTheme.typography.labelLarge)
-                    Button(onClick = { selectedIndex++ }, enabled = selectedIndex < examples.lastIndex) { Text("下一个 →") }
+                    Button(onClick = { selectedIndex++ }, enabled = selectedIndex < examples.lastIndex,
+                        modifier = Modifier.testTag("mermaid-next")) { Text("下一个 →") }
                 }
             }
         }
