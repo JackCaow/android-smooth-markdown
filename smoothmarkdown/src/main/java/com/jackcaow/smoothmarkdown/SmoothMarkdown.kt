@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -39,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -100,8 +102,12 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import coil.compose.SubcomposeAsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
+import coil.request.SuccessResult
+import coil.size.Size as CoilSize
 import coil.decode.SvgDecoder
 import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -811,72 +817,97 @@ private fun MarkdownInlineText(
         )
         return
     }
-    val density = LocalDensity.current
-    val inline = render.images.mapValues { (_, image) ->
-        val width = image.width ?: 32f
-        val height = image.height ?: 32f
-        InlineTextContent(
-            placeholder = Placeholder(
-                width = with(density) { width.dp.toSp() },
-                height = with(density) { height.dp.toSp() },
-                placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
-            ),
-        ) {
-            InlineImage(image, width, height, if (interactive) onImageClick else null)
-        }
-    }.toMutableMap()
-    render.math.forEach { (id, latex) ->
-        val renderer = rememberMathRenderer(latex, displayMode = false)
-        val widthDp = with(density) { (renderer?.widthPx ?: (latex.length * 10f)).coerceAtLeast(1f).toDp() }
-        val heightDp = with(density) { (renderer?.totalHeightPx ?: 24f).coerceAtLeast(1f).toDp() }
-        inline[id] = InlineTextContent(
-            placeholder = Placeholder(
-                width = with(density) { widthDp.toSp() },
-                height = with(density) { heightDp.toSp() },
-                placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
-            ),
-        ) {
-            if (renderer == null) Text("$$latex$")
-            else Canvas(Modifier.width(widthDp).height(heightDp)) {
-                renderer.draw(drawContext.canvas.nativeCanvas)
+    BoxWithConstraints {
+        val density = LocalDensity.current
+        val maxImageWidth = maxWidth.value.takeIf { it.isFinite() && it > 0f }
+            ?: LocalConfiguration.current.screenWidthDp.toFloat()
+        val customImageBuilder = LocalImageBuilder.current
+        val inline = render.images.mapValues { (_, image) ->
+            val natural = if (customImageBuilder == null && (image.width == null || image.height == null))
+                rememberImageIntrinsicSize(image.source) else null
+            val size = imageSize(image.width, image.height, natural, maxImageWidth)
+            InlineTextContent(
+                placeholder = Placeholder(
+                    width = with(density) { size.width.dp.toSp() },
+                    height = with(density) { size.height.dp.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+                ),
+            ) {
+                InlineImage(image, size.width, size.height, if (interactive) onImageClick else null)
+            }
+        }.toMutableMap()
+        render.math.forEach { (id, latex) ->
+            val renderer = rememberMathRenderer(latex, displayMode = false)
+            val widthDp = with(density) { (renderer?.widthPx ?: (latex.length * 10f)).coerceAtLeast(1f).toDp() }
+            val heightDp = with(density) { (renderer?.totalHeightPx ?: 24f).coerceAtLeast(1f).toDp() }
+            inline[id] = InlineTextContent(
+                placeholder = Placeholder(
+                    width = with(density) { widthDp.toSp() },
+                    height = with(density) { heightDp.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+                ),
+            ) {
+                if (renderer == null) Text("$$latex$")
+                else Canvas(Modifier.width(widthDp).height(heightDp)) {
+                    renderer.draw(drawContext.canvas.nativeCanvas)
+                }
             }
         }
-    }
-    if (!interactive) {
-        Text(
-            text = render.text,
-            inlineContent = inline,
-            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
-        )
-        return
-    }
-    val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
-    val actions = links.map { link ->
-        CustomAccessibilityAction("Open link ${render.text.text.substring(link.start, link.end)}") {
-            onLinkClick(link.item)
-            true
-        }
-    } + pluginAccessibilityActions(render.text, onMentionClick, onHashtagClick, onWikilinkClick) + render.images.values.map { image ->
-        CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
-            dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
-            true
-        }
-    }
-        Text(
-            text = render.text,
-            inlineContent = inline,
-            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
-                .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
-                detectTapGestures { position ->
-                    layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        dispatchTextTap(render.text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
-                    }
+        if (!interactive) {
+            Text(
+                text = render.text,
+                inlineContent = inline,
+                style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
+            )
+        } else {
+            val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
+            val actions = links.map { link ->
+                CustomAccessibilityAction("Open link ${render.text.text.substring(link.start, link.end)}") {
+                    onLinkClick(link.item)
+                    true
                 }
-            },
-            onTextLayout = { layout.value = it },
-        )
+            } + pluginAccessibilityActions(render.text, onMentionClick, onHashtagClick, onWikilinkClick) + render.images.values.map { image ->
+                CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
+                    dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
+                    true
+                }
+            }
+            Text(
+                text = render.text,
+                inlineContent = inline,
+                style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
+                    .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
+                    detectTapGestures { position ->
+                        layout.value?.getOffsetForPosition(position)?.let { offset ->
+                            dispatchTextTap(render.text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
+                        }
+                    }
+                },
+                onTextLayout = { layout.value = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberImageIntrinsicSize(source: String): ImageSize? {
+    val model = imageModel(source) ?: return null
+    val context = LocalContext.current
+    val imageLoader = context.imageLoader
+    val request = remember(context, model) {
+        ImageRequest.Builder(context).data(model).size(CoilSize.ORIGINAL).apply {
+            if (isSvgImageSource(source)) decoderFactory(SvgDecoder.Factory())
+        }.build()
+    }
+    return produceState<ImageSize?>(null, imageLoader, request) {
+        val result = imageLoader.execute(request) as? SuccessResult ?: return@produceState
+        val drawable = result.drawable
+        if (drawable.intrinsicWidth > 0 && drawable.intrinsicHeight > 0) {
+            value = ImageSize(drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
+        }
+    }.value
 }
 
 @Composable
@@ -913,25 +944,33 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
         Text(image.alt, modifier = Modifier.padding(bottom = sheet.blockSpacing), color = sheet.textColor ?: Color.Unspecified)
         return
     }
-    var imageModifier: Modifier = Modifier
-    imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
-    if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
+    val natural = if (imageBuilder == null && (image.width == null || image.height == null))
+        rememberImageIntrinsicSize(url) else null
     SelectableNonTextBlock(onClick = {
         dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
     }) {
-        Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-            .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
-            .clickable(role = Role.Button, onClickLabel = "Open image") {
-                dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
-            }) {
-            if (imageBuilder != null) Box(imageModifier) { imageBuilder(url, image.alt, image.title) }
-            else SubcomposeAsyncImage(
-                model = imageRequest(url, model),
-                contentDescription = null,
-                modifier = imageModifier,
-                loading = { androidx.compose.material3.CircularProgressIndicator() },
-                error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
-            )
+        BoxWithConstraints {
+            val maxImageWidth = maxWidth.value.takeIf { it.isFinite() && it > 0f }
+                ?: LocalConfiguration.current.screenWidthDp.toFloat()
+            val size = imageSize(image.width, image.height, natural, maxImageWidth)
+            val imageModifier = Modifier.width(size.width.dp).height(size.height.dp)
+            val customModifier = Modifier
+                .then(if (image.width != null) Modifier.width(image.width.dp) else Modifier)
+                .then(if (image.height != null) Modifier.height(image.height.dp) else Modifier)
+            Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
+                .clickable(role = Role.Button, onClickLabel = "Open image") {
+                    dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
+                }) {
+                if (imageBuilder != null) Box(customModifier) { imageBuilder(url, image.alt, image.title) }
+                else SubcomposeAsyncImage(
+                    model = imageRequest(url, model),
+                    contentDescription = null,
+                    modifier = imageModifier,
+                    loading = { androidx.compose.material3.CircularProgressIndicator() },
+                    error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
+                )
+            }
         }
     }
 }
