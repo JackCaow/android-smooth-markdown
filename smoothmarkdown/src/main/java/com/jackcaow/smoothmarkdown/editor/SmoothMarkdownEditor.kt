@@ -544,6 +544,12 @@ private fun FormattedBlockPane(
                     blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.ITALIC)
                 }, modifier = Modifier.testTag("formatted-block-italic")) { Text("Italic") }
                 TextButton(onClick = {
+                    blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.STRIKETHROUGH)
+                }, modifier = Modifier.testTag("formatted-block-strikethrough")) { Text("Strike") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.INLINE_CODE)
+                }, modifier = Modifier.testTag("formatted-block-inline-code")) { Text("Code") }
+                TextButton(onClick = {
                     blockSelectionError = !controller.deleteFormattedBlockSelection()
                 }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
                 TextButton(onClick = {
@@ -576,6 +582,10 @@ private fun FormattedBlockPane(
                     modifier = Modifier.testTag("formatted-list-selection-bold")) { Text("Bold") }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC) },
                     modifier = Modifier.testTag("formatted-list-selection-italic")) { Text("Italic") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.STRIKETHROUGH) },
+                    modifier = Modifier.testTag("formatted-list-selection-strikethrough")) { Text("Strike") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.INLINE_CODE) },
+                    modifier = Modifier.testTag("formatted-list-selection-inline-code")) { Text("Code") }
                 TextButton(onClick = controller::clearFormattedListItemSelection,
                     modifier = Modifier.testTag("formatted-list-selection-clear")) { Text("Clear") }
             }
@@ -591,6 +601,10 @@ private fun FormattedBlockPane(
                     modifier = Modifier.testTag("formatted-table-selection-bold")) { Text("Bold") }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.ITALIC) },
                     modifier = Modifier.testTag("formatted-table-selection-italic")) { Text("Italic") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.STRIKETHROUGH) },
+                    modifier = Modifier.testTag("formatted-table-selection-strikethrough")) { Text("Strike") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.INLINE_CODE) },
+                    modifier = Modifier.testTag("formatted-table-selection-inline-code")) { Text("Code") }
                 TextButton(onClick = { controller.clearFormattedTableCellSelection() },
                     modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
                 TextButton(onClick = {

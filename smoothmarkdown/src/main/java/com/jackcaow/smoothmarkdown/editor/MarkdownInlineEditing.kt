@@ -10,7 +10,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 
-internal enum class InlineMarkKind { BOLD, ITALIC, LINK, CODE, WIKILINK }
+internal enum class InlineMarkKind { BOLD, ITALIC, STRIKETHROUGH, LINK, CODE, WIKILINK }
 internal data class InlineMark(
     val kind: InlineMarkKind,
     val range: TextRange,
@@ -45,6 +45,7 @@ internal class MarkdownInlineEditing private constructor(
             val style = when (mark.kind) {
                 InlineMarkKind.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
                 InlineMarkKind.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                InlineMarkKind.STRIKETHROUGH -> SpanStyle(textDecoration = TextDecoration.LineThrough)
                 InlineMarkKind.LINK -> SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
                 InlineMarkKind.CODE -> SpanStyle(fontFamily = FontFamily.Monospace)
                 InlineMarkKind.WIKILINK -> SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
@@ -90,7 +91,7 @@ internal class MarkdownInlineEditing private constructor(
         val upper = selection.max.coerceIn(lower, visible.length)
         val existing = marks.firstOrNull { it.kind == kind && it.range.min == lower && it.range.max == upper }
         if (existing != null && kind != InlineMarkKind.LINK) {
-            val delimiterLength = if (kind == InlineMarkKind.BOLD || kind == InlineMarkKind.WIKILINK) 2 else 1
+            val delimiterLength = if (kind == InlineMarkKind.BOLD || kind == InlineMarkKind.STRIKETHROUGH || kind == InlineMarkKind.WIKILINK) 2 else 1
             return source.replaceRange(existing.sourceStart, existing.sourceEnd,
                 source.substring(existing.sourceStart + delimiterLength, existing.sourceEnd - delimiterLength))
         }
@@ -104,6 +105,7 @@ internal class MarkdownInlineEditing private constructor(
             when (kind) {
                 InlineMarkKind.BOLD -> "bold"
                 InlineMarkKind.ITALIC -> "italic"
+                InlineMarkKind.STRIKETHROUGH -> "strikethrough"
                 InlineMarkKind.LINK -> "link"
                 InlineMarkKind.CODE -> "code"
                 InlineMarkKind.WIKILINK -> "Note"
@@ -112,6 +114,7 @@ internal class MarkdownInlineEditing private constructor(
         val (prefix, suffix) = when (kind) {
             InlineMarkKind.BOLD -> "**" to "**"
             InlineMarkKind.ITALIC -> "*" to "*"
+            InlineMarkKind.STRIKETHROUGH -> "~~" to "~~"
             InlineMarkKind.CODE -> "`" to "`"
             InlineMarkKind.LINK -> "[" to "](${destination?.takeIf(String::isNotBlank) ?: "https://example.com"})"
             InlineMarkKind.WIKILINK -> "[[" to "]]"
@@ -152,10 +155,21 @@ internal class MarkdownInlineEditing private constructor(
             fun parseRange(from: Int, until: Int) {
                 var index = from
                 while (index < until) {
-                    if (source[index] == '\\' && index + 1 < until && source[index + 1] in "\\*_`[]") {
+                    if (source[index] == '\\' && index + 1 < until && source[index + 1] in "\\*_`[]~") {
                         emit(source[index + 1], index, index + 2)
                         index += 2
                         continue
+                    }
+                    if (source.startsWith("~~", index)) {
+                        val end = closing("~~", index + 2, until)
+                        if (end > index + 2) {
+                            val beginVisible = visible.length
+                            parseRange(index + 2, end)
+                            marks += InlineMark(InlineMarkKind.STRIKETHROUGH,
+                                TextRange(beginVisible, visible.length), sourceStart = index, sourceEnd = end + 2)
+                            index = end + 2
+                            continue
+                        }
                     }
                     val underscoreCanOpen = index == 0 || !source[index - 1].isLetterOrDigit()
                     val token = when {
@@ -225,7 +239,7 @@ internal class MarkdownInlineEditing private constructor(
 
         private fun escapeMarkdown(text: String, enableWikilinks: Boolean): String = buildString {
             text.forEach { char ->
-                if (char in "\\*_`" || (!enableWikilinks && char in "[]")) append('\\')
+                if (char in "\\*_`~" || (!enableWikilinks && char in "[]")) append('\\')
                 append(char)
             }
         }

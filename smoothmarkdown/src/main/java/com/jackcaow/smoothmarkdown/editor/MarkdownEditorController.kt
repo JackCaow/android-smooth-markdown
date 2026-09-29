@@ -303,6 +303,7 @@ class MarkdownEditorController(
         val kind = when (command) {
             MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
             MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+            MarkdownEditorCommand.STRIKETHROUGH -> InlineMarkKind.STRIKETHROUGH
             MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
             MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
             MarkdownEditorCommand.WIKILINK -> if (enableWikilinks) InlineMarkKind.WIKILINK else return false
@@ -418,7 +419,8 @@ class MarkdownEditorController(
         command: MarkdownEditorCommand,
         destination: String? = null,
     ): Boolean {
-        if (command !in setOf(MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC, MarkdownEditorCommand.INLINE_CODE)) return false
+        if (command !in setOf(MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                MarkdownEditorCommand.STRIKETHROUGH, MarkdownEditorCommand.INLINE_CODE)) return false
         val kind = inlineMarkKind(command) ?: return false
         val (table, selected) = selectedFormattedTableCells() ?: return false
         val block = semanticDocument().blockById(selected.blockId) ?: return false
@@ -507,6 +509,7 @@ class MarkdownEditorController(
     private fun inlineMarkKind(command: MarkdownEditorCommand): InlineMarkKind? = when (command) {
         MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
         MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+        MarkdownEditorCommand.STRIKETHROUGH -> InlineMarkKind.STRIKETHROUGH
         MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
         MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
         MarkdownEditorCommand.WIKILINK -> if (enableWikilinks) InlineMarkKind.WIKILINK else null
@@ -605,6 +608,7 @@ class MarkdownEditorController(
         val kind = when (command) {
             MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
             MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+            MarkdownEditorCommand.STRIKETHROUGH -> InlineMarkKind.STRIKETHROUGH
             MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
             MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
             MarkdownEditorCommand.WIKILINK -> InlineMarkKind.WIKILINK
@@ -616,6 +620,7 @@ class MarkdownEditorController(
         val placeholderLength = if (formattedSelection.collapsed) when (kind) {
             InlineMarkKind.BOLD -> 4
             InlineMarkKind.ITALIC -> 6
+            InlineMarkKind.STRIKETHROUGH -> 13
             InlineMarkKind.LINK -> 4
             InlineMarkKind.CODE -> 4
             InlineMarkKind.WIKILINK -> 4

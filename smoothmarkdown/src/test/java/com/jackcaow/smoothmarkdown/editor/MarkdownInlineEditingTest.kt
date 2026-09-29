@@ -9,11 +9,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MarkdownInlineEditingTest {
-    @Test fun displaysFourMarksAndKeepsUnknownSourceUntouched() {
+    @Test fun displaysFiveMarksAndKeepsSourceUntouched() {
         val source = "A **bold** and *italic*, [site](https://example.com), `code`, and ~~raw~~."
         val model = MarkdownInlineEditing.parse(source)
-        assertEquals("A bold and italic, site, code, and ~~raw~~.", model.visible)
-        assertEquals(listOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK, InlineMarkKind.CODE),
+        assertEquals("A bold and italic, site, code, and raw.", model.visible)
+        assertEquals(listOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK, InlineMarkKind.CODE,
+            InlineMarkKind.STRIKETHROUGH),
             model.marks.map { it.kind })
         assertEquals("https://example.com", model.marks.first { it.kind == InlineMarkKind.LINK }.destination)
         assertEquals(FontWeight.Bold, model.annotated(Color.Blue).spanStyles.first().item.fontWeight)
