@@ -5,7 +5,7 @@ enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Rada
 enum class MermaidDirection { TB, BT, LR, RL }
 enum class MermaidShape {
     Rectangle, Rounded, Stadium, Diamond, Hexagon, Circle, Subroutine,
-    Cylinder, Asymmetric, Parallelogram, Trapezoid, StateStart, StateEnd,
+    Cylinder, Asymmetric, Parallelogram, ParallelogramAlt, Trapezoid, TrapezoidAlt, StateStart, StateEnd,
 }
 enum class MermaidEdgeMarker { Inheritance, Composition, Aggregation }
 enum class MermaidLine { Solid, Dotted, Thick }
