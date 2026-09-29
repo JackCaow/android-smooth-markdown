@@ -3,6 +3,8 @@ package com.jackcaow.smoothmarkdown.demo
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -10,9 +12,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -49,6 +54,21 @@ private object PhysicalUiCapture {
         // Images and animated dialogs can paint after Compose has no pending frame.
         SystemClock.sleep(350)
     }
+
+    /** Stop only once the tagged scroll container's semantic offset stops changing. */
+    fun scrollToEdge(node: SemanticsNodeInteraction, waitForIdle: () -> Unit, bottom: Boolean) {
+        fun value(): Float = node.fetchSemanticsNode().config[
+            SemanticsProperties.VerticalScrollAxisRange
+        ].value()
+        repeat(80) {
+            val before = value()
+            node.performTouchInput { if (bottom) swipeUp() else swipeDown() }
+            waitForIdle()
+            val after = value()
+            if (kotlin.math.abs(after - before) < 0.001f) return
+        }
+        error("Scroll did not reach ${if (bottom) "bottom" else "top"} within 80 swipes")
+    }
 }
 
 @RunWith(AndroidJUnit4::class)
@@ -67,6 +87,9 @@ class MainPhysicalUiCaptureTest {
         rule.waitForIdle()
     }
 
+    private fun scrollToEdge(tag: String, bottom: Boolean = true) =
+        PhysicalUiCapture.scrollToEdge(rule.onNodeWithTag(tag), rule::waitForIdle, bottom)
+
     @Test fun homeExamplesAndChrome() {
         capture("home-basic-formatting")
         rule.onNodeWithTag("open-navigation").performClick()
@@ -78,9 +101,10 @@ class MainPhysicalUiCaptureTest {
             "details-summary", "complex-example")
         ids.forEach { id ->
             if (id != "basic-formatting") openPage(id)
+            scrollToEdge("reader-scroll", bottom = false)
             capture("example-$id-top")
-            rule.onRoot().performTouchInput { swipeUp() }
-            capture("example-$id-after-scroll")
+            scrollToEdge("reader-scroll")
+            capture("example-$id-bottom")
         }
         openPage("basic-formatting")
         rule.onNodeWithTag("open-source").performClick()
@@ -104,13 +128,29 @@ class MainPhysicalUiCaptureTest {
     @Test fun specialPagesAndStates() {
         for (id in listOf("math", "footnote", "plugin", "editor", "html", "stream")) {
             openPage(id)
-            capture("page-$id")
             when (id) {
+                "math", "footnote" -> scrollToEdge("reader-scroll", bottom = false)
+                "plugin" -> scrollToEdge("plugin-reader-scroll", bottom = false)
+                "html" -> scrollToEdge("html-markdown", bottom = false)
+                "editor" -> scrollToEdge("editor-formatted-scroll", bottom = false)
+            }
+            if (id == "editor") capture("editor-formatted") else capture("page-$id")
+            when (id) {
+                "math", "footnote" -> {
+                    scrollToEdge("reader-scroll")
+                    capture("page-$id-bottom")
+                }
                 "plugin" -> {
+                    scrollToEdge("plugin-reader-scroll")
+                    capture("page-plugin-bottom")
+                    scrollToEdge("plugin-reader-scroll", bottom = false)
                     rule.onNodeWithTag("plugin-source-toggle").performClick()
                     capture("plugin-source-open")
                 }
                 "html" -> {
+                    scrollToEdge("html-markdown")
+                    capture("page-html-bottom")
+                    scrollToEdge("html-markdown", bottom = false)
                     rule.onNodeWithTag("html-enabled").performClick()
                     capture("html-disabled")
                     rule.onNodeWithTag("html-enabled").performClick()
@@ -128,16 +168,33 @@ class MainPhysicalUiCaptureTest {
                         rule.onAllNodesWithTag("stream-complete-bar").fetchSemanticsNodes().isNotEmpty()
                     }
                     capture("stream-complete")
+                    scrollToEdge("stream-markdown")
+                    capture("stream-complete-bottom")
                     rule.onNodeWithTag("stream-reset").performClick()
                     capture("stream-reset")
                 }
                 "editor" -> {
+                    scrollToEdge("editor-formatted-scroll")
+                    capture("editor-formatted-bottom")
+                    scrollToEdge("editor-formatted-scroll", bottom = false)
                     rule.onNodeWithTag("editor-find").performClick()
                     capture("editor-search")
                     rule.onNodeWithTag("editor-find").performClick()
-                    rule.onNodeWithText("Source").performClick()
+                    rule.onNodeWithTag("editor-mode-source").performClick()
                     rule.onNodeWithTag("editor-source-input").assertExists()
                     capture("editor-source")
+                    rule.onNodeWithTag("editor-source-input").performTouchInput { swipeUp() }
+                    capture("editor-source-after-scroll")
+                    rule.onNodeWithTag("editor-mode-preview").performClick()
+                    scrollToEdge("editor-preview-scroll", bottom = false)
+                    capture("editor-preview")
+                    scrollToEdge("editor-preview-scroll")
+                    capture("editor-preview-bottom")
+                    rule.onNodeWithTag("editor-mode-split").performClick()
+                    scrollToEdge("editor-preview-scroll", bottom = false)
+                    capture("editor-split")
+                    scrollToEdge("editor-preview-scroll")
+                    capture("editor-split-preview-bottom")
                 }
             }
             rule.onNodeWithTag("demo-back").performClick()
@@ -150,6 +207,8 @@ class MermaidPhysicalUiCaptureTest {
     @get:Rule val rule = createAndroidComposeRule<MermaidDemoActivity>()
 
     @Test fun allFortyDiagramsAndDarkMode() {
+        fun scroll(bottom: Boolean) = PhysicalUiCapture.scrollToEdge(
+            rule.onNodeWithTag("mermaid-content-scroll"), rule::waitForIdle, bottom)
         val expected = loadMermaidGallery(rule.activity.assets)
         assertEquals(40, expected.size)
         rule.waitForIdle()
@@ -164,7 +223,12 @@ class MermaidPhysicalUiCaptureTest {
             rule.waitForIdle()
             PhysicalUiCapture.settle()
             PhysicalUiCapture.save("mermaid-${index.toString().padStart(2, '0')}")
-            if (index < 40) rule.onNodeWithTag("mermaid-next").performClick()
+            scroll(bottom = true)
+            PhysicalUiCapture.save("mermaid-${index.toString().padStart(2, '0')}-source")
+            if (index < 40) {
+                rule.onNodeWithTag("mermaid-next").performClick()
+                scroll(bottom = false)
+            }
         }
         rule.onNodeWithTag("mermaid-theme").performClick()
         rule.waitForIdle()
@@ -231,13 +295,31 @@ class ConversationPhysicalUiCaptureTest {
     @get:Rule val rule = createAndroidComposeRule<ConversationListActivity>()
 
     @Test fun listDetailAndLongPressMenu() {
+        val samples = loadConversationSamples(rule.activity)
+        assertEquals(12, samples.size)
         rule.waitForIdle()
         PhysicalUiCapture.save("conversation-list")
-        rule.onNodeWithTag("conversation-row-1").performClick()
-        rule.waitForIdle()
-        PhysicalUiCapture.save("conversation-detail")
-        rule.onNodeWithTag("conversation-message-menu-1-0").performClick()
-        rule.waitForIdle()
-        PhysicalUiCapture.save("conversation-message-menu")
+        PhysicalUiCapture.scrollToEdge(rule.onNodeWithTag("conversation-list"), rule::waitForIdle, true)
+        PhysicalUiCapture.save("conversation-list-bottom")
+        for (sample in samples) {
+            rule.onNodeWithTag("conversation-list")
+                .performScrollToNode(hasTestTag("conversation-row-${sample.id}"))
+            rule.onNodeWithTag("conversation-row-${sample.id}").performClick()
+            rule.onNodeWithText(sample.name).assertExists()
+            PhysicalUiCapture.scrollToEdge(rule.onNodeWithTag("conversation-detail"),
+                rule::waitForIdle, false)
+            rule.waitForIdle()
+            PhysicalUiCapture.save("conversation-detail-${sample.id.padStart(2, '0')}")
+            if (sample.id == "1") {
+                rule.onNodeWithTag("conversation-message-menu-1-0").performClick()
+                rule.waitForIdle()
+                PhysicalUiCapture.save("conversation-message-menu")
+                rule.onNodeWithText("关闭").performClick()
+            }
+            PhysicalUiCapture.scrollToEdge(rule.onNodeWithTag("conversation-detail"),
+                rule::waitForIdle, true)
+            PhysicalUiCapture.save("conversation-detail-${sample.id.padStart(2, '0')}-bottom")
+            rule.onNodeWithTag("conversation-back").performClick()
+        }
     }
 }

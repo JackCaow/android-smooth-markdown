@@ -167,7 +167,8 @@ private fun MermaidGallery(examples: List<MermaidGalleryExample>) {
                         modifier = Modifier.testTag("mermaid-theme")) { Text(if (darkMode) "☀ 浅色" else "☾ 深色") }
                 }
                 HorizontalDivider()
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
+                    .testTag("mermaid-content-scroll")) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(example.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
