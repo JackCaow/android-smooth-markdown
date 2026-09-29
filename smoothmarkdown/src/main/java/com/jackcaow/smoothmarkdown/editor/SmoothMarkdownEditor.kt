@@ -30,7 +30,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -88,8 +90,28 @@ fun SmoothMarkdownEditor(
     onShortcut: ((KeyEvent, MarkdownEditorController) -> Boolean)? = null,
     /** Called for accepted built-in commands from the toolbar, slash menu, or keyboard. */
     onCommand: ((MarkdownEditorCommand) -> Unit)? = null,
+    /** Called once for each committed source change, including undo and host edits. */
+    onChanged: ((String) -> Unit)? = null,
+    /** When supplied, the host owns the display mode; user requests arrive in [onModeChanged]. */
+    mode: MarkdownEditorMode? = null,
+    onModeChanged: ((MarkdownEditorMode) -> Unit)? = null,
+    /** Source offsets use UTF-16 and are reported when the selection changes. */
+    onSelectionChanged: ((TextRange) -> Unit)? = null,
+    initialFocusMode: Boolean = false,
+    onFocusModeChanged: ((Boolean) -> Unit)? = null,
 ) {
-    SideEffect { controller.enableWikilinks = enableWikilinks }
+    SideEffect {
+        controller.enableWikilinks = enableWikilinks
+        if (mode != null && controller.mode != mode) controller.mode = mode
+    }
+    val latestOnChanged by rememberUpdatedState(onChanged)
+    val latestOnSelectionChanged by rememberUpdatedState(onSelectionChanged)
+    val hostEvents = remember(controller) { MarkdownEditorHostEvents(controller.value) }
+    LaunchedEffect(controller) {
+        snapshotFlow { controller.value }.collect { value ->
+            hostEvents.accept(value, latestOnChanged, latestOnSelectionChanged)
+        }
+    }
     val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
         controller.parserPlugins?.copy()?.also { registry ->
             if (enableWikilinks && registry.getInlinePlugin("wikilink") == null) registry.register(WikilinkPlugin())
@@ -101,7 +123,7 @@ fun SmoothMarkdownEditor(
     var hostStatus by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var focusMode by remember { mutableStateOf(false) }
+    var focusMode by remember { mutableStateOf(initialFocusMode) }
     var searchFocusRequest by remember { mutableIntStateOf(0) }
     val searchFocusRequester = remember { FocusRequester() }
     LaunchedEffect(searchOpen, searchFocusRequest) {
@@ -112,6 +134,15 @@ fun SmoothMarkdownEditor(
     val slashSuggestions = slashTrigger?.let {
         MarkdownSlashCommands.allSuggestions(it, enableWikilinks, capabilities, customSlashCommands)
     }.orEmpty()
+    fun requestMode(next: MarkdownEditorMode) {
+        if (next == controller.mode) return
+        if (mode == null) controller.mode = next
+        onModeChanged?.invoke(next)
+    }
+    fun toggleFocusMode() {
+        focusMode = !focusMode
+        onFocusModeChanged?.invoke(focusMode)
+    }
     fun runHostAction(label: String, action: suspend () -> MarkdownEditorHostResult) {
         if (hostActionBusy) return
         hostActionBusy = true
@@ -159,7 +190,7 @@ fun SmoothMarkdownEditor(
                     true
                 }
                 event.key == Key.Enter && event.isShiftPressed -> {
-                    focusMode = !focusMode
+                    toggleFocusMode()
                     true
                 }
                 else -> false
@@ -169,7 +200,7 @@ fun SmoothMarkdownEditor(
         if (!focusMode) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Row {
                     MarkdownEditorMode.entries.forEach { mode ->
-                        TextButton(onClick = { controller.mode = mode }) {
+                        TextButton(onClick = { requestMode(mode) }) {
                             Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
                         }
                     }
@@ -182,7 +213,7 @@ fun SmoothMarkdownEditor(
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { focusMode = !focusMode }, modifier = Modifier.testTag(if (focusMode) "editor-exit-focus" else "editor-focus-mode")) {
+            TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag(if (focusMode) "editor-exit-focus" else "editor-focus-mode")) {
                 Text(if (focusMode) "Exit focus" else "Focus mode")
             }
             if (!focusMode) {
@@ -203,10 +234,10 @@ fun SmoothMarkdownEditor(
                 Row {
                     Text("${searchMatches.size} matches", modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
                     TextButton(onClick = {
-                        if (controller.selectPreviousMatch(searchQuery) != null) controller.mode = MarkdownEditorMode.SOURCE
+                        if (controller.selectPreviousMatch(searchQuery) != null) requestMode(MarkdownEditorMode.SOURCE)
                     }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-previous")) { Text("Previous") }
                     TextButton(onClick = {
-                        if (controller.selectNextMatch(searchQuery) != null) controller.mode = MarkdownEditorMode.SOURCE
+                        if (controller.selectNextMatch(searchQuery) != null) requestMode(MarkdownEditorMode.SOURCE)
                     }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-next")) { Text("Next") }
                 }
             }
