@@ -1,6 +1,7 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -23,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -35,6 +39,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -52,6 +58,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -118,7 +125,11 @@ fun SmoothMarkdownEditor(
     onPerformanceSnapshot: ((MarkdownEditorPerformanceSnapshot) -> Unit)? = null,
     initialFocusMode: Boolean = false,
     onFocusModeChanged: ((Boolean) -> Unit)? = null,
+    /** Editor-specific colors, text and spacing; overrides [LocalMarkdownEditorTheme]. */
+    editorTheme: MarkdownEditorTheme? = null,
 ) {
+    val effectiveTheme = LocalMarkdownEditorTheme.current.merge(editorTheme)
+    val colors = MaterialTheme.colorScheme
     SideEffect {
         controller.enableWikilinks = enableWikilinks
         if (mode != null && controller.mode != mode) controller.mode = mode
@@ -203,7 +214,12 @@ fun SmoothMarkdownEditor(
         controller.applyCommand(command)
         return true
     }
-    Column(modifier.onPreviewKeyEvent { event ->
+    val editorShape = RoundedCornerShape(effectiveTheme.editorBorderRadius ?: 8.dp)
+    CompositionLocalProvider(LocalMarkdownEditorTheme provides effectiveTheme) {
+    Column(modifier.clip(editorShape)
+        .background(effectiveTheme.editorColor ?: colors.surface)
+        .border(1.dp, effectiveTheme.editorBorderColor ?: effectiveTheme.blockBorderColor ?: colors.outlineVariant, editorShape)
+        .onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) {
             false
         } else if (onShortcut?.invoke(event, controller) == true) {
@@ -238,12 +254,19 @@ fun SmoothMarkdownEditor(
     }) {
         if (showToolbar && !focusMode) {
             val defaultToolbar: MarkdownEditorToolbarSlot = {
-                Column {
+                Column(Modifier.background(effectiveTheme.toolbarColor ?: colors.surface)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState())) {
                             toolbarLeading.forEach { it() }
                             MarkdownEditorMode.entries.forEach { mode ->
-                                TextButton(onClick = { requestMode(mode) }) {
+                                val active = controller.mode == mode
+                                TextButton(onClick = { requestMode(mode) },
+                                    modifier = Modifier.clip(RoundedCornerShape(effectiveTheme.toolbarButtonRadius ?: 6.dp))
+                                        .background(if (active) effectiveTheme.toolbarActiveBackgroundColor ?: colors.primary.copy(alpha = 0.12f) else Color.Transparent),
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = if (active) effectiveTheme.toolbarActiveIconColor ?: colors.primary
+                                            else effectiveTheme.toolbarIconColor ?: colors.primary,
+                                    )) {
                                     Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
                                 }
                             }
@@ -323,8 +346,11 @@ fun SmoothMarkdownEditor(
                         }
                     }
                 }
+                Spacer(Modifier.fillMaxWidth().height(1.dp).background(effectiveTheme.dividerColor ?: colors.outlineVariant))
             }
-            if (toolbarBuilder == null) defaultToolbar() else toolbarBuilder(defaultToolbar)
+            MaterialTheme(colorScheme = colors.copy(primary = effectiveTheme.toolbarIconColor ?: colors.primary)) {
+                if (toolbarBuilder == null) defaultToolbar() else toolbarBuilder(defaultToolbar)
+            }
         } else if (showToolbar && focusMode) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-exit-focus")) {
@@ -333,7 +359,8 @@ fun SmoothMarkdownEditor(
             }
         }
         if (searchOpen) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            Column(Modifier.fillMaxWidth().background(effectiveTheme.searchBarColor ?: colors.surfaceVariant.copy(alpha = 0.35f))
+                .padding(horizontal = 8.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -353,7 +380,9 @@ fun SmoothMarkdownEditor(
             }
         }
         if (slashTrigger != null && slashSuggestions.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()).testTag("editor-slash-suggestions")) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 220.dp)
+                .background(effectiveTheme.suggestionPanelColor ?: colors.surface)
+                .verticalScroll(rememberScrollState()).testTag("editor-slash-suggestions")) {
                 slashSuggestions.forEachIndexed { index, item ->
                     TextButton(
                         onClick = {
@@ -366,7 +395,7 @@ fun SmoothMarkdownEditor(
                                 scope.launch { MarkdownSlashCommands.applyCustom(controller, slashTrigger, command) }
                             }
                         },
-                        modifier = Modifier.testTag("editor-slash-suggestion-$index"),
+                        modifier = Modifier.fillMaxWidth().testTag("editor-slash-suggestion-$index"),
                     ) { Text(item.title) }
                 }
             }
@@ -377,13 +406,18 @@ fun SmoothMarkdownEditor(
             MarkdownEditorMode.SOURCE -> SourcePane(controller, Modifier.weight(1f)) { focused ->
                 sourceFocus.setFocused(focused, latestOnFocusChanged.value)
             }
-            MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f),
+            MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f)
+                .background(effectiveTheme.previewColor ?: colors.surface)
+                .padding(effectiveTheme.previewPadding ?: 16.dp),
                 plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f)) { focused ->
                     sourceFocus.setFocused(focused, latestOnFocusChanged.value)
                 }
-                SmoothMarkdown(controller.text, Modifier.weight(1f),
+                Spacer(Modifier.width(1.dp).fillMaxHeight().background(effectiveTheme.dividerColor ?: colors.outlineVariant))
+                SmoothMarkdown(controller.text, Modifier.weight(1f)
+                    .background(effectiveTheme.previewColor ?: colors.surface)
+                    .padding(effectiveTheme.previewPadding ?: 16.dp),
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink)
             }
             MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
@@ -391,6 +425,7 @@ fun SmoothMarkdownEditor(
                 customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
             )
         }
+    }
     }
 }
 
@@ -406,13 +441,15 @@ private fun editorToolbarLabel(command: MarkdownEditorCommand): String = when (c
 
 @Composable
 private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier, onFocusChanged: (Boolean) -> Unit) {
+    val theme = LocalMarkdownEditorTheme.current
     DisposableEffect(controller) { onDispose { onFocusChanged(false) } }
     BasicTextField(
         value = controller.value,
         onValueChange = controller::updateFromInput,
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(12.dp)
+        modifier = modifier.fillMaxSize().background(theme.sourceColor ?: MaterialTheme.colorScheme.surface)
+            .padding(theme.sourcePadding ?: 16.dp)
             .onFocusChanged { onFocusChanged(it.isFocused) }.testTag("editor-source-input"),
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
+        textStyle = theme.sourceTextStyle ?: MaterialTheme.typography.bodyMedium.copy(
             color = MaterialTheme.colorScheme.onSurface,
             fontFamily = FontFamily.Monospace,
         ),
@@ -430,6 +467,7 @@ private fun FormattedBlockPane(
     customBlockBuilder: MarkdownEditorCustomBlockBuilder?,
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder?,
 ) {
+    val editorTheme = LocalMarkdownEditorTheme.current
     val blocks = controller.semanticDocument().blocks
     val pendingExit = controller.pendingListExit
     val clipboard = LocalClipboardManager.current
@@ -441,7 +479,8 @@ private fun FormattedBlockPane(
     var tableReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
     var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+    Column(modifier.fillMaxSize().background(editorTheme.previewColor ?: MaterialTheme.colorScheme.surface)
+        .verticalScroll(rememberScrollState()).padding(editorTheme.contentPadding ?: 16.dp)) {
         var pendingRendered = false
         blocks.forEach { block ->
             if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
@@ -483,19 +522,26 @@ private fun FormattedBlockPane(
             } else {
             val editableText = MarkdownFormattedBlock.text(block)
             Surface(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                color = if (block.kind == MarkdownBlockKind.CODE) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                    .border(1.dp, editorTheme.blockBorderColor ?: MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp))
+                    .clip(RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp)),
+                color = if (blockSelection?.let { blocks.indexOf(block) in it.firstIndex..it.lastIndex } == true)
+                    editorTheme.selectionColor ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                else editorTheme.blockColor ?: if (block.kind == MarkdownBlockKind.CODE) MaterialTheme.colorScheme.surfaceVariant
+                    else MaterialTheme.colorScheme.surface,
                 tonalElevation = 1.dp,
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.padding(editorTheme.blockPadding ?: 12.dp)) {
+                    Row(Modifier.fillMaxWidth().background(editorTheme.blockHeaderColor ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                        horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(
                             text = when (block.kind) {
                                 MarkdownBlockKind.HEADING -> "Heading ${block.headingLevel}"
                                 MarkdownBlockKind.CODE -> "Code${block.language?.let { " · $it" }.orEmpty()}"
                                 else -> block.kind.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercaseChar)
                             },
-                            style = MaterialTheme.typography.labelSmall,
+                            style = editorTheme.blockHeaderTextStyle ?: MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         TextButton(onClick = {
@@ -599,11 +645,17 @@ private fun FormattedBlockPane(
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         )
                         if (showSuggestions) {
-                            Column(Modifier.fillMaxWidth().testTag("wikilink-suggestions")) {
+                            Column(Modifier.fillMaxWidth()
+                                .background(editorTheme.suggestionPanelColor ?: MaterialTheme.colorScheme.surface)
+                                .testTag("wikilink-suggestions")) {
                                 if (suggestions.isEmpty()) Text("No matching notes", modifier = Modifier.testTag("wikilink-empty"))
                                 suggestions.forEachIndexed { index, title ->
                                     TextButton(onClick = { controller.insertWikilinkSuggestion(title) },
-                                        modifier = Modifier.testTag("wikilink-suggestion-$index").semantics {
+                                        modifier = Modifier.fillMaxWidth()
+                                            .background(if (index == selectedSuggestion)
+                                                editorTheme.suggestionSelectedBackgroundColor ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                else Color.Transparent)
+                                            .testTag("wikilink-suggestion-$index").semantics {
                                             selected = index == selectedSuggestion
                                         }) {
                                         Text(title)
@@ -752,6 +804,7 @@ private fun FormattedListItems(
     showPending: Boolean = false,
     dragSelection: FormattedDragSelection,
 ) {
+    val editorTheme = LocalMarkdownEditorTheme.current
     Column {
         items.forEachIndexed { index, item ->
             if (showPending && controller.pendingListExit?.beforeItemCount == index) {
@@ -766,7 +819,8 @@ private fun FormattedListItems(
                         it.source == controller.text && it.blockId == blockId &&
                             path.size > it.parentPath.size && path.take(it.parentPath.size) == it.parentPath &&
                             path[it.parentPath.size] in it.firstIndex..it.lastIndex
-                    } == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                    } == true) editorTheme.selectionColor ?: MaterialTheme.colorScheme.primaryContainer
+                        else editorTheme.blockColor ?: MaterialTheme.colorScheme.surface)
                     .formattedDragSelectionTarget(dragSelection, FormattedDragTarget.ListItem(blockId, path))
                     .testTag("formatted-list-drag-$blockId-$pathTag"),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -885,7 +939,9 @@ private fun FormattedListTextField(
 @Composable
 private fun FormattedTable(controller: MarkdownEditorController, blockId: String, table: MarkdownSourceTable,
                            dragSelection: FormattedDragSelection) {
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+    val editorTheme = LocalMarkdownEditorTheme.current
+    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+        .padding(editorTheme.tablePadding ?: 12.dp)) {
         fun displayCell(raw: String) = raw.replace("\\|", "|")
         @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
             val selectedRow = if (header) 0 else rowIndex + 1
@@ -893,8 +949,13 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                 it.source == controller.text && it.blockId == blockId &&
                     selectedRow in it.firstRow..it.lastRow && columnIndex in it.firstColumn..it.lastColumn
             } == true
-            Column(Modifier.width(140.dp).padding(4.dp)
-                .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+            Column(Modifier.width(140.dp)
+                .border(1.dp, if (selected) editorTheme.tableActiveBorderColor ?: MaterialTheme.colorScheme.primary
+                    else editorTheme.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant)
+                .background(if (selected) editorTheme.tableSelectionColor ?: MaterialTheme.colorScheme.primaryContainer
+                    else if (header) editorTheme.tableHeaderColor ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                    else editorTheme.blockColor ?: MaterialTheme.colorScheme.surface)
+                .padding(4.dp)
                 .formattedDragSelectionTarget(dragSelection, FormattedDragTarget.TableCell(blockId, selectedRow, columnIndex))
                 .testTag("formatted-table-drag-$blockId-$selectedRow-$columnIndex")) {
                 TextButton(
