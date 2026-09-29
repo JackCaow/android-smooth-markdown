@@ -71,6 +71,57 @@ internal class MarkdownSourceList private constructor(
         val focusLine: Int,
     )
 
+    data class PlainLinePasteEdit(
+        val source: String,
+        val selectionOffset: Int,
+        val focusLine: Int,
+        val focusVisibleOffset: Int,
+    )
+
+    /** Keeps pasted plain soft lines in the same list-item paragraph. */
+    fun replaceLineWithPlainLines(path: List<Int>, lineIndex: Int, before: String,
+                                  pasted: List<String>, after: String,
+                                  expectedVisible: String, enableWikilinks: Boolean): PlainLinePasteEdit? {
+        if (pasted.size < 2 || pasted.any { it.isBlank() }) return null
+        val selected = item(path) ?: return null
+        val line = selected.lines.getOrNull(lineIndex) ?: return null
+        val itemStart = source.lastIndexOf('\n', selected.contentStart - 1) + 1
+        val itemEnd = source.indexOfAny(charArrayOf('\r', '\n'), itemStart)
+            .let { if (it < 0) source.length else it }
+        val markerMatch = marker.find(source.substring(itemStart, itemEnd)) ?: return null
+        if (markerMatch.range.first != 0 || '\t' in markerMatch.value) return null
+        val indent = " ".repeat(markerMatch.groupValues[1].length + markerMatch.groupValues[2].length +
+            markerMatch.groupValues[3].length)
+        val newline = if ("\r\n" in source) "\r\n" else "\n"
+        val escaped = pasted.map { MarkdownInlineEditing.escapedPlainText(it) }
+        val inserted = escaped.joinToString(newline + indent)
+        val replacement = before + inserted + after
+        val candidate = source.replaceRange(line.start, line.end, replacement)
+        val block = MarkdownDocumentCodec.parse(candidate).blocks.singleOrNull() ?: return null
+        if (block.kind != kind || block.range != TextRange(0, candidate.length)) return null
+        val parsed = parse(block) ?: return null
+        for (depth in path.indices) {
+            val parentPath = path.take(depth)
+            val oldSiblings = siblings(parentPath) ?: return null
+            val newSiblings = parsed.siblings(parentPath) ?: return null
+            if (oldSiblings.map { it.marker } != newSiblings.map { it.marker }) return null
+            for (index in oldSiblings.indices) {
+                if (index != path[depth] && copySiblingItems(parentPath, index, index) !=
+                    parsed.copySiblingItems(parentPath, index, index)) return null
+            }
+        }
+        val parsedItem = parsed.item(path) ?: return null
+        val insertedLines = parsedItem.lines.drop(lineIndex).take(pasted.size)
+        if (insertedLines.size != pasted.size) return null
+        val visible = insertedLines.joinToString("\n") { parsedLine ->
+            MarkdownInlineEditing.parse(candidate.substring(parsedLine.start, parsedLine.end), enableWikilinks).visible
+        }
+        if (visible != expectedVisible.replace("\r\n", "\n").replace('\r', '\n')) return null
+        val sourceCaret = line.start + before.length + inserted.length
+        val focusLine = lineIndex + pasted.lastIndex
+        return PlainLinePasteEdit(candidate, sourceCaret, focusLine, pasted.last().length)
+    }
+
     /** Inserts parsed blocks under the active list item without rewriting its marker or siblings. */
     fun replaceLineWithBlocks(path: List<Int>, lineIndex: Int, before: String, blocks: String, after: String): BlockPasteEdit? {
         val selected = item(path) ?: return null
