@@ -856,6 +856,8 @@ private fun FormattedListTextField(
                 controller.splitFormattedListLine(blockId, path, lineIndex, newline)
             } else if (controller.replaceFormattedListLineWithBlocks(blockId, path, lineIndex, next.text)) {
                 // The pasted child list replaces this field; its last item receives focus.
+            } else if (controller.replaceFormattedListLineWithPlainLines(blockId, path, lineIndex, next.text)) {
+                // A plain multi-line paste stays in this item as editable soft lines.
             } else if (next.text == inline.visible || controller.replaceFormattedListLineText(blockId, path, lineIndex, next.text)) {
                 controller.setFormattedListSelection(blockId, path, lineIndex, next.selection, next.composition)
             }

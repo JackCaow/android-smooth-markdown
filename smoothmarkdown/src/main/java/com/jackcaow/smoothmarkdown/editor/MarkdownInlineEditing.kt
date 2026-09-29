@@ -362,6 +362,9 @@ internal class MarkdownInlineEditing private constructor(
     }
 
     companion object {
+        internal fun escapedPlainText(text: String, enableWikilinks: Boolean): String =
+            escapeMarkdown(text, enableWikilinks)
+
         fun parse(source: String, enableWikilinks: Boolean = false): MarkdownInlineEditing {
             val visible = StringBuilder()
             val starts = mutableListOf<Int>()

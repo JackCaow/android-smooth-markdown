@@ -7,6 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
+import com.jackcaow.smoothmarkdown.parseMarkdown
+import org.commonmark.node.Paragraph
+import org.commonmark.node.SoftLineBreak
+import org.commonmark.node.Text
 
 data class MarkdownDocumentBlockSelection(
     val source: String,
@@ -834,6 +838,47 @@ class MarkdownEditorController(
         replaceRange(block.range.min, block.range.max, edit.source, selectedStart = edit.selectionOffset)
         setFormattedListSelection(blockId, edit.focusPath, edit.focusLine, TextRange(focusLength))
         formattedListFocusTarget = edit.focusPath to edit.focusLine
+        formattedSelection = TextRange.Zero
+        formattedComposition = null
+        formattedBlockFocusTarget = null
+        return true
+    }
+
+    /** Plain multi-line paste remains one soft-break paragraph inside the current list item. */
+    internal fun replaceFormattedListLineWithPlainLines(blockId: String, itemPath: List<Int>, lineIndex: Int,
+                                                        nextVisible: String): Boolean {
+        if (mode != MarkdownEditorMode.FORMATTED || ('\n' !in nextVisible && '\r' !in nextVisible) ||
+            !hasWellFormedUtf16(nextVisible)) return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val raw = list.lineContent(itemPath, lineIndex) ?: return false
+        val inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
+        val commonPrefix = inline.visible.commonPrefixWith(nextVisible).length
+        val oldTail = inline.visible.substring(commonPrefix)
+        val newTail = nextVisible.substring(commonPrefix)
+        val commonSuffix = oldTail.commonSuffixWith(newTail).length
+        val selectedRange = TextRange(commonPrefix, inline.visible.length - commonSuffix)
+        val pasted = nextVisible.substring(commonPrefix, nextVisible.length - commonSuffix)
+            .replace("\r\n", "\n").replace('\r', '\n')
+        val lines = pasted.split('\n')
+        if (lines.size < 2 || lines.any { it.isBlank() } ||
+            lines.any { MarkdownInlineEditing.parse(it, enableWikilinks).marks.isNotEmpty() }) return false
+        val parsedPaste = MarkdownDocumentCodec.parse(pasted, parserPlugins).blocks
+        if (parsedPaste.size != 1 || parsedPaste.single().kind != MarkdownBlockKind.PARAGRAPH ||
+            parsedPaste.single().range != TextRange(0, pasted.length)) return false
+        val paragraph = parseMarkdown(pasted, parserPlugins).firstChild as? Paragraph ?: return false
+        if (paragraph.next != null) return false
+        var inlineNode = paragraph.firstChild
+        while (inlineNode != null) {
+            if (inlineNode !is Text && inlineNode !is SoftLineBreak) return false
+            inlineNode = inlineNode.next
+        }
+        val split = inline.splitVisibleRange(selectedRange) ?: return false
+        val edit = list.replaceLineWithPlainLines(itemPath, lineIndex, split.before, lines, split.after,
+                                                  nextVisible, enableWikilinks) ?: return false
+        replaceRange(block.range.min, block.range.max, edit.source, selectedStart = edit.selectionOffset)
+        setFormattedListSelection(blockId, itemPath, edit.focusLine, TextRange(edit.focusVisibleOffset))
+        formattedListFocusTarget = itemPath to edit.focusLine
         formattedSelection = TextRange.Zero
         formattedComposition = null
         formattedBlockFocusTarget = null
