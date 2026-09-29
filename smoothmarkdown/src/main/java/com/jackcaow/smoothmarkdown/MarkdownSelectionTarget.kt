@@ -1,6 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
@@ -14,8 +16,15 @@ data class MarkdownSelectionTarget(
 )
 
 internal data class MarkdownSelectionOptions(
+    val selectable: Boolean = false,
     val outerRegion: Boolean = false,
     val onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
 )
 
 internal val LocalMarkdownSelectionOptions = compositionLocalOf { MarkdownSelectionOptions() }
+
+@Composable
+internal fun SelectableMarkdownContent(content: @Composable () -> Unit) {
+    val options = LocalMarkdownSelectionOptions.current
+    if (!options.selectable || options.outerRegion) content() else SelectionContainer { content() }
+}

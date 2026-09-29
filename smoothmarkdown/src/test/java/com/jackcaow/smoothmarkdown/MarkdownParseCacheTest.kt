@@ -30,4 +30,18 @@ class MarkdownParseCacheTest {
         assertNull(cache.get("b"))
         assertEquals(2, cache.statistics.size)
     }
+
+    @Test fun disabledCacheReparsesWithoutReadingOrWritingSharedEntries() {
+        SmoothMarkdownCache.clear()
+        val source = "# Frequently changing message"
+        val uncached = parseMarkdown(source, enableCache = false)
+        assertNotSame(uncached, parseMarkdown(source, enableCache = false))
+        assertEquals(0, SmoothMarkdownCache.statistics.size)
+
+        val cached = parseMarkdown(source)
+        assertNotSame(cached, parseMarkdown(source, enableCache = false))
+        assertSame(cached, parseMarkdown(source))
+        assertEquals(1, SmoothMarkdownCache.statistics.size)
+        SmoothMarkdownCache.clear()
+    }
 }

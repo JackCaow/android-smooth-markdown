@@ -24,11 +24,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -123,8 +125,8 @@ private val baseParser = Parser.builder().extensions(
     .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
     .build()
 
-internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null): Node {
-    if (plugins == null) SmoothMarkdownCache.get(markdown)?.let { return it }
+internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null, enableCache: Boolean = true): Node {
+    if (enableCache && plugins == null) SmoothMarkdownCache.get(markdown)?.let { return it }
     val parser = if (plugins == null || (plugins.blockPlugins.isEmpty() && plugins.inlinePlugins.isEmpty())) baseParser else {
         val builder = Parser.builder().extensions(listOf(
             StrikethroughExtension.create(), TablesExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create(),
@@ -144,7 +146,7 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     (plugins?.getInlinePlugin("wikilink") as? WikilinkPlugin)?.let {
         WikilinkPostProcessor.process(result, it)
     }
-    if (plugins == null) SmoothMarkdownCache.put(markdown, result)
+    if (enableCache && plugins == null) SmoothMarkdownCache.put(markdown, result)
     return result
 }
 
@@ -198,8 +200,15 @@ fun SmoothMarkdown(
     selectableAsSingleRegion: Boolean = false,
     /** Reports rendered text bounds for programmatic selection by touch position. */
     onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
+    /** Reuse the shared parsed document for unchanged content. Disable for rapidly changing text. */
+    enableCache: Boolean = true,
+    /** Allow selection and copying across the rendered Markdown blocks. */
+    selectable: Boolean = false,
+    /** Controls the selectable region when [selectable] is true. */
+    selectionController: SmoothSelectionController? = null,
 ) {
-    val document = remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
+    val document = if (enableCache) remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
+        else parseMarkdown(markdown, plugins, enableCache = false)
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks) { groupSelectableBlocks(blocks) }
     CompositionLocalProvider(
@@ -213,25 +222,51 @@ fun SmoothMarkdown(
         LocalOnMentionClick provides onMentionClick,
         LocalOnHashtagClick provides onHashtagClick,
         LocalOnWikilinkClick provides onWikilinkClick,
-        LocalMarkdownSelectionOptions provides MarkdownSelectionOptions(selectableAsSingleRegion, onTextPositioned),
+        LocalMarkdownSelectionOptions provides MarkdownSelectionOptions(
+            selectable = selectable || selectableAsSingleRegion,
+            outerRegion = selectable || selectableAsSingleRegion,
+            onTextPositioned = onTextPositioned,
+        ),
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
-        if (scrollable) {
-            LazyColumn(
-                modifier = backgroundModifier,
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
-            ) {
-                itemsIndexed(selectionGroups) { _, group ->
-                    MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml)
+        val content: @Composable () -> Unit = {
+            if (scrollable) {
+                LazyColumn(
+                    modifier = backgroundModifier,
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
+                ) {
+                    itemsIndexed(selectionGroups) { _, group ->
+                        MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
+                    }
                 }
-            }
-        } else {
-            Column(backgroundModifier.padding(styleSheet.contentPadding)) {
-                selectionGroups.forEach { group ->
-                    MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml)
+            } else {
+                Column(backgroundModifier.padding(styleSheet.contentPadding)) {
+                    selectionGroups.forEach { group ->
+                        MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
+                    }
                 }
             }
         }
+        if (selectable && !selectableAsSingleRegion) {
+            MarkdownSelectionRegion(selectionController, content)
+        } else content()
+    }
+}
+
+@Composable
+private fun MarkdownSelectionRegion(
+    controller: SmoothSelectionController?,
+    content: @Composable () -> Unit,
+) {
+    if (controller == null) {
+        SelectionContainer { content() }
+    } else {
+        val state = rememberSelectionState()
+        DisposableEffect(controller, state) {
+            controller.attach(state)
+            onDispose { controller.detach(state) }
+        }
+        SelectionContainer(state = state) { content() }
     }
 }
 
@@ -241,11 +276,12 @@ private fun MarkdownSelectionGroup(
     onLinkClick: (String) -> Unit,
     onImageClick: (String) -> Unit,
     enableHtml: Boolean,
+    selectable: Boolean,
 ) {
     val outerRegion = LocalMarkdownSelectionOptions.current.outerRegion
     if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
         MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
-    } else if (outerRegion) {
+    } else if (outerRegion || !selectable) {
         Column { group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) } }
     } else {
         SelectionContainer {

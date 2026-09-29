@@ -254,7 +254,8 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                     ),
                 )
             }
-            if (LocalMarkdownSelectionOptions.current.outerRegion) content() else SelectionContainer { content() }
+            if (LocalMarkdownSelectionOptions.current.outerRegion || !LocalMarkdownSelectionOptions.current.selectable) content()
+            else SelectionContainer { content() }
         }
     }
 }

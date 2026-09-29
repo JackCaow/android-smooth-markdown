@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -70,7 +69,7 @@ class ThinkingPlugin : BlockParserPlugin {
             }
             if (!collapsed) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SelectionContainer {
+                SelectableMarkdownContent {
                     Text(thinking.content, modifier = Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -136,7 +135,7 @@ class ArtifactPlugin : BlockParserPlugin {
                 if (artifact.artifactType == ArtifactType.CODE) {
                     EnhancedCodeBlock(artifact.content, artifact.language)
                 } else {
-                    SelectionContainer {
+                    SelectableMarkdownContent {
                         Text(artifact.content, modifier = Modifier.fillMaxWidth().padding(12.dp),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                     }
@@ -188,7 +187,7 @@ class ToolCallPlugin : BlockParserPlugin {
             }
             tool.toolId?.let { Text("ID: $it", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall) }
             tool.parameters?.let {
-                SelectionContainer {
+                SelectableMarkdownContent {
                     Text(it, modifier = Modifier.fillMaxWidth().padding(12.dp),
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                 }
