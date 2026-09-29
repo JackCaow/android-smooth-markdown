@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -233,13 +235,27 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(decoration.padding)) {
             val selectionOptions = LocalMarkdownSelectionOptions.current
             val selectionKey = androidx.compose.runtime.remember { Any() }
+            DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
+                onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
+            }
             val codeLayout = androidx.compose.runtime.remember(codeText) { mutableStateOf<TextLayoutResult?>(null) }
             val tracking = selectionOptions.onTextPositioned?.let { callback ->
                 Modifier.onGloballyPositioned { coordinates ->
                     val bounds = coordinates.boundsInWindow()
-                    callback(MarkdownSelectionTarget(selectionKey, bounds, codeText) { windowPoint ->
-                        codeLayout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
-                    })
+                    callback(MarkdownSelectionTarget(
+                        selectionKey, bounds, codeText,
+                        offsetAtWindowPosition = { windowPoint ->
+                            codeLayout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
+                        },
+                        wordBoundaryAtWindowPosition = { windowPoint ->
+                            codeLayout.value?.let { result ->
+                                result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
+                            } ?: TextRange(0)
+                        },
+                        containsTextAtWindowPosition = { windowPoint ->
+                            textLayoutContainsWindowPoint(codeLayout.value, windowPoint, bounds)
+                        },
+                    ))
                 }
             } ?: Modifier
             val content: @Composable () -> Unit = {

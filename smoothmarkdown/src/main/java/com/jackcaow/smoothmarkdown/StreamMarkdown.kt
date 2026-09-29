@@ -37,6 +37,8 @@ fun StreamMarkdown(
     selectionController: SmoothSelectionController? = null,
     loadingContent: (@Composable () -> Unit)? = null,
     errorContent: (@Composable (Throwable) -> Unit)? = null,
+    selectionMenuActions: List<SmoothSelectionMenuAction> = emptyList(),
+    showDefaultCopyAction: Boolean = true,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     // HTML is a rendering option, not a new stream. Keep collecting the same
@@ -75,7 +77,8 @@ fun StreamMarkdown(
     }
     StreamMarkdownContent(snapshot, modifier, onLinkClick, onImageClick, enableHtml, styleSheet,
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
-        onCodeCopied, selectable, selectionController, loadingContent, errorContent)
+        onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction,
+        loadingContent, errorContent)
 }
 
 /** Renders a cumulative streaming source. A late-composed chat bubble receives the latest
@@ -102,6 +105,8 @@ fun StreamMarkdown(
     selectionController: SmoothSelectionController? = null,
     loadingContent: (@Composable () -> Unit)? = null,
     errorContent: (@Composable (Throwable) -> Unit)? = null,
+    selectionMenuActions: List<SmoothSelectionMenuAction> = emptyList(),
+    showDefaultCopyAction: Boolean = true,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val snapshot by produceState(initialValue = StreamSnapshot(), key1 = prefixes, key2 = throttleMillis) {
@@ -133,7 +138,8 @@ fun StreamMarkdown(
     }
     StreamMarkdownContent(snapshot, modifier, onLinkClick, onImageClick, enableHtml, styleSheet,
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
-        onCodeCopied, selectable, selectionController, loadingContent, errorContent)
+        onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction,
+        loadingContent, errorContent)
 }
 
 @Composable
@@ -153,6 +159,8 @@ private fun StreamMarkdownContent(
     onCodeCopied: ((String) -> Unit)?,
     selectable: Boolean,
     selectionController: SmoothSelectionController?,
+    selectionMenuActions: List<SmoothSelectionMenuAction>,
+    showDefaultCopyAction: Boolean,
     loadingContent: (@Composable () -> Unit)?,
     errorContent: (@Composable (Throwable) -> Unit)?,
 ) {
@@ -164,7 +172,8 @@ private fun StreamMarkdownContent(
             onCodeCopied = onCodeCopied, styleSheet = styleSheet, plugins = plugins,
             onImageClickWithMetadata = onImageClickWithMetadata, imageBuilder = imageBuilder,
             scrollable = scrollable, enableCache = false, selectable = selectable,
-            selectionController = selectionController)
+            selectionController = selectionController, selectionMenuActions = selectionMenuActions,
+            showDefaultCopyAction = showDefaultCopyAction)
     }
 }
 
