@@ -157,8 +157,9 @@ private val baseParser = Parser.builder().extensions(
     .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
     .build()
 
-internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null, enableCache: Boolean = true): Node {
-    if (enableCache && plugins == null) SmoothMarkdownCache.get(markdown)?.let { return it }
+internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null, enableCache: Boolean = true, enableHtml: Boolean = false): Node {
+    // The HTML pass changes the AST, so the two parser modes need separate cache keys.
+    if (enableCache && plugins == null) SmoothMarkdownCache.get(markdown, enableHtml)?.let { return it }
     val parser = if (plugins == null || (plugins.blockPlugins.isEmpty() && plugins.inlinePlugins.isEmpty())) baseParser else {
         val builder = Parser.builder().extensions(listOf(
             StrikethroughExtension.create(), TablesExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create(),
@@ -174,11 +175,12 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     }
     val document = parser.parse(markdown)
     plugins?.transformFencedBlocks(document)
+    if (enableHtml) HtmlCodePostProcessor(markdown).process(document)
     val result = FootnoteReferencePostProcessor(markdown).process(document)
     (plugins?.getInlinePlugin("wikilink") as? WikilinkPlugin)?.let {
         WikilinkPostProcessor.process(result, it)
     }
-    if (enableCache && plugins == null) SmoothMarkdownCache.put(markdown, result)
+    if (enableCache && plugins == null) SmoothMarkdownCache.put(markdown, result, enableHtml)
     return result
 }
 
@@ -243,8 +245,8 @@ fun SmoothMarkdown(
     /** Hide the native Copy item when the host supplies its own copy action. */
     showDefaultCopyAction: Boolean = true,
 ) {
-    val document = if (enableCache) remember(markdown, plugins) { parseMarkdown(markdown, plugins) }
-        else parseMarkdown(markdown, plugins, enableCache = false)
+    val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
+        else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
         groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
@@ -602,13 +604,13 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     }
                     if (html.name == "blockquote") {
                         MarkdownBlockquote(sheet) {
-                            Column { parseMarkdown(html.content, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
+                            Column { parseMarkdown(html.content, plugins, enableHtml = true).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                         }
                     } else {
-                        Column { parseMarkdown(html.content, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
+                        Column { parseMarkdown(html.content, plugins, enableHtml = true).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, alignment) } }
                     }
                     if (html.trailing.isNotBlank()) {
-                        parseMarkdown(html.trailing, plugins).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
+                        parseMarkdown(html.trailing, plugins, enableHtml = true).children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, true, textAlign) }
                     }
                 }
                 else -> MarkdownText(AnnotatedString(node.literal), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
