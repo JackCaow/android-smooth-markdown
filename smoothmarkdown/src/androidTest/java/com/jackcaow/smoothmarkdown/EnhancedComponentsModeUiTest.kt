@@ -7,9 +7,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
 import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
 import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -44,5 +47,23 @@ class EnhancedComponentsModeUiTest {
         compose.onNodeWithText("Copy").assertHasClickAction()
         compose.runOnIdle { enhanced = false }
         compose.onNodeWithText("Copy").assertDoesNotExist()
+    }
+
+    @Test fun externalLinkKeepsItsLabelAndTapInBothModes() {
+        var enhanced by mutableStateOf(false)
+        val opened = mutableListOf<String>()
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdown("[site](https://example.com)", useEnhancedComponents = enhanced,
+                    onLinkClick = { opened += it })
+            }
+        }
+        compose.onNodeWithText("site").performTouchInput { click() }
+        compose.runOnIdle {
+            assertEquals(listOf("https://example.com"), opened)
+            enhanced = true
+        }
+        compose.onNodeWithText("site").performTouchInput { click() }
+        compose.runOnIdle { assertEquals(listOf("https://example.com", "https://example.com"), opened) }
     }
 }
