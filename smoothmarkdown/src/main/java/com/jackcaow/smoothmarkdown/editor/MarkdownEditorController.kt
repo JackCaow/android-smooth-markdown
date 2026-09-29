@@ -723,6 +723,8 @@ class MarkdownEditorController(
     }
 
     internal fun applyFormattedInlineMark(command: MarkdownEditorCommand, destination: String? = null): Boolean {
+        // A toolbar or hardware shortcut must not replace text still owned by the IME.
+        if (formattedComposition != null) return false
         val blockId = activeFormattedBlockId ?: return false
         val block = semanticDocument().blockById(blockId) ?: return false
         if (command == MarkdownEditorCommand.WIKILINK && !enableWikilinks) return false
@@ -1168,7 +1170,7 @@ class MarkdownEditorController(
 
     fun applyCommand(command: MarkdownEditorCommand, argument: String? = null) {
         if (mode == MarkdownEditorMode.FORMATTED && command in setOf(
-                MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC, MarkdownEditorCommand.STRIKETHROUGH,
                 MarkdownEditorCommand.LINK, MarkdownEditorCommand.INLINE_CODE, MarkdownEditorCommand.WIKILINK,
             )) {
             applyFormattedInlineMark(command, argument)
