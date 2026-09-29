@@ -347,66 +347,12 @@ private fun FormattedBlockPane(
     val blockSelection = controller.formattedBlockSelection?.takeIf { it.source == controller.text }
     val listSelection = controller.formattedListItemSelection?.takeIf { it.source == controller.text }
     val tableSelection = controller.formattedTableCellSelection?.takeIf { it.source == controller.text }
+    val dragSelection = remember(controller, controller.text) { FormattedDragSelection(controller) }
     var blockReplacement by remember(controller) { mutableStateOf("") }
+    var tableReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
     var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        if (blockSelection != null) {
-            Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                TextButton(onClick = {
-                    controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-block-copy")) { Text("Copy Markdown") }
-                TextButton(onClick = {
-                    blockSelectionError = !controller.deleteFormattedBlockSelection()
-                }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
-                TextButton(onClick = {
-                    blockSelectionError = !controller.replaceFormattedBlockSelectionWithMarkdown(blockReplacement)
-                    if (!blockSelectionError) blockReplacement = ""
-                }, modifier = Modifier.testTag("formatted-block-replace")) { Text("Replace blocks") }
-                TextButton(onClick = {
-                    controller.clearFormattedBlockSelection()
-                    blockSelectionError = false
-                }, modifier = Modifier.testTag("formatted-block-clear")) { Text("Clear") }
-            }
-            OutlinedTextField(
-                value = blockReplacement,
-                onValueChange = { blockReplacement = it; blockSelectionError = false },
-                label = { Text("Replacement Markdown") },
-                modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
-            )
-            if (blockSelectionError) Text("This edit would change neighboring blocks", modifier = Modifier.testTag("formatted-block-edit-error"))
-        }
-        if (listSelection != null) {
-            Text("${listSelection.lastIndex - listSelection.firstIndex + 1} list item(s) selected",
-                modifier = Modifier.testTag("formatted-list-selection-count"))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                TextButton(onClick = {
-                    controller.copyFormattedListItemSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-list-selection-copy")) { Text("Copy Markdown") }
-                TextButton(onClick = { controller.deleteFormattedListItemSelection() },
-                    modifier = Modifier.testTag("formatted-list-selection-delete")) { Text("Delete items") }
-                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.BOLD) },
-                    modifier = Modifier.testTag("formatted-list-selection-bold")) { Text("Bold") }
-                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC) },
-                    modifier = Modifier.testTag("formatted-list-selection-italic")) { Text("Italic") }
-                TextButton(onClick = controller::clearFormattedListItemSelection,
-                    modifier = Modifier.testTag("formatted-list-selection-clear")) { Text("Clear") }
-            }
-        }
-        if (tableSelection != null) {
-            Text("${tableSelection.lastRow - tableSelection.firstRow + 1} × ${tableSelection.lastColumn - tableSelection.firstColumn + 1} cells selected",
-                modifier = Modifier.testTag("formatted-table-selection-count"))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                TextButton(onClick = {
-                    controller.copyFormattedTableCellSelectionAsTsv()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text("Copy TSV") }
-                TextButton(onClick = { controller.clearFormattedTableCellSelection() },
-                    modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
-                TextButton(onClick = controller::resetFormattedTableCellSelection,
-                    modifier = Modifier.testTag("formatted-table-selection-clear")) { Text("Clear selection") }
-            }
-        }
         var pendingRendered = false
         blocks.forEach { block ->
             if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
@@ -481,11 +427,11 @@ private fun FormattedBlockPane(
                     }
                     if (block.kind == MarkdownBlockKind.TABLE) {
                         val table = controller.semanticTable(block.id)
-                        if (table != null) FormattedTable(controller, block.id, table)
+                        if (table != null) FormattedTable(controller, block.id, table, dragSelection)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (block.kind == MarkdownBlockKind.BULLET_LIST || block.kind == MarkdownBlockKind.ORDERED_LIST) {
                         val list = MarkdownSourceList.parse(block)
-                        if (list != null) FormattedList(controller, block.id, list)
+                        if (list != null) FormattedList(controller, block.id, list, dragSelection)
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
@@ -510,6 +456,9 @@ private fun FormattedBlockPane(
                                 controller.clearFormattedBlockFocusTarget(block.id)
                             }
                         }
+                        val dragModifier = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
+                            Modifier.formattedDragSelectionTarget(dragSelection, FormattedDragTarget.Block(block.id))
+                                .testTag("formatted-block-drag-${block.id}") else Modifier
                         BasicTextField(
                             value = TextFieldValue(inline?.annotated(MaterialTheme.colorScheme.primary) ?: androidx.compose.ui.text.AnnotatedString(editableText), fieldSelection, fieldComposition),
                             onValueChange = { next ->
@@ -522,7 +471,8 @@ private fun FormattedBlockPane(
                                     controller.replaceFormattedBlockText(block.id, next.text)
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).focusRequester(blockFocusRequester).onPreviewKeyEvent { event ->
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp).then(dragModifier)
+                                .focusRequester(blockFocusRequester).onPreviewKeyEvent { event ->
                                 if (!showSuggestions || event.type != KeyEventType.KeyDown) false else when (event.key) {
                                     Key.DirectionDown -> {
                                         if (suggestions.isNotEmpty()) selectedSuggestion = (selectedSuggestion + 1) % suggestions.size
@@ -581,6 +531,68 @@ private fun FormattedBlockPane(
         if (pendingExit != null && !pendingRendered) {
             PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(bottom = 10.dp))
         }
+        if (blockSelection != null) {
+            Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-block-copy")) { Text("Copy Markdown") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.deleteFormattedBlockSelection()
+                }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.replaceFormattedBlockSelectionWithMarkdown(blockReplacement)
+                    if (!blockSelectionError) blockReplacement = ""
+                }, modifier = Modifier.testTag("formatted-block-replace")) { Text("Replace blocks") }
+                TextButton(onClick = {
+                    controller.clearFormattedBlockSelection()
+                    blockSelectionError = false
+                }, modifier = Modifier.testTag("formatted-block-clear")) { Text("Clear") }
+            }
+            OutlinedTextField(
+                value = blockReplacement,
+                onValueChange = { blockReplacement = it; blockSelectionError = false },
+                label = { Text("Replacement Markdown") },
+                modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
+            )
+            if (blockSelectionError) Text("This edit would change neighboring blocks", modifier = Modifier.testTag("formatted-block-edit-error"))
+        }
+        if (listSelection != null) {
+            Text("${listSelection.lastIndex - listSelection.firstIndex + 1} list item(s) selected",
+                modifier = Modifier.testTag("formatted-list-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedListItemSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-list-selection-copy")) { Text("Copy Markdown") }
+                TextButton(onClick = { controller.deleteFormattedListItemSelection() },
+                    modifier = Modifier.testTag("formatted-list-selection-delete")) { Text("Delete items") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.BOLD) },
+                    modifier = Modifier.testTag("formatted-list-selection-bold")) { Text("Bold") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC) },
+                    modifier = Modifier.testTag("formatted-list-selection-italic")) { Text("Italic") }
+                TextButton(onClick = controller::clearFormattedListItemSelection,
+                    modifier = Modifier.testTag("formatted-list-selection-clear")) { Text("Clear") }
+            }
+        }
+        if (tableSelection != null) {
+            Text("${tableSelection.lastRow - tableSelection.firstRow + 1} × ${tableSelection.lastColumn - tableSelection.firstColumn + 1} cells selected",
+                modifier = Modifier.testTag("formatted-table-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedTableCellSelectionAsTsv()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text("Copy TSV") }
+                TextButton(onClick = { controller.clearFormattedTableCellSelection() },
+                    modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
+                TextButton(onClick = {
+                    if (controller.replaceFormattedTableCellSelectionFromTsv(tableReplacement)) tableReplacement = ""
+                }, modifier = Modifier.testTag("formatted-table-selection-replace")) { Text("Replace TSV") }
+                TextButton(onClick = controller::resetFormattedTableCellSelection,
+                    modifier = Modifier.testTag("formatted-table-selection-clear")) { Text("Clear selection") }
+            }
+            OutlinedTextField(value = tableReplacement, onValueChange = { tableReplacement = it },
+                label = { Text("Replacement TSV") },
+                modifier = Modifier.fillMaxWidth().testTag("formatted-table-replacement"))
+        }
     }
 }
 
@@ -602,11 +614,12 @@ private fun PendingEmptyParagraphField(controller: MarkdownEditorController, mod
 }
 
 @Composable
-private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList) {
+private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList,
+                          dragSelection: FormattedDragSelection) {
     val block = controller.semanticDocument().blockById(blockId)
     val pending = controller.pendingListExit
     val showPending = block != null && pending != null && pending.offset > block.range.min && pending.offset < block.range.max
-    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending)
+    FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending, dragSelection)
 }
 
 @Composable
@@ -619,6 +632,7 @@ private fun FormattedListItems(
     depth: Int,
     indexBase: Int,
     showPending: Boolean = false,
+    dragSelection: FormattedDragSelection,
 ) {
     Column {
         items.forEachIndexed { index, item ->
@@ -629,7 +643,14 @@ private fun FormattedListItems(
             val pathTag = path.joinToString("-")
             val firstLine = item.lines.firstOrNull { it.start == item.contentStart } ?: item.lines.firstOrNull()
             Row(
-                Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(8) * 20).dp),
+                Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(8) * 20).dp)
+                    .background(if (controller.formattedListItemSelection?.let {
+                        it.source == controller.text && it.blockId == blockId &&
+                            path.size > it.parentPath.size && path.take(it.parentPath.size) == it.parentPath &&
+                            path[it.parentPath.size] in it.firstIndex..it.lastIndex
+                    } == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                    .formattedDragSelectionTarget(dragSelection, FormattedDragTarget.ListItem(blockId, path))
+                    .testTag("formatted-list-drag-$blockId-$pathTag"),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 if (item.taskStateOffset != null) {
@@ -665,7 +686,8 @@ private fun FormattedListItems(
                                 .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"))
                     }
                     is MarkdownSourceList.NestedList -> {
-                        FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase)
+                        FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase,
+                            dragSelection = dragSelection)
                         nestedBase += part.items.size
                     }
                     is MarkdownSourceList.Raw -> Text(
@@ -741,11 +763,20 @@ private fun FormattedListTextField(
 }
 
 @Composable
-private fun FormattedTable(controller: MarkdownEditorController, blockId: String, table: MarkdownSourceTable) {
+private fun FormattedTable(controller: MarkdownEditorController, blockId: String, table: MarkdownSourceTable,
+                           dragSelection: FormattedDragSelection) {
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         fun displayCell(raw: String) = raw.replace("\\|", "|")
         @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
-            Column(Modifier.width(140.dp).padding(4.dp)) {
+            val selectedRow = if (header) 0 else rowIndex + 1
+            val selected = controller.formattedTableCellSelection?.let {
+                it.source == controller.text && it.blockId == blockId &&
+                    selectedRow in it.firstRow..it.lastRow && columnIndex in it.firstColumn..it.lastColumn
+            } == true
+            Column(Modifier.width(140.dp).padding(4.dp)
+                .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                .formattedDragSelectionTarget(dragSelection, FormattedDragTarget.TableCell(blockId, selectedRow, columnIndex))
+                .testTag("formatted-table-drag-$blockId-$selectedRow-$columnIndex")) {
                 TextButton(
                     onClick = { controller.selectFormattedTableCell(blockId, if (header) 0 else rowIndex + 1, columnIndex) },
                     modifier = Modifier.testTag("formatted-table-select-$blockId-${if (header) 0 else rowIndex + 1}-$columnIndex"),
