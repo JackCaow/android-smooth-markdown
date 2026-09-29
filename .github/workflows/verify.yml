@@ -37,6 +37,6 @@ jobs:
       - name: Check Flutter Demo fixtures
         working-directory: android-smooth-markdown
         run: python3 tools/check_flutter_example_parity.py
-      - name: Test library and Demo; assemble Demo
+      - name: Test library and Demo; compile UI tests; assemble Demo
         working-directory: android-smooth-markdown
-        run: ./gradlew :smoothmarkdown:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --no-daemon
+        run: ./gradlew :smoothmarkdown:testDebugUnitTest :smoothmarkdown:compileDebugAndroidTestKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon
