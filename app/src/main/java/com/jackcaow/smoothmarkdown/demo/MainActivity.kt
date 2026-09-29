@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -271,6 +272,7 @@ private fun DemoHome(
     var themeMenu by remember { mutableStateOf(false) }
     var showSource by remember { mutableStateOf(false) }
     var exportedLength by remember { mutableStateOf<Int?>(null) }
+    var useDeviceFiles by rememberSaveable { mutableStateOf(false) }
     var imagePickStatus by remember { mutableStateOf<MarkdownEditorImagePickStatus?>(null) }
     var hostActionError by remember { mutableStateOf<String?>(null) }
     var pdfExportLength by remember { mutableStateOf<Int?>(null) }
@@ -296,6 +298,8 @@ private fun DemoHome(
             if (isEditor) it.mode = MarkdownEditorMode.FORMATTED
         }
     }
+    val editorDocumentActions = DemoEditorDocumentActions(
+        pickEditorImage, importEditorMarkdown, exportEditorMarkdown)
     val plugins = remember { ParserPluginRegistry().also {
         it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(),
             MermaidPlugin(), ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
@@ -441,14 +445,24 @@ private fun DemoHome(
                 Text("Hardware keyboard: Ctrl+E inline code · Ctrl+Alt+1–6 headings · Ctrl+Shift+B quote · Ctrl+Shift+7/8 lists.",
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("editor-shortcuts-help"))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("Use device files", style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f))
+                    Switch(checked = useDeviceFiles, onCheckedChange = {
+                        useDeviceFiles = it
+                        imagePickStatus = null
+                        hostActionError = null
+                    }, modifier = Modifier.testTag("editor-device-files-switch"))
+                }
                 exportedLength?.let {
                     Text("Last export: $it characters",
                         modifier = Modifier.testTag("export-status"))
                 }
-                imagePickStatus?.let {
+                imagePickStatus?.takeIf { useDeviceFiles }?.let {
                     Text("Image: ${it.name.lowercase()}", modifier = Modifier.testTag("image-pick-status"))
                 }
-                hostActionError?.let {
+                hostActionError?.takeIf { useDeviceFiles }?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("editor-host-error"))
                 }
                 pdfExportLength?.let {
@@ -459,26 +473,26 @@ private fun DemoHome(
                 SmoothMarkdownEditor(
                     controller = controller,
                     modifier = Modifier.weight(1f),
-                    onPickImage = pickEditorImage,
-                    onImagePickEvent = { event: MarkdownEditorImagePickEvent ->
+                    onPickImage = { editorDocumentActions.pickImage(useDeviceFiles) },
+                    onImagePickEvent = if (useDeviceFiles) ({ event: MarkdownEditorImagePickEvent ->
                         imagePickStatus = event.status
                         if (event.status == MarkdownEditorImagePickStatus.PICKING) hostActionError = null
-                    },
-                    onImportMarkdown = importEditorMarkdown,
+                    }) else null,
+                    onImportMarkdown = { editorDocumentActions.importMarkdown(useDeviceFiles) },
                     onExportMarkdown = { markdown ->
-                        exportEditorMarkdown(markdown)
+                        editorDocumentActions.exportMarkdown(useDeviceFiles, markdown)
                         exportedLength = markdown.length
                     },
-                    onHostActionError = { action: MarkdownEditorHostAction, error: Throwable ->
+                    onHostActionError = if (useDeviceFiles) ({ action: MarkdownEditorHostAction, error: Throwable ->
                         hostActionError = "${action.name.lowercase().replace('_', ' ')}: ${error.message ?: "failed"}"
-                    },
-                    imageBuilder = { source, alt, title ->
+                    }) else null,
+                    imageBuilder = if (useDeviceFiles) ({ source, alt, title ->
                         val model = resolveEditorImage(source)
                             ?: if (source.contains(':')) source else "file:///android_asset/${source.trimStart('/')}"
                         AsyncImage(model = model, contentDescription = alt?.ifBlank { title ?: "Image" } ?: title,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 240.dp),
                             contentScale = ContentScale.Fit)
-                    },
+                    }) else null,
                     onExportPdf = { markdown, _ -> pdfExportLength = markdown.length },
                     wikilinkSuggestions = listOf("Daily Notes", "Project Plan", "Research Index", "Scratch Reference"),
                     onTapWikilink = { tappedWikilink = it },
