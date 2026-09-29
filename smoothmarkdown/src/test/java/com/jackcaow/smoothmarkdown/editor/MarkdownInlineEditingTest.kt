@@ -60,6 +60,44 @@ class MarkdownInlineEditingTest {
         assertEquals("alpha beta gamma delta", controller.text)
     }
 
+    @Test fun formattedStrikethroughUsesVisibleUtf16RangeAndPreservesNeighborSource() {
+        val original = "before\n\n## 😀 alpha beta ##\n\nafter"
+        val controller = MarkdownEditorController(original)
+        controller.mode = MarkdownEditorMode.FORMATTED
+        val heading = controller.semanticDocument().blocks[1]
+        // The source cursor deliberately points at the preceding paragraph.
+        controller.setSelection(0)
+        controller.setFormattedSelection(heading.id, TextRange(3, 8))
+        controller.applyCommand(MarkdownEditorCommand.STRIKETHROUGH)
+        assertEquals("before\n\n## 😀 ~~alpha~~ beta ##\n\nafter", controller.text)
+        assertEquals(TextRange(3, 8), controller.formattedSelection)
+        assertEquals("😀 alpha beta", MarkdownFormattedBlock.inline(controller.semanticDocument().blocks[1])!!.visible)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+        assertTrue(controller.redo())
+        assertEquals("before\n\n## 😀 ~~alpha~~ beta ##\n\nafter", controller.text)
+    }
+
+    @Test fun formattedStrikethroughTogglesOffAndDoesNotEditDuringImeComposition() {
+        val original = "~~alpha~~ beta"
+        val controller = MarkdownEditorController(original)
+        controller.mode = MarkdownEditorMode.FORMATTED
+        val id = controller.semanticDocument().blocks.single().id
+        controller.setFormattedSelection(id, TextRange(0, 5), TextRange(0, 5))
+        controller.applyCommand(MarkdownEditorCommand.STRIKETHROUGH)
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+
+        controller.setFormattedSelection(id, TextRange(0, 5))
+        controller.applyCommand(MarkdownEditorCommand.STRIKETHROUGH)
+        assertEquals("alpha beta", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertTrue(controller.redo())
+        assertEquals("alpha beta", controller.text)
+    }
+
     @Test fun headingAndEscapedLiteralRoundTripWithoutTouchingNeighborBlocks() {
         val original = "first\n\n## Hello **world** ##\n\nlast"
         val controller = MarkdownEditorController(original)

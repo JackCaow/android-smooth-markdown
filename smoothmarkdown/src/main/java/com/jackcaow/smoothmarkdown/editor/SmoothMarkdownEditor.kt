@@ -238,6 +238,8 @@ fun SmoothMarkdownEditor(
                 }
                 event.key == Key.B && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.BOLD)
                 event.key == Key.I && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.ITALIC)
+                event.isShiftPressed && (event.key == Key.S || event.key == Key.X) ->
+                    applyEditorCommand(MarkdownEditorCommand.STRIKETHROUGH)
                 event.key == Key.K && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.LINK)
                 event.key == Key.F && !event.isShiftPressed -> {
                     searchOpen = true
@@ -293,6 +295,7 @@ fun SmoothMarkdownEditor(
                         val defaultCommands = listOf(
                             "B" to MarkdownEditorCommand.BOLD,
                             "I" to MarkdownEditorCommand.ITALIC,
+                            "Strike" to MarkdownEditorCommand.STRIKETHROUGH,
                             "H1" to MarkdownEditorCommand.HEADING1,
                             "List" to MarkdownEditorCommand.UNORDERED_LIST,
                             "Task" to MarkdownEditorCommand.TASK_LIST,
