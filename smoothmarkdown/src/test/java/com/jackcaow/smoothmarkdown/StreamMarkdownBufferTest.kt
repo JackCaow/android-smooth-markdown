@@ -3,6 +3,8 @@ package com.jackcaow.smoothmarkdown
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.unit.em
 
 class StreamMarkdownBufferTest {
     @Test fun batchesRapidChunksAndFlushesOnCompletion() {
@@ -52,6 +54,20 @@ class StreamMarkdownBufferTest {
         val completeTag = StreamSnapshot(buffer.visibleText)
         assertEquals("lead <font color='red'>red</font> tail", completeTag.renderText(enableHtml = true))
         assertEquals(completeTag.text, completeTag.renderText(enableHtml = false))
+    }
+
+    @Test fun splitSubscriptAndSuperscriptTagsRenderAtReducedSizeAfterCompletion() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0, enableHtml = true)
+        assertNull(buffer.append("H<sub", 50))
+        assertEquals("H", buffer.visibleText)
+        assertNull(buffer.append(">2</sub>O x<sup", 100))
+        assertEquals("H<sub>2</sub>O x", buffer.visibleText)
+        assertNull(buffer.append(">2</sup>", 150))
+        val rendered = inlineText(parseMarkdown(buffer.visibleText, enableHtml = true).firstChild!!, enableHtml = true)
+        assertEquals("H2O x2", rendered.text)
+        assertEquals(listOf(BaselineShift.Subscript, BaselineShift.Superscript),
+            rendered.spanStyles.map { it.item.baselineShift })
+        assertEquals(listOf(0.75.em, 0.75.em), rendered.spanStyles.map { it.item.fontSize })
     }
 
     @Test fun completedStreamRevealsUnfinishedTagAsLiteralSource() {

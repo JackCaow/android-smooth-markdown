@@ -1126,8 +1126,10 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
             "s", "del", "strike" -> addStyle(strikeSpan, start, end)
             "u", "ins" -> addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
             "mark" -> addStyle(SpanStyle(background = styleSheet.highlightColor), start, end)
-            "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript), start, end)
-            "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript), start, end)
+            "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)
+                .merge(styleSheet.subscriptStyle), start, end)
+            "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)
+                .merge(styleSheet.superscriptStyle), start, end)
             "code", "kbd" -> addStyle(codeSpan, start, end)
             "a" -> tag.attributes["href"]?.takeIf(SafeHtml::isSafeLink)?.let { url ->
                 addStyle(linkSpan, start, end)

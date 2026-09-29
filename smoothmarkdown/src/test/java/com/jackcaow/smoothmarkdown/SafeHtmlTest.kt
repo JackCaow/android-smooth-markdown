@@ -5,7 +5,12 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import org.commonmark.node.Paragraph
 
 class SafeHtmlTest {
@@ -49,6 +54,31 @@ class SafeHtmlTest {
             span.item.fontWeight == FontWeight.Bold && rendered.text.substring(span.start, span.end) == "bold"
         })
         assertTrue(rendered.getStringAnnotations("url", 0, rendered.length).isEmpty())
+    }
+
+    @Test fun htmlSubscriptAndSuperscriptUseFlutterRelativeSizeAndAllowOverrides() {
+        val paragraph = parseMarkdown("H<sub>2</sub>O and x<sup>2</sup>", enableHtml = true).firstChild!!
+        val default = inlineText(paragraph, enableHtml = true)
+        assertEquals("H2O and x2", default.text)
+        val sub = default.spanStyles.single { default.text.substring(it.start, it.end) == "2" && it.start == 1 }.item
+        val sup = default.spanStyles.single { default.text.substring(it.start, it.end) == "2" && it.start > 1 }.item
+        assertEquals(0.75.em, sub.fontSize)
+        assertEquals(BaselineShift.Subscript, sub.baselineShift)
+        assertEquals(0.75.em, sup.fontSize)
+        assertEquals(BaselineShift.Superscript, sup.baselineShift)
+
+        val customized = inlineRender(paragraph, enableHtml = true, styleSheet = MarkdownStyleSheet(
+            subscriptStyle = SpanStyle(color = Color.Red, fontSize = 9.sp),
+            superscriptStyle = SpanStyle(color = Color.Blue, fontSize = 10.sp),
+        )).text
+        val customSub = customized.spanStyles.single { it.start == 1 }.item
+        val customSup = customized.spanStyles.single { it.start > 1 }.item
+        assertEquals(9.sp, customSub.fontSize)
+        assertEquals(Color.Red, customSub.color)
+        assertEquals(BaselineShift.Subscript, customSub.baselineShift)
+        assertEquals(10.sp, customSup.fontSize)
+        assertEquals(Color.Blue, customSup.color)
+        assertEquals(BaselineShift.Superscript, customSup.baselineShift)
     }
 
     @Test fun withholdsOnlyPartialTagsOutsideCode() {
