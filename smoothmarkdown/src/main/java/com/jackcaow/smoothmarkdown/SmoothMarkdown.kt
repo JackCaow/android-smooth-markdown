@@ -41,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.nativeCanvas
@@ -66,6 +68,7 @@ import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboard
@@ -408,15 +411,47 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 fontSize = (32 - (node.level - 1) * 3).sp,
                 fontWeight = FontWeight.Bold,
             )
-            MarkdownInlineText(
-                inlineRender(node, enableHtml, sheet, plugins),
-                baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
-                    ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface),
-                onLinkClick,
-                onImageClick,
-                textAlign,
-                modifier = Modifier.semantics { heading() },
-            )
+            val resolvedStyle = baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
+                ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface)
+            val primary = MaterialTheme.colorScheme.primary
+            val decorated = node.level <= 2
+            val barHeight = with(LocalDensity.current) {
+                if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
+            }
+            Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (decorated) {
+                        Box(
+                            Modifier.padding(end = 12.dp)
+                                .width(4.dp)
+                                .height(barHeight)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Brush.verticalGradient(listOf(primary, primary.copy(alpha = 0.3f)))),
+                        )
+                    }
+                    Box(Modifier.weight(1f)) {
+                        MarkdownInlineText(
+                            inlineRender(node, enableHtml, sheet, plugins),
+                            resolvedStyle,
+                            onLinkClick,
+                            onImageClick,
+                            textAlign,
+                            bottomPadding = 0.dp,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                    }
+                }
+                if (decorated) {
+                    Box(
+                        Modifier.fillMaxWidth().height(2.dp).background(
+                            Brush.horizontalGradient(listOf(primary.copy(alpha = 0.3f), primary.copy(alpha = 0f))),
+                        ),
+                    )
+                }
+            }
         }
         is Paragraph -> {
             val meaningful = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.toList()
