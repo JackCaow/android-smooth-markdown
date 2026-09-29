@@ -20,8 +20,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -41,11 +44,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -146,6 +152,7 @@ import org.commonmark.parser.Parser
 import org.commonmark.parser.IncludeSourceSpans
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 private val baseParser = Parser.builder().extensions(
     listOf(
@@ -269,10 +276,18 @@ fun SmoothMarkdown(
         )
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
-    DisposableEffect(activeController, document, enableHtml, plugins, builderRegistry) {
-        activeController?.bindDocument(document, enableHtml, plugins, builderRegistry)
+    SideEffect {
+        activeController?.bindDocument(
+            document, enableHtml, plugins, builderRegistry,
+            customCodeBuilder = codeBlockBuilder != null,
+            customImageBuilder = imageBuilder != null,
+        )
+    }
+    DisposableEffect(activeController, document) {
         onDispose { activeController?.unbindDocument(document) }
     }
+    val fullDocumentSelectionMode = activeController?.fullDocumentSelectionMode == true
+    val lazyListState = rememberLazyListState()
     val targetCallback = remember(activeController, onTextPositioned) {
         if (activeController == null) onTextPositioned
         else { target: MarkdownSelectionTarget ->
@@ -308,9 +323,10 @@ fun SmoothMarkdown(
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
         val content: @Composable () -> Unit = {
-            if (scrollable) {
+            if (scrollable && !fullDocumentSelectionMode) {
                 LazyColumn(
                     modifier = backgroundModifier,
+                    state = lazyListState,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
                 ) {
                     itemsIndexed(selectionGroups) { _, group ->
@@ -318,7 +334,11 @@ fun SmoothMarkdown(
                     }
                 }
             } else {
-                Column(backgroundModifier.padding(styleSheet.contentPadding)) {
+                val fullModifier = if (scrollable) backgroundModifier.verticalScroll(rememberScrollState())
+                    else backgroundModifier
+                Column(fullModifier.padding(styleSheet.contentPadding).onGloballyPositioned {
+                    if (fullDocumentSelectionMode) activeController?.onFullDocumentLaidOut()
+                }) {
                     selectionGroups.forEach { group ->
                         MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
                     }
@@ -358,6 +378,7 @@ private fun MarkdownSelectionRegion(
             clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("selection", text)))
         }
         stateHolder.state?.clear()
+        controller?.exitFullDocumentSelection()
     }
     val toolbarProvider = LocalTextContextMenuToolbarProvider.current
     val dropdownProvider = LocalTextContextMenuDropdownProvider.current
@@ -393,6 +414,29 @@ private fun MarkdownSelectionRegion(
             onDispose {
                 controller?.detach(state)
                 if (stateHolder.state === state) stateHolder.state = null
+            }
+        }
+        val fullRequest = controller?.fullDocumentSelectRequest ?: 0
+        val fullReady = controller?.fullDocumentLayoutReady ?: 0
+        LaunchedEffect(controller, state, fullRequest, fullReady) {
+            if (controller != null && fullRequest > 0 && fullReady == fullRequest &&
+                controller.fullDocumentSelectionMode) {
+                // The complete Column has been positioned. Let selectable text publish its
+                // coordinates before asking Compose for native handles over the whole region.
+                withFrameNanos { }
+                if (controller.fullDocumentSelectRequest == fullRequest &&
+                    controller.fullDocumentSelectionMode) {
+                    state.selectAll()
+                    if (state.selectedTexts.isEmpty()) controller.exitFullDocumentSelection()
+                    else controller.markFullDocumentSelected(fullRequest)
+                }
+            }
+        }
+        LaunchedEffect(controller, state) {
+            snapshotFlow { state.selectedTexts.isNotEmpty() }.collect { hasSelection ->
+                if (!hasSelection && controller?.fullDocumentSelectionEstablished == true) {
+                    controller.exitFullDocumentSelection()
+                }
             }
         }
         val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
@@ -742,8 +786,10 @@ private fun MarkdownDetails(
     enableHtml: Boolean,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
-    val expanded = rememberSaveable(node) { mutableStateOf(node.isOpen) }
     val selectionController = LocalReaderSelectionController.current
+    val expanded = rememberSaveable(node) {
+        mutableStateOf(selectionController?.detailsExpanded(node) ?: node.isOpen)
+    }
     SideEffect { selectionController?.setDetailsExpanded(node, expanded.value) }
     val shape = RoundedCornerShape(6.dp)
     Column(

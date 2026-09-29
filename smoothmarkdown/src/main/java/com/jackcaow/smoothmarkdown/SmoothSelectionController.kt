@@ -1,10 +1,15 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.foundation.text.selection.SelectionState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import org.commonmark.node.Node
+import org.commonmark.node.HtmlBlock
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
@@ -17,6 +22,16 @@ class SmoothSelectionController {
     private var documentBuilders: MarkdownBuilderRegistry? = null
     private val detailsExpanded = mutableMapOf<DetailsNode, Boolean>()
     private var copyDocumentText: ((String) -> Unit)? = null
+    private var hasCustomCodeBuilder = false
+    private var hasCustomImageBuilder = false
+    internal var fullDocumentSelectionMode by mutableStateOf(false)
+        private set
+    internal var fullDocumentSelectRequest by mutableIntStateOf(0)
+        private set
+    internal var fullDocumentLayoutReady by mutableIntStateOf(0)
+        private set
+    internal var fullDocumentSelectionEstablished by mutableStateOf(false)
+        private set
 
     /** The currently selected visible text, omitting non-text selection anchors. */
     val selectedText: String
@@ -43,6 +58,37 @@ class SmoothSelectionController {
     /** Select all text currently registered with the Compose selection region (viewport scope). */
     fun selectAll() { region?.selectAll() }
 
+    /**
+     * Request native Select All handles over every parsed block, including blocks outside the
+     * current viewport. Normal reading remains lazy; while this selection is active the Reader
+     * mounts its bounded document in one scroll container. Returns false without changing the UI
+     * when the Reader is detached, a custom visual renderer is present, the text projection is
+     * incomplete, or the document exceeds the bounded full-selection budget. A true return means
+     * the request was accepted; selection is applied after the full layout is positioned.
+     */
+    fun selectAllDocument(): Boolean {
+        if (region == null || fullDocumentSelectionProjection() == null) return false
+        region?.clear()
+        fullDocumentSelectionEstablished = false
+        fullDocumentSelectionMode = true
+        fullDocumentSelectRequest++
+        return true
+    }
+
+    internal fun fullDocumentSelectionProjection(): ReaderDocumentText? {
+        if (hasCustomCodeBuilder || hasCustomImageBuilder) return null
+        val node = document ?: return null
+        if (readerDocumentHasOpaqueRenderer(node, documentHtml, documentPlugins, documentBuilders)) return null
+        if (readerDocumentNodeCount(node) > MAX_FULL_SELECTION_RENDER_NODES) return null
+        val projection = readerDocumentText(
+            node, documentHtml, documentPlugins, documentBuilders, detailsExpanded,
+        )
+        if (!projection.complete || projection.text.isEmpty() ||
+            projection.blocks.size > MAX_FULL_SELECTION_BLOCKS ||
+            projection.text.length > MAX_FULL_SELECTION_UTF16) return null
+        return projection
+    }
+
     /** Select a range in the region's currently registered text. */
     fun select(range: TextRange) { region?.select(range) }
 
@@ -53,7 +99,10 @@ class SmoothSelectionController {
     fun selectParagraphAt(windowPosition: Offset) { selectAt(windowPosition, ReaderSelectionGranularity.PARAGRAPH) }
 
     /** Clear the current text selection. */
-    fun clear() { region?.clear() }
+    fun clear() {
+        region?.clear()
+        exitFullDocumentSelection()
+    }
 
     private fun selectAt(position: Offset, granularity: ReaderSelectionGranularity) {
         val state = region ?: return
@@ -73,24 +122,40 @@ class SmoothSelectionController {
 
     internal fun removeTarget(key: Any) { targets.remove(key) }
 
-    internal fun bindDocument(node: Node, enableHtml: Boolean, plugins: ParserPluginRegistry?, builders: MarkdownBuilderRegistry?) {
-        if (document !== node) detailsExpanded.clear()
+    internal fun bindDocument(
+        node: Node,
+        enableHtml: Boolean,
+        plugins: ParserPluginRegistry?,
+        builders: MarkdownBuilderRegistry?,
+        customCodeBuilder: Boolean = false,
+        customImageBuilder: Boolean = false,
+    ) {
+        if (document !== node) {
+            detailsExpanded.clear()
+            exitFullDocumentSelection()
+            region?.clear()
+        }
         document = node
         documentHtml = enableHtml
         documentPlugins = plugins
         documentBuilders = builders
+        hasCustomCodeBuilder = customCodeBuilder
+        hasCustomImageBuilder = customImageBuilder
     }
 
     internal fun unbindDocument(node: Node) {
         if (document === node) {
             document = null
             detailsExpanded.clear()
+            exitFullDocumentSelection()
         }
     }
 
     internal fun setDetailsExpanded(node: DetailsNode, expanded: Boolean) {
         if (document != null) detailsExpanded[node] = expanded
     }
+
+    internal fun detailsExpanded(node: DetailsNode): Boolean? = detailsExpanded[node]
 
     internal fun attach(state: SelectionState, anchorRegistry: NonTextAnchorRegistry, copyAll: (String) -> Unit) {
         region = state
@@ -104,8 +169,72 @@ class SmoothSelectionController {
             anchors = null
             targets.clear()
             copyDocumentText = null
+            exitFullDocumentSelection()
         }
     }
+
+    internal fun onFullDocumentLaidOut() {
+        if (fullDocumentSelectionMode) fullDocumentLayoutReady = fullDocumentSelectRequest
+    }
+
+    internal fun markFullDocumentSelected(request: Int) {
+        if (fullDocumentSelectionMode && request == fullDocumentSelectRequest) {
+            fullDocumentSelectionEstablished = true
+        }
+    }
+
+    internal fun exitFullDocumentSelection() {
+        fullDocumentSelectionMode = false
+        fullDocumentSelectionEstablished = false
+        fullDocumentSelectRequest = 0
+        fullDocumentLayoutReady = 0
+    }
+}
+
+internal const val MAX_FULL_SELECTION_BLOCKS = 512
+internal const val MAX_FULL_SELECTION_UTF16 = 100_000
+internal const val MAX_FULL_SELECTION_RENDER_NODES = 2_048
+
+/**
+ * Copy text supplied by a custom renderer does not prove its Compose output participates in the
+ * outer SelectionContainer. Native full selection therefore rejects those renderer boundaries.
+ */
+internal fun readerDocumentHasOpaqueRenderer(
+    document: Node,
+    enableHtml: Boolean,
+    plugins: ParserPluginRegistry?,
+    builders: MarkdownBuilderRegistry?,
+): Boolean {
+    fun visit(node: Node, depth: Int): Boolean {
+        if (depth > 64 || builders?.findBuilder(node) != null || node is PluginBlockNode) return true
+        if (node is DetailsNode &&
+            (node.summary + node.body).any { visit(it, depth + 1) }) return true
+        if (enableHtml && node is HtmlBlock) {
+            val html = SafeHtml.parseBlock(node.literal)
+            if (html is SafeHtml.Block.Container) {
+                val nested = parseMarkdown(html.content + "\n" + html.trailing, plugins, enableHtml = true)
+                if (nested.children().any { visit(it, depth + 1) }) return true
+            }
+        }
+        return node.children().any { visit(it, depth + 1) }
+    }
+    return document.children().any { visit(it, 0) }
+}
+
+/** Count visual AST work even when it projects to no text (for example, hundreds of images). */
+internal fun readerDocumentNodeCount(document: Node): Int {
+    var count = 0
+    fun visit(node: Node) {
+        if (++count > MAX_FULL_SELECTION_RENDER_NODES) return
+        node.children().forEach { if (count <= MAX_FULL_SELECTION_RENDER_NODES) visit(it) }
+        if (node is DetailsNode) {
+            (node.summary + node.body).forEach {
+                if (count <= MAX_FULL_SELECTION_RENDER_NODES) visit(it)
+            }
+        }
+    }
+    document.children().forEach { if (count <= MAX_FULL_SELECTION_RENDER_NODES) visit(it) }
+    return count
 }
 
 internal enum class ReaderSelectionGranularity { WORD, PARAGRAPH }

@@ -94,4 +94,43 @@ class ReaderDocumentTextTest {
         val document = parseMarkdown("![alt](https://example.com/image.png)")
         assertFalse(readerDocumentText(document, false, null, builders, emptyMap()).complete)
     }
+
+    @Test fun nativeFullSelectionEligibilityIsBoundedAndRejectsUnknownVisualBuilders() {
+        val controller = SmoothSelectionController()
+        val small = parseMarkdown("First\n\nLast")
+        controller.bindDocument(small, false, null, null)
+        assertEquals("First\nLast", controller.fullDocumentSelectionProjection()?.text)
+
+        controller.bindDocument(small, false, null, null, customCodeBuilder = true)
+        assertNull(controller.fullDocumentSelectionProjection())
+        controller.bindDocument(small, false, null, null, customImageBuilder = true)
+        assertNull(controller.fullDocumentSelectionProjection())
+
+        val builders = MarkdownBuilderRegistry().register(Paragraph::class, object : MarkdownNodeBuilder {
+            override fun canBuild(node: Node) = node is Paragraph
+            @Composable override fun Render(node: Node, context: MarkdownBuilderContext) = Unit
+            override fun documentText(node: Node) = "visible text"
+        })
+        controller.bindDocument(small, false, null, builders)
+        assertEquals("visible text\nvisible text", controller.documentText)
+        assertNull(controller.fullDocumentSelectionProjection())
+
+        val plugins = ParserPluginRegistry().apply { registerBlock(DelimitedBlockPlugin("note")) }
+        controller.bindDocument(parseMarkdown(":::note\ninside\n:::", plugins), false, plugins, null)
+        assertEquals("inside", controller.documentText)
+        assertNull(controller.fullDocumentSelectionProjection())
+
+        val many = parseMarkdown((0..MAX_FULL_SELECTION_BLOCKS).joinToString("\n\n") { "Block $it" })
+        controller.bindDocument(many, false, null, null)
+        assertNull(controller.fullDocumentSelectionProjection())
+
+        controller.bindDocument(parseMarkdown("x".repeat(MAX_FULL_SELECTION_UTF16 + 1)), false, null, null)
+        assertNull(controller.fullDocumentSelectionProjection())
+
+        val manyImages = parseMarkdown("Start\n\n" +
+            (0..700).joinToString("\n\n") { "![alt](https://example.com/$it.png)" })
+        controller.bindDocument(manyImages, false, null, null)
+        assertTrue(readerDocumentNodeCount(manyImages) > MAX_FULL_SELECTION_RENDER_NODES)
+        assertNull(controller.fullDocumentSelectionProjection())
+    }
 }
