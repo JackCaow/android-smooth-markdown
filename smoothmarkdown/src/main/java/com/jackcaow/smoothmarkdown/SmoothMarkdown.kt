@@ -209,6 +209,16 @@ private val LocalOnMentionClick = compositionLocalOf<((String) -> Unit)?> { null
 private val LocalOnHashtagClick = compositionLocalOf<((String) -> Unit)?> { null }
 private val LocalOnWikilinkClick = compositionLocalOf<((String) -> Unit)?> { null }
 
+@Composable
+private fun enhancedLinkDecoration(
+    text: AnnotatedString,
+    layout: androidx.compose.runtime.State<TextLayoutResult?>,
+): Modifier {
+    val sheet = LocalMarkdownStyleSheet.current
+    val color = sheet.linkStyle?.color?.takeIf { it != Color.Unspecified } ?: sheet.linkColor
+    return enhancedLinkDecoration(text, layout, LocalEnhancedComponents.current, color)
+}
+
 /** Sends the original image source and metadata to both registered callbacks. */
 internal fun dispatchImageClick(
     image: SafeHtml.ImageSpec,
@@ -917,7 +927,8 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
             })
         }
     } ?: Modifier
-    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
+    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+        .then(enhancedLinkDecoration(text, layout)).then(tracking)
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -983,7 +994,8 @@ private fun MarkdownInlineText(
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
         )
         return
     }
@@ -1075,7 +1087,8 @@ private fun MarkdownInlineText(
                 text = render.text,
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
             )
         } else {
             val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
@@ -1094,7 +1107,8 @@ private fun MarkdownInlineText(
                 text = render.text,
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking)
                     .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
                     detectTapGestures { position ->
                         layout.value?.getOffsetForPosition(position)?.let { offset ->
@@ -1472,6 +1486,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
             is Link -> if (isSafeLink(current.destination)) {
                 addStyle(linkSpan, start, end)
                 addStringAnnotation("url", current.destination, start, end)
+                addStringAnnotation("enhanced-link", current.destination, start, end)
             }
         }
     }
