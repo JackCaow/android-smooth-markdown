@@ -39,8 +39,8 @@ class FormattedTableTextSelectionTest {
         val source = "top\r\n\r\n| H | Tail |\r\n| --- | --- |\r\n| A | BeforeX |\r\n\r\nYAfter\r\n\r\nbottom"
         val selection = selected(source, cell(1, 1, 1, 6), prose(2, 1))
         val editor = MarkdownEditorController(source)
-        assertEquals("X\r\n\r\nY", editor.copyFormattedTextSelectionAsMarkdown(selection))
-        assertEquals("X\r\n\r\nY", editor.copyFormattedTextSelectionAsMarkdown(
+        assertEquals("X |\r\n\r\nY", editor.copyFormattedTextSelectionAsMarkdown(selection))
+        assertEquals("X |\r\n\r\nY", editor.copyFormattedTextSelectionAsMarkdown(
             selection.copy(anchor = selection.focus, focus = selection.anchor)))
         assertTrue(editor.deleteFormattedTextSelection(selection))
         assertEquals("top\r\n\r\n| H | Tail |\r\n| --- | --- |\r\n| A | Before |\r\n\r\nAfter\r\n\r\nbottom", editor.text)
@@ -57,7 +57,7 @@ class FormattedTableTextSelectionTest {
         val source = "BeforeX\n\n| YAfter | H |\n| --- | --- |\n| A | B |\n\noutside"
         val selection = selected(source, prose(0, 6), cell(1, 0, 0, 1))
         val editor = MarkdownEditorController(source)
-        assertEquals("X\n\nY", editor.copyFormattedTextSelectionAsMarkdown(selection))
+        assertEquals("X\n\n| Y", editor.copyFormattedTextSelectionAsMarkdown(selection))
         assertTrue(editor.deleteFormattedTextSelection(selection))
         assertEquals("Before\n\n| After | H |\n| --- | --- |\n| A | B |\n\noutside", editor.text)
         assertTrue(editor.undo())
@@ -101,6 +101,14 @@ class FormattedTableTextSelectionTest {
         val editor = MarkdownEditorController(source)
         assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(selection, "\\"))
         assertEquals(source, editor.text)
+        assertFalse(editor.canUndo)
+    }
+
+    @Test fun crossTableCopyUsesExactSourceSliceIncludingRowPipeAndInlineTokens() {
+        val source = "| H |\n| --- |\n| BeforeX |\n\n**Y**After"
+        val selection = selected(source, cell(0, 1, 0, 6), prose(1, 1))
+        val editor = MarkdownEditorController(source)
+        assertEquals("X |\n\n**Y", editor.copyFormattedTextSelectionAsMarkdown(selection))
         assertFalse(editor.canUndo)
     }
 

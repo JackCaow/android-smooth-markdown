@@ -192,7 +192,7 @@ class FormattedTextEndpointsUiTest {
         compose.onNodeWithTag("formatted-table-text-end-block-1-0-0").performClick()
         compose.onNodeWithTag("formatted-text-selection-status").performScrollTo()
         compose.onNodeWithTag("formatted-text-copy").performClick()
-        compose.runOnIdle { assertEquals("X\n\nY", copied?.text) }
+        compose.runOnIdle { assertEquals("X\n\n| Y", copied?.text) }
         compose.onNodeWithTag("formatted-text-delete").performClick()
         compose.runOnIdle {
             assertEquals("Before\n\n| After | H |\n| --- | --- |\n| A | B |\n\nOutside", controller.text)

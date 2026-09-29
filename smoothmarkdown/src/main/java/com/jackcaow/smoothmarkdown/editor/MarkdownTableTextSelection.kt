@@ -68,11 +68,16 @@ internal class MarkdownTableTextSelection private constructor(
     ) {
         val visibleLength: Int get() = table?.visible?.length ?: inline!!.visible.length
 
-        fun fragment(start: Int, end: Int): String? {
-            if (start == end) return ""
-            if (table != null) return table.slice(start, end)
-            val body = inline?.sliceVisibleRange(TextRange(start, end)) ?: return null
-            return MarkdownFormattedBlock.markdown(block, body)
+        fun absoluteSourceOffset(): Int? {
+            table?.let { span ->
+                val relative = span.sourceOffset(offset) ?: return null
+                return block.range.min + span.range.min + relative
+            }
+            val inlineOffset = inline?.sourceOffsetAtVisible(offset) ?: return null
+            val bodyStart = if (block.kind == MarkdownBlockKind.HEADING)
+                Regex("^ {0,3}#{1,6}[ \t]+").find(block.source)?.value?.length ?: return null
+                else 0
+            return block.range.min + bodyStart + inlineOffset
         }
 
         fun left(): String? = if (table != null) table.patch(offset, visibleLength, "")
@@ -88,25 +93,12 @@ internal class MarkdownTableTextSelection private constructor(
 
     data class Edit(val range: TextRange, val replacement: String, val caret: Int)
 
-    /** Copies selected cell source text and intervening block trivia, without unselected table structure. */
+    /** Same-cell copy is the raw cell fragment; cross-block copy is the exact source slice. */
     fun copy(): String? {
         if (firstIndex == lastIndex) return first.table?.slice(first.offset, last.offset)?.takeIf { it.isNotEmpty() }
-        val fragments = (firstIndex..lastIndex).mapNotNull { index ->
-            val block = document.blocks[index]
-            val markdown = when (index) {
-                firstIndex -> first.fragment(first.offset, first.visibleLength)
-                lastIndex -> last.fragment(0, last.offset)
-                else -> block.source
-            } ?: return null
-            if (markdown.isEmpty()) null else block to markdown
-        }
-        if (fragments.isEmpty()) return null
-        return buildString {
-            fragments.forEachIndexed { index, (block, markdown) ->
-                if (index > 0) append(source.substring(fragments[index - 1].first.range.max, block.range.min))
-                append(markdown)
-            }
-        }
+        val from = first.absoluteSourceOffset() ?: return null
+        val to = last.absoluteSourceOffset() ?: return null
+        return source.substring(from, to).takeIf { it.isNotEmpty() }
     }
 
     fun edit(markdown: String): Edit? {
