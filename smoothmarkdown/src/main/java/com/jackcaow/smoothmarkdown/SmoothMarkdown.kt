@@ -9,9 +9,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
@@ -39,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
@@ -725,22 +728,42 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
 private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean) {
     val sheet = LocalMarkdownStyleSheet.current
     val rows = table.children().flatMap { it.children() }.filterIsInstance<TableRow>().toList()
-    val columns = rows.maxOfOrNull { it.children().filterIsInstance<TableCell>().count() } ?: 0
+    val columns = (rows.maxOfOrNull { it.children().filterIsInstance<TableCell>().count() } ?: 0).coerceAtLeast(1)
+    val border = resolveTableBorder(sheet, MaterialTheme.colorScheme.outline)
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
         .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
         rows.forEachIndexed { rowIndex, row ->
-            Row {
-                row.children().filterIsInstance<TableCell>().forEachIndexed { columnIndex, cell ->
-                    val style = if (cell.isHeader) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+            val cells = row.children().filterIsInstance<TableCell>().toList()
+            val rowIsHeader = cells.firstOrNull()?.isHeader == true
+            Row(Modifier.height(IntrinsicSize.Min)) {
+                repeat(columns) { columnIndex ->
+                    val cell = cells.getOrNull(columnIndex)
+                    val style = if (cell?.isHeader == true) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
                     else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
-                    Box(Modifier.width(150.dp)
-                        .then(if (cell.isHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
-                        .border(0.5.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outline)
+                    val edges = tableCellBorderEdges(border, rowIndex, rows.size, columnIndex, columns)
+                    Box(Modifier.width(150.dp).fillMaxHeight()
+                        .then(if (rowIsHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
+                        .drawBehind {
+                            fun drawEdge(side: MarkdownTableBorderSide?, x: Float, y: Float, width: Float, height: Float) {
+                                if (side == null || side.width.value == 0f) return
+                                drawRect(side.color, topLeft = Offset(x, y), size = Size(width, height))
+                            }
+                            edges.top?.let { drawEdge(it, 0f, 0f, size.width, it.width.toPx().coerceAtMost(size.height)) }
+                            edges.right?.let {
+                                val stroke = it.width.toPx().coerceAtMost(size.width)
+                                drawEdge(it, size.width - stroke, 0f, stroke, size.height)
+                            }
+                            edges.bottom?.let {
+                                val stroke = it.width.toPx().coerceAtMost(size.height)
+                                drawEdge(it, 0f, size.height - stroke, size.width, stroke)
+                            }
+                            edges.left?.let { drawEdge(it, 0f, 0f, it.width.toPx().coerceAtMost(size.width), size.height) }
+                        }
                         .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
                             collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
-                            if (cell.isHeader) heading()
+                            if (cell?.isHeader == true) heading()
                         }) {
-                        MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current), style, onLinkClick, onImageClick)
+                        if (cell != null) MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current), style, onLinkClick, onImageClick)
                     }
                 }
             }

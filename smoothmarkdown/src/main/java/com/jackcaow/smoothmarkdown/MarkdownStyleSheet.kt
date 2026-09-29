@@ -35,6 +35,33 @@ data class MarkdownCodeBlockDecoration(
     }
 }
 
+/** One edge of a table border. A null edge in [MarkdownTableBorder] is not drawn. */
+data class MarkdownTableBorderSide(
+    val color: Color,
+    val width: Dp = 1.dp,
+) {
+    init {
+        require(width.value >= 0) { "Table border width cannot be negative" }
+    }
+}
+
+/** Flutter TableBorder's four outside edges and two shared inside rules. */
+data class MarkdownTableBorder(
+    val top: MarkdownTableBorderSide? = null,
+    val right: MarkdownTableBorderSide? = null,
+    val bottom: MarkdownTableBorderSide? = null,
+    val left: MarkdownTableBorderSide? = null,
+    val horizontalInside: MarkdownTableBorderSide? = null,
+    val verticalInside: MarkdownTableBorderSide? = null,
+) {
+    companion object {
+        fun all(color: Color, width: Dp = 1.dp): MarkdownTableBorder {
+            val side = MarkdownTableBorderSide(color, width)
+            return MarkdownTableBorder(side, side, side, side, side, side)
+        }
+    }
+}
+
 /** Visual overrides for [SmoothMarkdown]. Null colors and text styles inherit MaterialTheme. */
 data class MarkdownStyleSheet(
     val backgroundColor: Color? = null,
@@ -86,6 +113,8 @@ data class MarkdownStyleSheet(
     val linkStyle: SpanStyle? = null,
     /** Inline code and HTML code/kbd, merged over legacy inline-code colors. */
     val inlineCodeStyle: SpanStyle? = null,
+    /** Per-edge table border; when absent, [tableBorderColor] colors a 1dp full grid. */
+    val tableBorder: MarkdownTableBorder? = null,
 ) {
     init {
         require(headingStyles == null || headingStyles.size == 6) { "headingStyles must contain H1 through H6" }
