@@ -42,10 +42,30 @@ internal class MarkdownInlineEditing private constructor(
     private val ends: List<Int>,
     private val enableWikilinks: Boolean,
 ) {
+    data class SplitRange(val before: String, val after: String)
+
     /** UTF-16 source offset for a visible caret, including hidden Markdown delimiters. */
     fun sourceOffsetAtVisible(offset: Int): Int? {
         if (offset !in 0..visible.length) return null
         return if (offset == 0) starts.firstOrNull() ?: 0 else ends[offset - 1]
+    }
+
+    /**
+     * Split a visible selection into standalone Markdown fragments. Delimiters active at either
+     * edge are closed or reopened so bold, italic, and link text outside a block paste survives.
+     */
+    fun splitVisibleRange(range: TextRange): SplitRange? {
+        val lower = range.min
+        val upper = range.max
+        if (lower < 0 || upper > visible.length || !validUtf16Boundary(lower) || !validUtf16Boundary(upper)) return null
+        val start = boundary(lower) ?: return null
+        val end = boundary(upper) ?: return null
+        if (start.offset > end.offset) return null
+        val before = source.substring(0, start.offset) + start.closeTokens
+        val after = end.openTokens + source.substring(end.offset)
+        if (before.isNotEmpty() && parse(before, enableWikilinks).visible != visible.substring(0, lower)) return null
+        if (after.isNotEmpty() && parse(after, enableWikilinks).visible != visible.substring(upper)) return null
+        return SplitRange(before, after)
     }
 
     fun annotated(linkColor: Color): AnnotatedString = buildAnnotatedString {
