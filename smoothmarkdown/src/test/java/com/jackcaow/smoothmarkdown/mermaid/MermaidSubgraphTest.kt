@@ -91,4 +91,49 @@ class MermaidSubgraphTest {
         assertEquals(target.x, layout.edges.single().end.x)
         assertTrue(layout.edges.single().edge.subgraphEdge)
     }
+
+    @Test fun nestedGroupsFollowDependenciesInsteadOfDeclarationOrder() {
+        listOf("LR", "TB").forEach { direction ->
+            val diagram = MermaidParser.parse("""
+                flowchart $direction
+                subgraph outer [Outer]
+                  subgraph inner [Inner]
+                    C[Third]
+                    B[Second]
+                    A[First]
+                    A --> B
+                    B --> C
+                    C --> A
+                  end
+                  Z[After]
+                  inner --> Z
+                end
+                Q[Outside]
+                outer --> Q
+            """.trimIndent())!!
+            val layout = MermaidLayout.compute(diagram)
+            val first = layout.nodes.getValue("A")
+            val second = layout.nodes.getValue("B")
+            val third = layout.nodes.getValue("C")
+            val after = layout.nodes.getValue("Z")
+            val inner = layout.subgraphs.getValue("inner")
+            val outer = layout.subgraphs.getValue("outer")
+            assertTrue(direction, if (direction == "LR") first.x < second.x && second.x < third.x
+                else first.y < second.y && second.y < third.y)
+            assertTrue(direction, if (direction == "LR") inner.x < after.x else inner.y < after.y)
+            assertTrue(contains(outer, inner))
+            listOf(first, second, third).forEach { assertTrue(contains(inner, it)) }
+            assertFalse(overlaps(outer, layout.nodes.getValue("Q")))
+            assertEquals(5, layout.edges.size)
+        }
+    }
+
+    @Test fun unsupportedFlowchartStatementsFallBackToSource() {
+        listOf(
+            "flowchart LR\nA[Start] --> B[Done]\nclick A callback",
+            "flowchart TB\nA[Start] --> B[Done]\nA --> ???",
+            "flowchart TB\nA[Start]\nsubgraph group [Unclosed\nB[Inside]\nend",
+            "flowchart TB\nA[Start]\nclassDef style",
+        ).forEach { source -> assertNull(source, MermaidParser.parse(source)) }
+    }
 }
