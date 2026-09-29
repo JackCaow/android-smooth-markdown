@@ -8,7 +8,9 @@ import org.commonmark.node.Heading
 import org.commonmark.node.Paragraph
 import org.commonmark.node.Node
 import org.commonmark.node.ThematicBreak
+import org.commonmark.node.Image
 import org.commonmark.ext.gfm.tables.TableBlock
+import androidx.compose.runtime.Composable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,6 +84,65 @@ class MarkdownSelectionGroupingTest {
         assertEquals(listOf(4, 1), groupSelectableBlocks(blocks, bridgeVisibleNonText = true).map { it.size })
         // Ordinary lazy rendering keeps its smaller items for virtualization.
         assertEquals(listOf(1, 1, 1, 1, 1), groupSelectableBlocks(blocks).map { it.size })
+    }
+
+    @Test fun blockMathBridgesProseOnlyWithVisibleNonTextSelection() {
+        val blocks = parseMarkdown("Before.\n\n\u0024\u0024\nx + y\n\u0024\u0024\n\nAfter.").directChildren()
+        assertEquals(listOf(Paragraph::class, BlockMathNode::class, Paragraph::class), blocks.map { it::class })
+        assertEquals(listOf(1, 1, 1), groupSelectableBlocks(blocks).map { it.size })
+        assertEquals(listOf(blocks), groupSelectableBlocks(blocks, bridgeVisibleNonText = true))
+    }
+
+    @Test fun builtInPluginsDeclareTheirContinuousSelectionBehavior() {
+        val plugins = ParserPluginRegistry().apply {
+            registerBlock(DelimitedBlockPlugin("note"))
+            registerBlock(MermaidPlugin())
+        }
+        val blocks = parseMarkdown("""
+            Before.
+
+            :::note
+            Text content.
+            :::
+
+            ```mermaid
+            graph TD
+              A --> B
+            ```
+
+            After.
+        """.trimIndent(), plugins).directChildren()
+        assertEquals(listOf(Paragraph::class, DelimitedBlockNode::class, MermaidDiagramNode::class,
+            Paragraph::class), blocks.map { it::class })
+        assertEquals(MarkdownBlockSelectionMode.NATIVE_TEXT, readerBlockSelectionMode(blocks[1], null, plugins))
+        assertEquals(MarkdownBlockSelectionMode.NON_TEXT, readerBlockSelectionMode(blocks[2], null, plugins))
+        assertEquals(listOf(blocks), groupSelectableBlocks(blocks, bridgeVisibleNonText = true,
+            selectionMode = { readerBlockSelectionMode(it, null, plugins) }))
+    }
+
+    @Test fun unknownCustomRenderersRemainIsolatedUnlessTheyOptIn() {
+        val blocks = parseMarkdown("Before.\n\n![image](https://example.com/i.png)\n\nAfter.").directChildren()
+        val imageBuilder = object : MarkdownNodeBuilder {
+            override fun canBuild(node: Node) = node is Image
+            @Composable override fun Render(node: Node, context: MarkdownBuilderContext) = Unit
+        }
+        val builders = MarkdownBuilderRegistry().register(Image::class, imageBuilder)
+        assertEquals(listOf(1, 1, 1), groupSelectableBlocks(blocks, bridgeVisibleNonText = true,
+            selectionMode = { readerBlockSelectionMode(it, builders, null) }).map { it.size })
+        val visual = object : MarkdownNodeBuilder by imageBuilder {
+            override fun selectionMode(node: Node) = MarkdownBlockSelectionMode.NON_TEXT
+        }
+        builders.register(Image::class, visual)
+        assertEquals(listOf(blocks), groupSelectableBlocks(blocks, bridgeVisibleNonText = true,
+            selectionMode = { readerBlockSelectionMode(it, builders, null) }))
+
+        val unknownPlugin = object : DelimitedBlockPlugin("opaque") {
+            override fun selectionMode(node: PluginBlockNode) = MarkdownBlockSelectionMode.NONE
+        }
+        val plugins = ParserPluginRegistry().apply { registerBlock(unknownPlugin) }
+        val pluginBlocks = parseMarkdown("Before.\n\n:::opaque\ninside\n:::\n\nAfter.", plugins).directChildren()
+        assertEquals(listOf(1, 1, 1), groupSelectableBlocks(pluginBlocks,
+            selectionMode = { readerBlockSelectionMode(it, null, plugins) }).map { it.size })
     }
 
     @Test fun detailsBridgeOnlyItsNearestProseNeighbors() {

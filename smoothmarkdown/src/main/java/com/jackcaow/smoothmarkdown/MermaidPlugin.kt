@@ -17,6 +17,8 @@ class MermaidPlugin(val onNodeTap: ((String) -> Unit)? = null) : BlockParserPlug
     override val name = "Mermaid Diagram Plugin"
     override val priority = 10
 
+    override fun selectionMode(node: PluginBlockNode) = MarkdownBlockSelectionMode.NON_TEXT
+
     override fun parseFencedCodeBlock(block: FencedCodeBlock): PluginBlockNode? {
         val info = block.info.orEmpty().trim()
         if (!info.split(Regex("\\s+"), limit = 2).firstOrNull().equals("mermaid", ignoreCase = true)) return null

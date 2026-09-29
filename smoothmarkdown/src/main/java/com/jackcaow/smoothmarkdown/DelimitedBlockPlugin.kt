@@ -40,6 +40,8 @@ open class DelimitedBlockPlugin(val type: String, override val priority: Int = 0
     override fun documentText(node: PluginBlockNode): String? =
         (node as? DelimitedBlockNode)?.contentLines?.joinToString("\n")
 
+    override fun selectionMode(node: PluginBlockNode) = MarkdownBlockSelectionMode.NATIVE_TEXT
+
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         Text((node as DelimitedBlockNode).contentLines.joinToString("\n"))
