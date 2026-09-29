@@ -345,6 +345,8 @@ private fun FormattedBlockPane(
     val pendingExit = controller.pendingListExit
     val clipboard = LocalClipboardManager.current
     val blockSelection = controller.formattedBlockSelection?.takeIf { it.source == controller.text }
+    val listSelection = controller.formattedListItemSelection?.takeIf { it.source == controller.text }
+    val tableSelection = controller.formattedTableCellSelection?.takeIf { it.source == controller.text }
     var blockReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
     var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
@@ -374,6 +376,36 @@ private fun FormattedBlockPane(
                 modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
             )
             if (blockSelectionError) Text("This edit would change neighboring blocks", modifier = Modifier.testTag("formatted-block-edit-error"))
+        }
+        if (listSelection != null) {
+            Text("${listSelection.lastIndex - listSelection.firstIndex + 1} list item(s) selected",
+                modifier = Modifier.testTag("formatted-list-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedListItemSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-list-selection-copy")) { Text("Copy Markdown") }
+                TextButton(onClick = { controller.deleteFormattedListItemSelection() },
+                    modifier = Modifier.testTag("formatted-list-selection-delete")) { Text("Delete items") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.BOLD) },
+                    modifier = Modifier.testTag("formatted-list-selection-bold")) { Text("Bold") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC) },
+                    modifier = Modifier.testTag("formatted-list-selection-italic")) { Text("Italic") }
+                TextButton(onClick = controller::clearFormattedListItemSelection,
+                    modifier = Modifier.testTag("formatted-list-selection-clear")) { Text("Clear") }
+            }
+        }
+        if (tableSelection != null) {
+            Text("${tableSelection.lastRow - tableSelection.firstRow + 1} × ${tableSelection.lastColumn - tableSelection.firstColumn + 1} cells selected",
+                modifier = Modifier.testTag("formatted-table-selection-count"))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                TextButton(onClick = {
+                    controller.copyFormattedTableCellSelectionAsTsv()?.let { clipboard.setText(AnnotatedString(it)) }
+                }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text("Copy TSV") }
+                TextButton(onClick = { controller.clearFormattedTableCellSelection() },
+                    modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
+                TextButton(onClick = controller::resetFormattedTableCellSelection,
+                    modifier = Modifier.testTag("formatted-table-selection-clear")) { Text("Clear selection") }
+            }
         }
         var pendingRendered = false
         blocks.forEach { block ->
@@ -613,6 +645,10 @@ private fun FormattedListItems(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
+                TextButton(
+                    onClick = { controller.selectFormattedListItem(blockId, path) },
+                    modifier = Modifier.testTag("formatted-list-select-$blockId-$pathTag"),
+                ) { Text("Select") }
                 if (firstLine != null) {
                     val lineIndex = item.lines.indexOf(firstLine)
                     FormattedListTextField(controller, blockId, list, path, lineIndex,
@@ -709,18 +745,24 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
         fun displayCell(raw: String) = raw.replace("\\|", "|")
         @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
-            BasicTextField(
-                value = displayCell(raw),
-                onValueChange = { next ->
-                    controller.editSemanticTable(blockId) { it.replaceCell(rowIndex, columnIndex, next, header) }
-                },
-                modifier = Modifier.width(140.dp).padding(4.dp),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-            )
+            Column(Modifier.width(140.dp).padding(4.dp)) {
+                TextButton(
+                    onClick = { controller.selectFormattedTableCell(blockId, if (header) 0 else rowIndex + 1, columnIndex) },
+                    modifier = Modifier.testTag("formatted-table-select-$blockId-${if (header) 0 else rowIndex + 1}-$columnIndex"),
+                ) { Text("Select") }
+                BasicTextField(
+                    value = displayCell(raw),
+                    onValueChange = { next ->
+                        controller.editSemanticTable(blockId) { it.replaceCell(rowIndex, columnIndex, next, header) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                )
+            }
         }
         Row {
             table.headers.forEachIndexed { column, raw -> cell(raw, true, 0, column) }

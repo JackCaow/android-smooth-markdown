@@ -17,6 +17,33 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
+/** A contiguous selection of sibling list items in one source revision. */
+data class MarkdownListItemSelection(
+    val source: String,
+    val blockId: String,
+    val anchorPath: List<Int>,
+    val extentPath: List<Int>,
+) {
+    val parentPath: List<Int> get() = anchorPath.dropLast(1)
+    val firstIndex: Int get() = minOf(anchorPath.last(), extentPath.last())
+    val lastIndex: Int get() = maxOf(anchorPath.last(), extentPath.last())
+}
+
+data class MarkdownTableCellPosition(val rowIndex: Int, val columnIndex: Int)
+
+/** Row zero is the table header; body rows start at one. */
+data class MarkdownTableCellSelection(
+    val source: String,
+    val blockId: String,
+    val anchor: MarkdownTableCellPosition,
+    val extent: MarkdownTableCellPosition,
+) {
+    val firstRow: Int get() = minOf(anchor.rowIndex, extent.rowIndex)
+    val lastRow: Int get() = maxOf(anchor.rowIndex, extent.rowIndex)
+    val firstColumn: Int get() = minOf(anchor.columnIndex, extent.columnIndex)
+    val lastColumn: Int get() = maxOf(anchor.columnIndex, extent.columnIndex)
+}
+
 /** Source-backed editing commands. Offsets use UTF-16, matching Compose selections. */
 class MarkdownEditorController(
     initialText: String = "",
@@ -54,6 +81,10 @@ class MarkdownEditorController(
     /** A contiguous range of top-level formatted blocks, tied to one source revision. */
     var formattedBlockSelection by mutableStateOf<MarkdownDocumentBlockSelection?>(null)
         private set
+    var formattedListItemSelection by mutableStateOf<MarkdownListItemSelection?>(null)
+        private set
+    var formattedTableCellSelection by mutableStateOf<MarkdownTableCellSelection?>(null)
+        private set
 
     private val limit = historyLimit.coerceAtLeast(0)
     private data class EditorSnapshot(
@@ -67,6 +98,8 @@ class MarkdownEditorController(
         val listComposition: TextRange?,
         val pendingListExit: PendingListExit?,
         val blockSelection: MarkdownDocumentBlockSelection?,
+        val listItemSelection: MarkdownListItemSelection?,
+        val tableCellSelection: MarkdownTableCellSelection?,
     )
 
     private val undoStack = ArrayDeque<EditorSnapshot>()
@@ -95,6 +128,8 @@ class MarkdownEditorController(
             recordUndo(value)
             pendingListExit = null
             formattedBlockSelection = null
+            formattedListItemSelection = null
+            formattedTableCellSelection = null
         }
         value = next
     }
@@ -188,6 +223,114 @@ class MarkdownEditorController(
     }
 
     fun clearFormattedBlockSelection() { formattedBlockSelection = null }
+
+    /** Tap one sibling item to anchor, then another item to extend. */
+    fun selectFormattedListItem(blockId: String, path: List<Int>): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        if (list.item(path) == null || path.isEmpty()) return false
+        val old = formattedListItemSelection?.takeIf {
+            it.source == text && it.blockId == blockId && it.parentPath == path.dropLast(1)
+        }
+        formattedListItemSelection = if (old == null) MarkdownListItemSelection(text, blockId, path, path)
+            else old.copy(extentPath = path)
+        return true
+    }
+
+    fun clearFormattedListItemSelection() { formattedListItemSelection = null }
+
+    fun copyFormattedListItemSelectionAsMarkdown(): String? {
+        val (list, selected) = selectedFormattedListItems() ?: return null
+        return list.copySiblingItems(selected.parentPath, selected.firstIndex, selected.lastIndex)
+    }
+
+    /** Deletes complete sibling subtrees as one source edit and one undo step. */
+    fun deleteFormattedListItemSelection(): Boolean {
+        val (list, selected) = selectedFormattedListItems() ?: return false
+        val block = semanticDocument().blockById(selected.blockId) ?: return false
+        val replacement = list.deleteSiblingItems(selected.parentPath, selected.firstIndex, selected.lastIndex) ?: return false
+        if (replacement == block.source) return false
+        if (replacement.isNotEmpty()) {
+            val parsed = MarkdownDocumentCodec.parse(replacement, parserPlugins).blocks
+            if (parsed.size != 1 || parsed.single().range != TextRange(0, replacement.length) ||
+                parsed.single().kind != block.kind) return false
+        }
+        return replaceCustomBlockMarkdown(text, block, replacement)
+    }
+
+    /** Formats every selected item's primary line in one source edit. */
+    fun applyInlineCommandToFormattedListItemSelection(command: MarkdownEditorCommand, destination: String? = null): Boolean {
+        val kind = when (command) {
+            MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
+            MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+            MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
+            MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
+            MarkdownEditorCommand.WIKILINK -> if (enableWikilinks) InlineMarkKind.WIKILINK else return false
+            else -> return false
+        }
+        val (list, selected) = selectedFormattedListItems() ?: return false
+        val replacement = list.applyInlineToSiblingItems(
+            selected.parentPath, selected.firstIndex, selected.lastIndex, kind, destination, enableWikilinks,
+        ) ?: return false
+        return replaceSemanticBlock(selected.blockId, replacement)
+    }
+
+    private fun selectedFormattedListItems(): Pair<MarkdownSourceList, MarkdownListItemSelection>? {
+        val selected = formattedListItemSelection ?: return null
+        if (selected.source != text || selected.anchorPath.isEmpty() || selected.extentPath.isEmpty() ||
+            selected.parentPath != selected.extentPath.dropLast(1)) return null
+        val list = semanticDocument().blockById(selected.blockId)?.let(MarkdownSourceList::parse) ?: return null
+        if (list.siblingRange(selected.parentPath, selected.firstIndex, selected.lastIndex) == null) return null
+        return list to selected
+    }
+
+    fun selectFormattedTableCell(blockId: String, rowIndex: Int, columnIndex: Int): Boolean {
+        val table = semanticTable(blockId) ?: return false
+        if (rowIndex !in 0..table.rows.size || columnIndex !in table.headers.indices) return false
+        val position = MarkdownTableCellPosition(rowIndex, columnIndex)
+        val old = formattedTableCellSelection?.takeIf { it.source == text && it.blockId == blockId }
+        formattedTableCellSelection = if (old == null) MarkdownTableCellSelection(text, blockId, position, position)
+            else old.copy(extent = position)
+        return true
+    }
+
+    fun resetFormattedTableCellSelection() { formattedTableCellSelection = null }
+
+    fun copyFormattedTableCellSelectionAsTsv(): String? {
+        val (table, selected) = selectedFormattedTableCells() ?: return null
+        return (selected.firstRow..selected.lastRow).joinToString("\n") { row ->
+            (selected.firstColumn..selected.lastColumn).joinToString("\t") { column ->
+                if (row == 0) table.headers[column] else table.rows[row - 1][column]
+            }
+        }
+    }
+
+    /** Clears a rectangular range with independent source patches in a single undo step. */
+    fun clearFormattedTableCellSelection(): Boolean {
+        val (table, selected) = selectedFormattedTableCells() ?: return false
+        val block = semanticDocument().blockById(selected.blockId) ?: return false
+        var updated = table
+        for (row in selected.firstRow..selected.lastRow) {
+            for (column in selected.firstColumn..selected.lastColumn) {
+                updated = updated.replaceCell(if (row == 0) 0 else row - 1, column, "", row == 0)
+            }
+        }
+        if (updated == table) return false
+        val patches = table.sourcePatchesForCells(block.source, updated) ?: return false
+        val replacement = patches.sortedByDescending { it.start }.fold(block.source) { source, patch ->
+            source.replaceRange(patch.start, patch.end, patch.replacement)
+        }
+        return replaceSemanticBlock(selected.blockId, replacement)
+    }
+
+    private fun selectedFormattedTableCells(): Pair<MarkdownSourceTable, MarkdownTableCellSelection>? {
+        val selected = formattedTableCellSelection ?: return null
+        if (selected.source != text) return null
+        val table = semanticTable(selected.blockId) ?: return null
+        if (selected.firstRow < 0 || selected.lastRow > table.rows.size ||
+            selected.firstColumn < 0 || selected.lastColumn >= table.columnCount) return null
+        return table to selected
+    }
 
     /** Includes the exact source between the first and last selected blocks. */
     fun copyFormattedBlockSelectionAsMarkdown(): String? {
@@ -658,6 +801,8 @@ class MarkdownEditorController(
         value = next
         pendingListExit = null
         if (next.text != formattedBlockSelection?.source) formattedBlockSelection = null
+        if (next.text != formattedListItemSelection?.source) formattedListItemSelection = null
+        if (next.text != formattedTableCellSelection?.source) formattedTableCellSelection = null
     }
 
     private fun snapshot(): EditorSnapshot = EditorSnapshot(
@@ -665,6 +810,8 @@ class MarkdownEditorController(
         activeFormattedListPath, activeFormattedListLine, formattedListSelection, formattedListComposition,
         pendingListExit,
         formattedBlockSelection,
+        formattedListItemSelection,
+        formattedTableCellSelection,
     )
 
     private fun restore(snapshot: EditorSnapshot) {
@@ -678,6 +825,8 @@ class MarkdownEditorController(
         formattedListComposition = snapshot.listComposition
         pendingListExit = snapshot.pendingListExit
         formattedBlockSelection = snapshot.blockSelection
+        formattedListItemSelection = snapshot.listItemSelection
+        formattedTableCellSelection = snapshot.tableCellSelection
         formattedListFocusTarget = snapshot.listPath?.let { it to snapshot.listLine }
         formattedBlockFocusTarget = if (snapshot.listPath == null) snapshot.blockId else null
     }

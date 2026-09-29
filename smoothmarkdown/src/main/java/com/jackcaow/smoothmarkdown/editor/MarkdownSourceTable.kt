@@ -12,6 +12,11 @@ data class MarkdownSourceTable(
 
     /** Keeps the untouched table source when a formatted edit changes just one cell. */
     internal fun sourcePatchForCell(source: String, updated: MarkdownSourceTable): MarkdownSourceCellPatch? {
+        return sourcePatchesForCells(source, updated)?.singleOrNull()
+    }
+
+    /** Creates independent patches for cell contents, leaving pipes, padding and alignment untouched. */
+    internal fun sourcePatchesForCells(source: String, updated: MarkdownSourceTable): List<MarkdownSourceCellPatch>? {
         if (headers.size != updated.headers.size || rows.size != updated.rows.size ||
             alignments != updated.alignments || rows.indices.any { rows[it].size != updated.rows[it].size }) return null
 
@@ -24,20 +29,25 @@ data class MarkdownSourceTable(
                 if (rows[row][column] != updated.rows[row][column]) changes += Triple(row + 2, column, updated.rows[row][column])
             }
         }
-        val (lineIndex, columnIndex, replacement) = changes.singleOrNull() ?: return null
-        if ('\n' in replacement || '\r' in replacement) return null
-
         val lines = source.split('\n')
-        val line = lines.getOrNull(lineIndex) ?: return null
-        val cell = sourceCellRanges(line).getOrNull(columnIndex) ?: return null
-        val raw = line.substring(cell.start, cell.end)
-        val old = if (lineIndex == 0) headers[columnIndex] else rows[lineIndex - 2][columnIndex]
-        if (raw.trim() != old) return null
-        val contentStart = raw.indexOfFirst { !it.isWhitespace() }.let { if (it < 0) raw.length / 2 else it }
-        val contentEnd = raw.indexOfLast { !it.isWhitespace() }.let { if (it < 0) contentStart else it + 1 }
-        val lineStart = lines.take(lineIndex).sumOf { it.length + 1 }
-        val patch = MarkdownSourceCellPatch(lineStart + cell.start + contentStart, lineStart + cell.start + contentEnd, replacement)
-        return patch.takeIf { parse(source.replaceRange(it.start, it.end, replacement)) == updated }
+        val starts = mutableListOf<Int>()
+        var offset = 0
+        lines.forEach { line -> starts += offset; offset += line.length + 1 }
+        val patches = changes.map { (lineIndex, columnIndex, replacement) ->
+            if ('\n' in replacement || '\r' in replacement) return null
+            val line = lines.getOrNull(lineIndex) ?: return null
+            val cell = sourceCellRanges(line).getOrNull(columnIndex) ?: return null
+            val raw = line.substring(cell.start, cell.end)
+            val old = if (lineIndex == 0) headers[columnIndex] else rows[lineIndex - 2][columnIndex]
+            if (raw.trim() != old) return null
+            val contentStart = raw.indexOfFirst { !it.isWhitespace() }.let { if (it < 0) raw.length / 2 else it }
+            val contentEnd = raw.indexOfLast { !it.isWhitespace() }.let { if (it < 0) contentStart else it + 1 }
+            MarkdownSourceCellPatch(starts[lineIndex] + cell.start + contentStart, starts[lineIndex] + cell.start + contentEnd, replacement)
+        }
+        val patched = patches.sortedByDescending { it.start }.fold(source) { current, patch ->
+            current.replaceRange(patch.start, patch.end, patch.replacement)
+        }
+        return patches.takeIf { parse(patched) == updated }
     }
 
     fun toMarkdown(): String {

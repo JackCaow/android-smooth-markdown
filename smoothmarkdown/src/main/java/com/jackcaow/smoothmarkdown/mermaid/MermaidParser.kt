@@ -51,7 +51,7 @@ class MermaidFlowchartParser {
         classDefs.clear(); assignments.clear(); inlineStyles.clear(); invalid = false
         val direction = MermaidDirection.valueOf(match.groupValues[1].uppercase().replace("TD", "TB"))
         lines.drop(1).forEach { parseLine(it.trim()) }
-        if (invalid || groups.isNotEmpty()) return null
+        if (invalid || groups.isNotEmpty() || nodes.isEmpty()) return null
         val styledNodes = nodes.values.map { node ->
             val className = assignments[node.id]
             node.copy(className = className, style = className?.let(classDefs::get) ?: inlineStyles[node.id])
@@ -59,6 +59,8 @@ class MermaidFlowchartParser {
         val knownGroups = subgraphs.mapTo(mutableSetOf()) { it.id }
         val finalNodes = styledNodes.filterNot { it.id in knownGroups }
         val finalEdges = edges.map { it.copy(subgraphEdge = it.from in knownGroups || it.to in knownGroups) }
+        val endpoints = finalNodes.mapTo(mutableSetOf()) { it.id } + knownGroups
+        if (finalEdges.any { it.from !in endpoints || it.to !in endpoints }) return null
         return MermaidDiagram(MermaidKind.Flowchart, direction, finalNodes, finalEdges, subgraphs.toList())
     }
 
@@ -66,19 +68,17 @@ class MermaidFlowchartParser {
         if (line.isBlank() || line.startsWith("%%")) return
         when {
             line.startsWith("classDef ") -> {
-                Regex("^classDef\\s+(\\w+)\\s+(.+)$").matchEntire(line)?.let {
-                    classDefs[it.groupValues[1]] = parseStyle(it.groupValues[2])
-                }
+                val match = Regex("^classDef\\s+(\\w+)\\s+(.+)$").matchEntire(line)
+                if (match == null) invalid = true else classDefs[match.groupValues[1]] = parseStyle(match.groupValues[2])
             }
             line.startsWith("class ") -> {
-                Regex("^class\\s+([^\\s]+)\\s+(\\w+)$").matchEntire(line)?.let { match ->
+                val match = Regex("^class\\s+([^\\s]+)\\s+(\\w+)$").matchEntire(line)
+                if (match == null) invalid = true else
                     match.groupValues[1].split(',').forEach { assignments[it.trim()] = match.groupValues[2] }
-                }
             }
             line.startsWith("style ") -> {
-                Regex("^style\\s+(\\w+)\\s+(.+)$").matchEntire(line)?.let {
-                    inlineStyles[it.groupValues[1]] = parseStyle(it.groupValues[2])
-                }
+                val match = Regex("^style\\s+(\\w+)\\s+(.+)$").matchEntire(line)
+                if (match == null) invalid = true else inlineStyles[match.groupValues[1]] = parseStyle(match.groupValues[2])
             }
             line == "subgraph" || line.startsWith("subgraph ") -> openGroup(line.removePrefix("subgraph").trim())
             line == "end" -> closeGroup()
@@ -89,6 +89,7 @@ class MermaidFlowchartParser {
     private fun openGroup(value: String) {
         if (value.isBlank()) { invalid = true; return }
         val idAndLabel = Regex("^([\\p{L}_][\\p{L}\\p{N}_-]*)\\s*\\[(.+)]$").matchEntire(value)
+        if (idAndLabel == null && ('[' in value || ']' in value)) { invalid = true; return }
         val id = idAndLabel?.groupValues?.get(1) ?: value.substringBefore(' ')
         val label = idAndLabel?.groupValues?.get(2) ?: value
         if (id in groupIds || id.isBlank()) { invalid = true; return }
@@ -107,7 +108,8 @@ class MermaidFlowchartParser {
     private fun parseNodeOrEdge(line: String) {
         val matches = arrowPattern.findAll(line).toList()
         if (matches.isEmpty()) {
-            parseNode(line)?.let(::saveNode)
+            val node = parseNode(line)
+            if (node == null && line !in groupIds) invalid = true else node?.let(::saveNode)
             return
         }
         val parts = mutableListOf<String>()
@@ -117,7 +119,8 @@ class MermaidFlowchartParser {
             cursor = match.range.last + 1
         }
         parts += line.substring(cursor).trim()
-        if (parts.size != matches.size + 1 || parts.any(String::isEmpty)) return
+        if (parts.size != matches.size + 1 || parts.any(String::isEmpty) ||
+            parts.any { it !in groupIds && parseNode(it) == null }) { invalid = true; return }
         parts.mapNotNull(::parseNode).forEach(::saveNode)
         for (index in matches.indices) {
             val from = extractId(parts[index]) ?: continue

@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown.editor
 
+import androidx.compose.ui.text.TextRange
 import com.jackcaow.smoothmarkdown.parseMarkdown
 import org.commonmark.node.BulletList
 import org.commonmark.node.Heading
@@ -208,6 +209,50 @@ internal class MarkdownSourceList private constructor(
     }
 
     private fun lineStart(item: Item): Int = source.lastIndexOf('\n', item.contentStart - 1) + 1
+
+    /** Selects complete sibling subtrees, including their original line endings. */
+    fun siblingRange(parentPath: List<Int>, firstIndex: Int, lastIndex: Int): Pair<Int, Int>? {
+        if (firstIndex < 0 || lastIndex < firstIndex) return null
+        val siblings = if (parentPath.isEmpty()) items else
+            item(parentPath)?.parts?.filterIsInstance<NestedList>()?.flatMap { it.items } ?: return null
+        if (lastIndex >= siblings.size) return null
+        val first = subtreeRange(parentPath + firstIndex) ?: return null
+        val last = subtreeRange(parentPath + lastIndex) ?: return null
+        return first.first to last.second
+    }
+
+    fun copySiblingItems(parentPath: List<Int>, firstIndex: Int, lastIndex: Int): String? =
+        siblingRange(parentPath, firstIndex, lastIndex)?.let { (start, end) ->
+            source.substring(start, end).trimEnd('\r', '\n')
+        }
+
+    fun deleteSiblingItems(parentPath: List<Int>, firstIndex: Int, lastIndex: Int): String? {
+        val (start, end) = siblingRange(parentPath, firstIndex, lastIndex) ?: return null
+        var before = source.substring(0, start)
+        val after = source.substring(end)
+        if (after.isEmpty()) before = before.removeSuffix("\r\n").removeSuffix("\n")
+        return before + after
+    }
+
+    /** Wraps the visible primary line in each item, preserving markers and child subtrees. */
+    fun applyInlineToSiblingItems(
+        parentPath: List<Int>, firstIndex: Int, lastIndex: Int,
+        kind: InlineMarkKind, destination: String?, enableWikilinks: Boolean,
+    ): String? {
+        if (siblingRange(parentPath, firstIndex, lastIndex) == null) return null
+        val patches = (firstIndex..lastIndex).mapNotNull { index ->
+            val selected = item(parentPath + index) ?: return null
+            val line = selected.lines.firstOrNull { it.start == selected.contentStart } ?: selected.lines.firstOrNull() ?: return null
+            val inline = MarkdownInlineEditing.parse(source.substring(line.start, line.end), enableWikilinks)
+            if (inline.visible.isEmpty()) return@mapNotNull null
+            val wrapped = inline.wrap(TextRange(0, inline.visible.length), kind, destination) ?: return null
+            if (wrapped == inline.source) null else Triple(line.start, line.end, wrapped)
+        }
+        if (patches.isEmpty()) return null
+        return patches.sortedByDescending { it.first }.fold(source) { current, (start, end, replacement) ->
+            current.replaceRange(start, end, replacement)
+        }
+    }
 
     private fun subtreeRange(path: List<Int>): Pair<Int, Int>? {
         val selected = item(path) ?: return null
