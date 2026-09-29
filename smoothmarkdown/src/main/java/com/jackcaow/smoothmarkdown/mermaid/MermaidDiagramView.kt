@@ -38,6 +38,25 @@ fun MermaidDiagramView(
     source: String,
     modifier: Modifier = Modifier,
     onNodeTap: ((String) -> Unit)? = null,
+    /** Flutter-compatible fenced `theme=dark|forest|neutral|default` override. */
+    theme: String? = null,
+) {
+    if (theme == null) {
+        MermaidDiagramContent(source, modifier, onNodeTap, explicitTheme = false)
+    } else {
+        val colors = mermaidThemeColors(theme)
+        MaterialTheme(colorScheme = MaterialTheme.colorScheme.withMermaidTheme(colors)) {
+            MermaidDiagramContent(source, modifier.background(colors.background), onNodeTap, explicitTheme = true)
+        }
+    }
+}
+
+@Composable
+private fun MermaidDiagramContent(
+    source: String,
+    modifier: Modifier,
+    onNodeTap: ((String) -> Unit)?,
+    explicitTheme: Boolean,
 ) {
     val diagram = remember(source) { MermaidParser.parse(source) }
     if (diagram == null) {
@@ -77,6 +96,8 @@ fun MermaidDiagramView(
     }
     val foreground = MaterialTheme.colorScheme.onSurface
     val nodeFill = MaterialTheme.colorScheme.surfaceVariant
+    val nodeStroke = if (explicitTheme) MaterialTheme.colorScheme.primary else foreground
+    val edgeColor = if (explicitTheme) MaterialTheme.colorScheme.outline else foreground
     val surface = MaterialTheme.colorScheme.surface
     val groupById = diagram.subgraphs.associateBy { it.id }
     fun depth(group: MermaidSubgraph): Int {
@@ -98,21 +119,21 @@ fun MermaidDiagramView(
                     drawRoundRect(surface, Offset(rect.x * density, rect.y * density),
                         Size(rect.width * density, rect.height * density),
                         CornerRadius(8.dp.toPx()))
-                    drawRoundRect(foreground.copy(alpha = 0.45f), Offset(rect.x * density, rect.y * density),
+                    drawRoundRect(edgeColor.copy(alpha = 0.45f), Offset(rect.x * density, rect.y * density),
                         Size(rect.width * density, rect.height * density),
                         CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))
                 }
                 if (diagram.kind == MermaidKind.Sequence) {
                     layout.nodes.values.forEach { rect ->
-                        drawLine(foreground.copy(alpha = 0.5f),
+                        drawLine(edgeColor.copy(alpha = 0.5f),
                             Offset(rect.centerX * density, (rect.y + rect.height) * density),
                             Offset(rect.centerX * density, (layout.height - 18f) * density),
                             1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
                     }
                 }
-                layout.edges.forEach { drawEdge(it, foreground) }
+                layout.edges.forEach { drawEdge(it, edgeColor) }
                 diagram.nodes.forEach { node ->
-                    layout.nodes[node.id]?.let { drawNode(it, node, nodeFill, foreground) }
+                    layout.nodes[node.id]?.let { drawNode(it, node, nodeFill, nodeStroke) }
                 }
             }
             diagram.subgraphs.forEach { group ->

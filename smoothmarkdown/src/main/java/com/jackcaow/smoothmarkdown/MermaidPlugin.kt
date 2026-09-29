@@ -29,8 +29,10 @@ class MermaidPlugin(val onNodeTap: ((String) -> Unit)? = null) : BlockParserPlug
 
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
-        MermaidDiagramView((node as MermaidDiagramNode).code,
-            Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(vertical = 8.dp), onNodeTap)
+        val diagram = node as MermaidDiagramNode
+        MermaidDiagramView(diagram.code,
+            Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(vertical = 8.dp), onNodeTap,
+            theme = diagram.theme)
     }
 }
 
