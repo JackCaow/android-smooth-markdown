@@ -413,6 +413,40 @@ class MarkdownEditorController(
         return table to selected
     }
 
+    /** Formats every cell in the selected rectangle as one source edit. */
+    fun applyInlineCommandToFormattedTableCellSelection(
+        command: MarkdownEditorCommand,
+        destination: String? = null,
+    ): Boolean {
+        if (command !in setOf(MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC, MarkdownEditorCommand.INLINE_CODE)) return false
+        val kind = inlineMarkKind(command) ?: return false
+        val (table, selected) = selectedFormattedTableCells() ?: return false
+        val block = semanticDocument().blockById(selected.blockId) ?: return false
+        var updated = table
+        var changed = false
+        for (row in selected.firstRow..selected.lastRow) {
+            for (column in selected.firstColumn..selected.lastColumn) {
+                val source = if (row == 0) updated.headers[column] else updated.rows[row - 1][column]
+                if (MarkdownInlineEditing.parse(source, enableWikilinks).visible.isEmpty()) continue
+                val wrapped = wrapCompleteInlineSource(source, kind, destination) ?: return false
+                if (wrapped != source) changed = true
+                updated = if (row == 0) {
+                    updated.copy(headers = updated.headers.toMutableList().also { it[column] = wrapped })
+                } else {
+                    updated.copy(rows = updated.rows.toMutableList().also { rows ->
+                        rows[row - 1] = rows[row - 1].toMutableList().also { it[column] = wrapped }
+                    })
+                }
+            }
+        }
+        if (!changed) return false
+        val patches = table.sourcePatchesForCells(block.source, updated) ?: return false
+        val replacement = patches.sortedByDescending { it.start }.fold(block.source) { source, patch ->
+            source.replaceRange(patch.start, patch.end, patch.replacement)
+        }
+        return replaceSemanticBlock(selected.blockId, replacement)
+    }
+
     /** Includes the exact source between the first and last selected blocks. */
     fun copyFormattedBlockSelectionAsMarkdown(): String? {
         val document = selectedFormattedDocument() ?: return null
@@ -420,6 +454,63 @@ class MarkdownEditorController(
         val first = document.blocks[selection.firstIndex]
         val last = document.blocks[selection.lastIndex]
         return text.substring(first.range.min, last.range.max)
+    }
+
+    /** Applies an inline mark to complete visible text in selected prose blocks. */
+    fun applyInlineCommandToFormattedBlockSelection(
+        command: MarkdownEditorCommand,
+        destination: String? = null,
+    ): Boolean {
+        val kind = inlineMarkKind(command) ?: return false
+        val document = selectedFormattedDocument() ?: return false
+        val selection = formattedBlockSelection ?: return false
+        val blocks = document.blocks.subList(selection.firstIndex, selection.lastIndex + 1)
+        if (blocks.any { it.kind !in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING) }) return false
+        val replacements = blocks.map { block ->
+            val source = MarkdownFormattedBlock.text(block) ?: return false
+            val wrapped = wrapCompleteInlineSource(source, kind, destination) ?: return false
+            val markdown = MarkdownFormattedBlock.markdown(block, wrapped) ?: return false
+            block to markdown
+        }
+        if (replacements.all { (block, markdown) -> block.source == markdown }) return false
+        val first = blocks.first()
+        val last = blocks.last()
+        val replacement = replacements.asReversed().fold(text.substring(first.range.min, last.range.max)) { current, (block, markdown) ->
+            current.replaceRange(block.range.min - first.range.min, block.range.max - first.range.min, markdown)
+        }
+        val candidate = text.replaceRange(first.range.min, last.range.max, replacement)
+        val reparsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        if (reparsed.size != document.blocks.size) return false
+        if (document.blocks.zip(reparsed).any { (old, next) ->
+                val selected = old.range.min >= first.range.min && old.range.max <= last.range.max
+                old.kind != next.kind || (!selected && old.source != next.source)
+            }) return false
+        if (replacements.zip(reparsed.drop(selection.firstIndex)).any { (replacementBlock, parsed) ->
+                replacementBlock.second != parsed.source
+            }) return false
+        replaceRange(first.range.min, last.range.max, replacement)
+        return true
+    }
+
+    /** Avoids crossing existing nested marks whose delimiters cannot be split safely. */
+    private fun wrapCompleteInlineSource(source: String, kind: InlineMarkKind, destination: String?): String? {
+        val inline = MarkdownInlineEditing.parse(source, enableWikilinks)
+        if (inline.visible.isEmpty()) return null
+        if (inline.marks.isNotEmpty() &&
+            (inline.marks.size != 1 || inline.marks.single().kind != kind ||
+                inline.marks.single().range != TextRange(0, inline.visible.length))) return null
+        val wrapped = inline.wrap(TextRange(0, inline.visible.length), kind, destination) ?: return null
+        if (MarkdownInlineEditing.parse(wrapped, enableWikilinks).visible != inline.visible) return null
+        return wrapped
+    }
+
+    private fun inlineMarkKind(command: MarkdownEditorCommand): InlineMarkKind? = when (command) {
+        MarkdownEditorCommand.BOLD -> InlineMarkKind.BOLD
+        MarkdownEditorCommand.ITALIC -> InlineMarkKind.ITALIC
+        MarkdownEditorCommand.INLINE_CODE -> InlineMarkKind.CODE
+        MarkdownEditorCommand.LINK -> InlineMarkKind.LINK
+        MarkdownEditorCommand.WIKILINK -> if (enableWikilinks) InlineMarkKind.WIKILINK else null
+        else -> null
     }
 
     fun deleteFormattedBlockSelection(): Boolean = replaceFormattedBlockSelectionWithMarkdown("")

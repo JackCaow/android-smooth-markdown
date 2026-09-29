@@ -538,6 +538,12 @@ private fun FormattedBlockPane(
                     controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
                 }, modifier = Modifier.testTag("formatted-block-copy")) { Text("Copy Markdown") }
                 TextButton(onClick = {
+                    blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.BOLD)
+                }, modifier = Modifier.testTag("formatted-block-bold")) { Text("Bold") }
+                TextButton(onClick = {
+                    blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.ITALIC)
+                }, modifier = Modifier.testTag("formatted-block-italic")) { Text("Italic") }
+                TextButton(onClick = {
                     blockSelectionError = !controller.deleteFormattedBlockSelection()
                 }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
                 TextButton(onClick = {
@@ -555,7 +561,7 @@ private fun FormattedBlockPane(
                 label = { Text("Replacement Markdown") },
                 modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
             )
-            if (blockSelectionError) Text("This edit would change neighboring blocks", modifier = Modifier.testTag("formatted-block-edit-error"))
+            if (blockSelectionError) Text("Cannot preserve this selection's Markdown structure", modifier = Modifier.testTag("formatted-block-edit-error"))
         }
         if (listSelection != null) {
             Text("${listSelection.lastIndex - listSelection.firstIndex + 1} list item(s) selected",
@@ -581,6 +587,10 @@ private fun FormattedBlockPane(
                 TextButton(onClick = {
                     controller.copyFormattedTableCellSelectionAsTsv()?.let { clipboard.setText(AnnotatedString(it)) }
                 }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text("Copy TSV") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.BOLD) },
+                    modifier = Modifier.testTag("formatted-table-selection-bold")) { Text("Bold") }
+                TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.ITALIC) },
+                    modifier = Modifier.testTag("formatted-table-selection-italic")) { Text("Italic") }
                 TextButton(onClick = { controller.clearFormattedTableCellSelection() },
                     modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
                 TextButton(onClick = {
