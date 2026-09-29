@@ -1010,6 +1010,30 @@ private fun FormattedBlockPane(
         }
         if (blockSelection != null) {
             Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
+            val transformable = blocks.subList(blockSelection.firstIndex, blockSelection.lastIndex + 1)
+                .all { it.kind == MarkdownBlockKind.PARAGRAPH || it.kind == MarkdownBlockKind.HEADING }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                listOf(
+                    "Paragraph" to MarkdownEditorCommand.PARAGRAPH,
+                    "H1" to MarkdownEditorCommand.HEADING1,
+                    "H2" to MarkdownEditorCommand.HEADING2,
+                    "H3" to MarkdownEditorCommand.HEADING3,
+                    "H4" to MarkdownEditorCommand.HEADING4,
+                    "H5" to MarkdownEditorCommand.HEADING5,
+                    "H6" to MarkdownEditorCommand.HEADING6,
+                    "Bullet list" to MarkdownEditorCommand.UNORDERED_LIST,
+                    "Numbered list" to MarkdownEditorCommand.ORDERED_LIST,
+                    "Task list" to MarkdownEditorCommand.TASK_LIST,
+                    "Quote" to MarkdownEditorCommand.BLOCKQUOTE,
+                ).forEach { (label, command) ->
+                    TextButton(onClick = {
+                        blockSelectionError = !controller.applyBlockCommandToFormattedBlockSelection(command)
+                    }, enabled = transformable,
+                        modifier = Modifier.testTag("formatted-block-transform-${command.name.lowercase()}")) {
+                        Text(label)
+                    }
+                }
+            }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 TextButton(onClick = {
                     controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }

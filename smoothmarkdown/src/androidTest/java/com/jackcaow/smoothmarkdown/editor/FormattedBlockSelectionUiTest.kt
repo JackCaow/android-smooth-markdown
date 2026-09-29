@@ -33,4 +33,21 @@ class FormattedBlockSelectionUiTest {
             check(!controller.canUndo)
         }
     }
+
+    @Test fun selectedProseCanBecomeOneBulletListWithoutLeavingFormattedMode() {
+        val original = "Before\n\n# One\n\nTwo\n\nAfter"
+        val controller = MarkdownEditorController(original).apply { mode = MarkdownEditorMode.FORMATTED }
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithTag("formatted-block-select-block-1").performScrollTo().performClick()
+        compose.onNodeWithTag("formatted-block-select-block-2").performScrollTo().performClick()
+        compose.onNodeWithTag("formatted-block-transform-unordered_list").performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals("Before\n\n- One\n- Two\n\nAfter", controller.text)
+            assertEquals(MarkdownEditorMode.FORMATTED, controller.mode)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+            check(!controller.canUndo)
+        }
+    }
 }
