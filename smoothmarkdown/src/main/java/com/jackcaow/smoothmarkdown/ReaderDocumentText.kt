@@ -37,7 +37,7 @@ internal data class ReaderDocumentText(
 
 /**
  * Projects the whole parsed document without composing offscreen LazyColumn items. The projection
- * is for explicit document copying, not a Compose selection or a claim about selection handles.
+ * is for explicit document copying and the exact, unchanged native whole-document selection.
  * Top-level and nested block paths are deterministic within one parsed document revision.
  */
 internal fun readerDocumentText(
@@ -65,7 +65,7 @@ internal fun readerDocumentText(
                 is Text -> result.append(current.literal)
                 is Code -> result.append(current.literal)
                 is SoftLineBreak, is HardLineBreak -> result.append('\n')
-                is Image -> Unit // The displayed image is not the alt text.
+                is Image -> result.append(inline(current)) // Semantic alt text, not image pixels.
                 is InlineMathNode -> result.append('$').append(current.latex).append('$')
                 is HtmlKbdNode -> result.append(current.label)
                 is FootnoteReferenceNode -> result.append('[').append(current.label).append(']')
@@ -81,7 +81,9 @@ internal fun readerDocumentText(
                         when {
                             tag == null || tag.end != current.literal.length -> result.append(current.literal)
                             tag.name == "br" && !tag.isClosing -> result.append('\n')
-                            // HTML image and formatting tags have no selectable glyph.
+                            tag.name == "img" && !tag.isClosing ->
+                                result.append(tag.attributes["alt"].orEmpty())
+                            // Formatting tags have no selectable glyph.
                         }
                     }
                 }
@@ -116,14 +118,17 @@ internal fun readerDocumentText(
                     if (custom != null) {
                         val replacement = custom.documentText(sole)
                         if (replacement == null) complete = false else append(path, replacement)
-                    }
+                    } else append(path, inline(sole))
                     return
                 }
-                if (enableHtml && sole is HtmlInline && SafeHtml.imageTag(sole.literal) != null) return
+                if (enableHtml && sole is HtmlInline && SafeHtml.imageTag(sole.literal) != null) {
+                    append(path, SafeHtml.imageTag(sole.literal)?.alt.orEmpty())
+                    return
+                }
                 append(path, inline(node))
             }
-            is FencedCodeBlock -> append(path, node.literal.trimEnd('\n'))
-            is IndentedCodeBlock -> append(path, node.literal.trimEnd('\n'))
+            is FencedCodeBlock -> append(path, node.literal)
+            is IndentedCodeBlock -> append(path, node.literal)
             is BlockQuote -> node.children().forEachIndexed { index, child -> visitBlock(child, "${path}/${index}") }
             is BulletList, is OrderedList -> {
                 val start = (node as? OrderedList)?.startNumber ?: 1
@@ -162,7 +167,8 @@ internal fun readerDocumentText(
                 val html = if (enableHtml) SafeHtml.parseBlock(node.literal) else null
                 when {
                     !enableHtml -> append(path, node.literal)
-                    SafeHtml.imageTag(node.literal) != null -> Unit
+                    SafeHtml.imageTag(node.literal) != null ->
+                        append(path, SafeHtml.imageTag(node.literal)?.alt.orEmpty())
                     SafeHtml.imageAlt(node.literal) != null -> append(path, SafeHtml.imageAlt(node.literal).orEmpty())
                     html is SafeHtml.Block.Rule -> Unit
                     html is SafeHtml.Block.Container -> {
@@ -176,7 +182,8 @@ internal fun readerDocumentText(
                     else -> append(path, node.literal)
                 }
             }
-            is ThematicBreak, is BlockMathNode -> Unit // Canvas and rules are not text glyphs.
+            is ThematicBreak -> Unit
+            is BlockMathNode -> if (node.latex.isNotEmpty()) append(path, "$$${node.latex}$$")
             is PluginBlockNode -> {
                 val replacement = plugins?.blockRenderer(node)?.documentText(node)
                 if (replacement == null) complete = false

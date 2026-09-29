@@ -22,6 +22,8 @@ class SmoothSelectionController {
     private var documentBuilders: MarkdownBuilderRegistry? = null
     private val detailsExpanded = mutableMapOf<DetailsNode, Boolean>()
     private var copyDocumentText: ((String) -> Unit)? = null
+    private var fullDocumentProjection: ReaderDocumentText? = null
+    private var fullDocumentNativeSnapshot: List<AnnotatedString>? = null
     private var hasCustomCodeBuilder = false
     private var hasCustomImageBuilder = false
     internal var fullDocumentSelectionMode by mutableStateOf(false)
@@ -33,13 +35,14 @@ class SmoothSelectionController {
     internal var fullDocumentSelectionEstablished by mutableStateOf(false)
         private set
 
-    /** The currently selected visible text, omitting non-text selection anchors. */
+    /** The currently selected native text, omitting non-text selection anchors. */
     val selectedText: String
         get() = region?.let { visibleSelectedText(it.selectedTexts, anchors?.snapshot().orEmpty()).text }.orEmpty()
 
     /**
-     * Full document text for explicit copying, including offscreen blocks but excluding collapsed
-     * details and nontext images/rules. Null when a custom renderer has no known text projection.
+     * Full document semantic text for explicit copying, including offscreen blocks and built-in
+     * image alt/math source but excluding collapsed details and rules. Null when a custom renderer
+     * has no known text projection.
      * This does not represent a native selection or selection handles.
      */
     val documentText: String?
@@ -67,8 +70,11 @@ class SmoothSelectionController {
      * the request was accepted; selection is applied after the full layout is positioned.
      */
     fun selectAllDocument(): Boolean {
-        if (region == null || fullDocumentSelectionProjection() == null) return false
+        if (region == null) return false
+        val projection = fullDocumentSelectionProjection() ?: return false
         region?.clear()
+        fullDocumentProjection = projection
+        fullDocumentNativeSnapshot = null
         fullDocumentSelectionEstablished = false
         fullDocumentSelectionMode = true
         fullDocumentSelectRequest++
@@ -152,7 +158,11 @@ class SmoothSelectionController {
     }
 
     internal fun setDetailsExpanded(node: DetailsNode, expanded: Boolean) {
-        if (document != null) detailsExpanded[node] = expanded
+        if (document != null) {
+            val before = detailsExpanded[node] ?: node.isOpen
+            detailsExpanded[node] = expanded
+            if (before != expanded && fullDocumentSelectionMode) clear()
+        }
     }
 
     internal fun detailsExpanded(node: DetailsNode): Boolean? = detailsExpanded[node]
@@ -177,10 +187,17 @@ class SmoothSelectionController {
         if (fullDocumentSelectionMode) fullDocumentLayoutReady = fullDocumentSelectRequest
     }
 
-    internal fun markFullDocumentSelected(request: Int) {
+    internal fun markFullDocumentSelected(request: Int, selectedTexts: List<AnnotatedString>) {
         if (fullDocumentSelectionMode && request == fullDocumentSelectRequest) {
+            fullDocumentNativeSnapshot = selectedTexts.toList()
             fullDocumentSelectionEstablished = true
         }
+    }
+
+    /** Semantic copy is valid only while native handles still span the original full selection. */
+    internal fun fullDocumentSemanticText(selectedTexts: List<AnnotatedString>): String? {
+        if (!fullDocumentSelectionMode || !fullDocumentSelectionEstablished) return null
+        return exactWholeDocumentCopyText(fullDocumentNativeSnapshot, selectedTexts, fullDocumentProjection)
     }
 
     internal fun exitFullDocumentSelection() {
@@ -188,7 +205,17 @@ class SmoothSelectionController {
         fullDocumentSelectionEstablished = false
         fullDocumentSelectRequest = 0
         fullDocumentLayoutReady = 0
+        fullDocumentProjection = null
+        fullDocumentNativeSnapshot = null
     }
+}
+
+internal fun exactWholeDocumentCopyText(
+    snapshot: List<AnnotatedString>?,
+    selectedTexts: List<AnnotatedString>,
+    projection: ReaderDocumentText?,
+): String? = projection?.text?.takeIf {
+    projection.complete && snapshot != null && snapshot.isNotEmpty() && snapshot == selectedTexts
 }
 
 internal const val MAX_FULL_SELECTION_BLOCKS = 512
