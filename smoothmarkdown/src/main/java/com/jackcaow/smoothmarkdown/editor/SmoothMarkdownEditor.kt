@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.isAltPressed
@@ -81,6 +82,12 @@ fun SmoothMarkdownEditor(
     customBlockMatcher: ((MarkdownDocumentBlock) -> Boolean)? = null,
     customBlockBuilder: MarkdownEditorCustomBlockBuilder? = null,
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder? = null,
+    /** Whether the built-in keyboard shortcuts are handled. */
+    enableKeyboardShortcuts: Boolean = true,
+    /** Host key handler runs before the built-in shortcuts, even when they are disabled. */
+    onShortcut: ((KeyEvent, MarkdownEditorController) -> Boolean)? = null,
+    /** Called for accepted built-in commands from the toolbar, slash menu, or keyboard. */
+    onCommand: ((MarkdownEditorCommand) -> Unit)? = null,
 ) {
     SideEffect { controller.enableWikilinks = enableWikilinks }
     val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
@@ -119,20 +126,44 @@ fun SmoothMarkdownEditor(
             } finally { hostActionBusy = false }
         }
     }
+    fun applyEditorCommand(command: MarkdownEditorCommand): Boolean {
+        if (!capabilities.supports(command) ||
+            (command == MarkdownEditorCommand.WIKILINK && !enableWikilinks)) return false
+        onCommand?.invoke(command)
+        controller.applyCommand(command)
+        return true
+    }
     Column(modifier.onPreviewKeyEvent { event ->
-        if (event.type != KeyEventType.KeyDown || !event.isCtrlPressed || event.isAltPressed) {
+        if (event.type != KeyEventType.KeyDown) {
             false
-        } else when {
-            event.key == Key.F && !event.isShiftPressed -> {
-                searchOpen = true
-                searchFocusRequest++
-                true
+        } else if (onShortcut?.invoke(event, controller) == true) {
+            true
+        } else if (!enableKeyboardShortcuts || !event.isCtrlPressed || event.isAltPressed) {
+            false
+        } else {
+            when {
+                event.key == Key.Z -> {
+                    if (event.isShiftPressed) controller.redo() else controller.undo()
+                    true
+                }
+                event.key == Key.Y && !event.isShiftPressed -> {
+                    controller.redo()
+                    true
+                }
+                event.key == Key.B && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.BOLD)
+                event.key == Key.I && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.ITALIC)
+                event.key == Key.K && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.LINK)
+                event.key == Key.F && !event.isShiftPressed -> {
+                    searchOpen = true
+                    searchFocusRequest++
+                    true
+                }
+                event.key == Key.Enter && event.isShiftPressed -> {
+                    focusMode = !focusMode
+                    true
+                }
+                else -> false
             }
-            event.key == Key.Enter && event.isShiftPressed -> {
-                focusMode = !focusMode
-                true
-            }
-            else -> false
         }
     }) {
         if (!focusMode) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -185,7 +216,11 @@ fun SmoothMarkdownEditor(
                 slashSuggestions.forEachIndexed { index, item ->
                     TextButton(
                         onClick = {
-                            item.command?.let { MarkdownSlashCommands.apply(controller, slashTrigger, it, capabilities) }
+                            item.command?.let { command ->
+                                if (MarkdownSlashCommands.apply(controller, slashTrigger, command, capabilities)) {
+                                    onCommand?.invoke(command)
+                                }
+                            }
                             item.customCommand?.let { command ->
                                 scope.launch { MarkdownSlashCommands.applyCustom(controller, slashTrigger, command) }
                             }
@@ -214,18 +249,18 @@ fun SmoothMarkdownEditor(
             buttons.filter { capabilities.supports(it.second) }.forEach { (label, command) ->
                 TextButton(onClick = {
                     if (command == MarkdownEditorCommand.IMAGE && onPickImage != null) {
+                        onCommand?.invoke(command)
                         runHostAction("Image") {
                             MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
                         }
-                    } else {
-                        controller.applyCommand(command)
-                    }
+                    } else applyEditorCommand(command)
                 }, enabled = (command != MarkdownEditorCommand.WIKILINK || enableWikilinks) &&
                     (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(label) }
             }
             if (onPickImage != null && (toolbarCommands == null || MarkdownEditorCommand.IMAGE !in toolbarCommands) &&
                 capabilities.supports(MarkdownEditorCommand.IMAGE)) {
                 TextButton(onClick = {
+                    onCommand?.invoke(MarkdownEditorCommand.IMAGE)
                     runHostAction("Image") {
                         MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
                     }

@@ -1,10 +1,9 @@
 package com.jackcaow.smoothmarkdown.editor
 
-/** Controls built-in commands shown by this editor's toolbar and slash menu.
+/** Controls built-in commands shown by this editor's toolbar and slash menu and accepted by its shortcuts.
  *
  * [MarkdownEditorController.applyCommand] remains a public imperative API and is not filtered here.
- * The Android editor currently has no formatting keyboard shortcuts; Ctrl+F and Ctrl+Shift+Enter
- * control Find and Focus mode independently of this setting.
+ * Find, Focus mode, and history shortcuts are independent of this setting.
  */
 data class MarkdownEditorCapabilities(
     val disabledCommands: Set<MarkdownEditorCommand> = emptySet(),
