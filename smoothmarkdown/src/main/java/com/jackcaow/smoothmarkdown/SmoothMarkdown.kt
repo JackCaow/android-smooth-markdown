@@ -248,8 +248,12 @@ fun SmoothMarkdown(
     val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
-    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
-        groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
+    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder) {
+        groupSelectableBlocks(
+            blocks,
+            bridgeVisibleNonText = selectable || selectableAsSingleRegion,
+            bridgeBuiltInCode = (selectable || selectableAsSingleRegion) && codeBlockBuilder == null,
+        )
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
     val targetCallback = remember(activeController, onTextPositioned) {
@@ -466,15 +470,20 @@ private fun MarkdownSelectionGroup(
     }
 }
 
-/** Keep text around visible nontext blocks mounted in one lazy item for a shared selection range. */
-internal fun groupSelectableBlocks(blocks: List<Node>, bridgeVisibleNonText: Boolean = false): List<List<Node>> {
+/** Keep selectable prose, nontext geometry, and built-in code mounted in one lazy item. */
+internal fun groupSelectableBlocks(
+    blocks: List<Node>,
+    bridgeVisibleNonText: Boolean = false,
+    bridgeBuiltInCode: Boolean = false,
+): List<List<Node>> {
     val groups = mutableListOf<List<Node>>()
     val pending = mutableListOf<Node>()
     fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
     for (block in blocks) {
         val prose = block is Heading || block is Paragraph || block is BlockQuote ||
             block is BulletList || block is OrderedList ||
-            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak))
+            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak)) ||
+            (bridgeBuiltInCode && (block is FencedCodeBlock || block is IndentedCodeBlock))
         if (prose) pending += block else { flush(); groups += listOf(block) }
     }
     flush()

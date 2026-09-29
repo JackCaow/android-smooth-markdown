@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown
 import org.commonmark.node.BlockQuote
 import org.commonmark.node.BulletList
 import org.commonmark.node.FencedCodeBlock
+import org.commonmark.node.IndentedCodeBlock
 import org.commonmark.node.Heading
 import org.commonmark.node.Paragraph
 import org.commonmark.node.Node
@@ -46,6 +47,18 @@ class MarkdownSelectionGroupingTest {
         val groups = groupSelectableBlocks(blocks)
         assertEquals(listOf(1, 1, 2), groups.map { it.size })
         assertTrue(groups[1].single() is FencedCodeBlock)
+        // A host builder owns its own layout, so it keeps this safe fallback.
+        assertEquals(groups, groupSelectableBlocks(blocks, bridgeVisibleNonText = true,
+            bridgeBuiltInCode = false))
+        // The built-in code text shares one mounted item with its prose neighbors.
+        assertEquals(listOf(blocks), groupSelectableBlocks(blocks, bridgeBuiltInCode = true))
+    }
+
+    @Test fun indentedCodeCanBridgeAdjacentProseOnlyWhenBuiltInSelectionIsEnabled() {
+        val blocks = parseMarkdown("Before.\n\n    first\n    second\n\nAfter.").directChildren()
+        assertEquals(listOf(Paragraph::class, IndentedCodeBlock::class, Paragraph::class), blocks.map { it::class })
+        assertEquals(listOf(1, 1, 1), groupSelectableBlocks(blocks).map { it.size })
+        assertEquals(listOf(blocks), groupSelectableBlocks(blocks, bridgeBuiltInCode = true))
     }
 
     @Test fun selectableTextAcrossRuleAndTableStaysInOneMountedLazyItem() {
