@@ -18,12 +18,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.sp
 import kotlin.math.ceil
 import java.security.SecureRandom
 
 private val anchorRandom = SecureRandom()
 private const val anchorAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+internal const val nonTextAnchorAnnotationTag = "smooth-markdown-selection-anchor"
 
 internal fun newNonTextSelectionAnchor(): String = buildString(500) {
     append("smd")
@@ -56,7 +58,12 @@ internal fun SelectableNonTextBlock(onClick: (() -> Unit)? = null, content: @Com
         registry?.register(row)
         onDispose { registry?.unregister(row) }
     }
-    val anchor = remember(rows, row) { List(rows) { row }.joinToString("\n") }
+    val anchor = remember(rows, row) {
+        buildAnnotatedString {
+            append(List(rows) { row }.joinToString("\n"))
+            addStringAnnotation(nonTextAnchorAnnotationTag, row, 0, length)
+        }
+    }
     Box(Modifier.onSizeChanged { heightPx = it.height }) {
         content()
         Text(
