@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -31,6 +33,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -88,6 +91,24 @@ typealias MarkdownEditorToolbarSlot = @Composable () -> Unit
 
 /** Wrap or replace the complete default toolbar. Call [defaultToolbar] to retain its controls. */
 typealias MarkdownEditorToolbarBuilder = @Composable (defaultToolbar: MarkdownEditorToolbarSlot) -> Unit
+
+private data class FormattedSearchUi(
+    val search: FormattedSearch = FormattedSearch.Empty,
+    val active: FormattedSearchMatch? = null,
+    val navigationId: Int = 0,
+) {
+    fun ranges(target: FormattedSearchTarget): List<TextRange> = search.ranges(target)
+}
+
+private val LocalFormattedSearch = staticCompositionLocalOf { FormattedSearchUi() }
+
+private fun AnnotatedString.Builder.highlightSearch(ranges: List<TextRange>, color: Color) {
+    ranges.forEach { range ->
+        if (range.min >= 0 && range.max <= length && range.min < range.max) {
+            addStyle(SpanStyle(background = color), range.min, range.max)
+        }
+    }
+}
 
 /** Source editor, preview, split view, and a focused formatted-block editing surface. */
 @Composable
@@ -179,13 +200,42 @@ fun SmoothMarkdownEditor(
     var hostStatus by remember { mutableStateOf("") }
     var searchOpen by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    var searchMatchIndex by remember { mutableIntStateOf(0) }
+    var searchNavigationId by remember { mutableIntStateOf(0) }
     var focusMode by remember { mutableStateOf(initialFocusMode) }
     var searchFocusRequest by remember { mutableIntStateOf(0) }
     val searchFocusRequester = remember { FocusRequester() }
     LaunchedEffect(searchOpen, searchFocusRequest) {
         if (searchOpen) searchFocusRequester.requestFocus()
     }
-    val searchMatches = if (searchOpen) controller.findMatches(searchQuery) else emptyList()
+    val formattedSearch = remember(controller.text, searchQuery, searchOpen, controller.mode,
+        controller.enableWikilinks) {
+        if (searchOpen && controller.mode == MarkdownEditorMode.FORMATTED)
+            FormattedSearch.find(controller.semanticDocument(), searchQuery, controller.enableWikilinks)
+        else FormattedSearch.Empty
+    }
+    val sourceSearchMatches = if (searchOpen && controller.mode != MarkdownEditorMode.FORMATTED)
+        controller.findMatches(searchQuery) else emptyList()
+    val searchMatchCount = if (controller.mode == MarkdownEditorMode.FORMATTED)
+        formattedSearch.matches.size else sourceSearchMatches.size
+    val currentSearchIndex = searchMatchIndex.coerceIn(0, (searchMatchCount - 1).coerceAtLeast(0))
+    LaunchedEffect(searchQuery, controller.mode) {
+        searchMatchIndex = 0
+        searchNavigationId = 0
+    }
+    fun navigateSearch(direction: Int) {
+        if (searchMatchCount == 0) return
+        val index = (currentSearchIndex + direction + searchMatchCount) % searchMatchCount
+        searchMatchIndex = index
+        searchNavigationId++
+        if (controller.mode == MarkdownEditorMode.FORMATTED)
+            controller.activateFormattedSearchMatch(formattedSearch.matches[index])
+        else {
+            val match = sourceSearchMatches[index]
+            controller.setSelection(match.min, match.max)
+            controller.requestSourceFocus()
+        }
+    }
     val slashTrigger = if (!enableSlashCommands || controller.mode == MarkdownEditorMode.PREVIEW) null else MarkdownSlashCommands.match(controller)
     val slashSuggestions = slashTrigger?.let {
         MarkdownSlashCommands.allSuggestions(it, enableWikilinks, capabilities, customSlashCommands)
@@ -301,7 +351,10 @@ fun SmoothMarkdownEditor(
                         TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-focus-mode")) {
                             Text("Focus mode")
                         }
-                        TextButton(onClick = { searchOpen = !searchOpen }, modifier = Modifier.testTag("editor-find")) {
+                        TextButton(onClick = {
+                            searchOpen = !searchOpen
+                            if (!searchOpen) { searchMatchIndex = 0; searchNavigationId = 0 }
+                        }, modifier = Modifier.testTag("editor-find")) {
                             Text(if (searchOpen) "Close find" else "Find")
                         }
                         toolbarTrailing.forEach { it() }
@@ -383,19 +436,20 @@ fun SmoothMarkdownEditor(
                 .padding(horizontal = 8.dp)) {
                 OutlinedTextField(
                     value = searchQuery,
-                    onValueChange = { searchQuery = it },
+                    onValueChange = { searchQuery = it; searchMatchIndex = 0; searchNavigationId = 0 },
                     label = { Text("Find in note") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester).testTag("editor-search-query"),
                 )
                 Row {
-                    Text("${searchMatches.size} matches", modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
-                    TextButton(onClick = {
-                        if (controller.selectPreviousMatch(searchQuery) != null) requestMode(MarkdownEditorMode.SOURCE)
-                    }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-previous")) { Text("Previous") }
-                    TextButton(onClick = {
-                        if (controller.selectNextMatch(searchQuery) != null) requestMode(MarkdownEditorMode.SOURCE)
-                    }, enabled = searchMatches.isNotEmpty(), modifier = Modifier.testTag("editor-search-next")) { Text("Next") }
+                    Text(if (searchMatchCount == 0) "Not found" else "${currentSearchIndex + 1}/$searchMatchCount",
+                        modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
+                    TextButton(onClick = { navigateSearch(-1) }, enabled = searchMatchCount > 0,
+                        modifier = Modifier.testTag("editor-search-previous")) { Text("Previous") }
+                    TextButton(onClick = { navigateSearch(1) }, enabled = searchMatchCount > 0,
+                        modifier = Modifier.testTag("editor-search-next")) { Text("Next") }
+                    TextButton(onClick = { searchOpen = false; searchMatchIndex = 0; searchNavigationId = 0 },
+                        modifier = Modifier.testTag("editor-search-close")) { Text("Close") }
                 }
             }
         }
@@ -444,12 +498,16 @@ fun SmoothMarkdownEditor(
                     plugins = previewPlugins, onWikilinkClick = onTapWikilink,
                     builderRegistry = builderRegistry, imageBuilder = imageBuilder)
             }
-            MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
-                controller, Modifier.weight(1f), wikilinkSuggestions,
-                customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
-                imageBuilder,
-                onSourcePaste = { onModeChanged?.invoke(MarkdownEditorMode.SOURCE) },
-            )
+            MarkdownEditorMode.FORMATTED -> CompositionLocalProvider(LocalFormattedSearch provides FormattedSearchUi(
+                formattedSearch, formattedSearch.matches.getOrNull(currentSearchIndex), searchNavigationId,
+            )) {
+                FormattedBlockPane(
+                    controller, Modifier.weight(1f), wikilinkSuggestions,
+                    customBlockMatcher, customBlockBuilder, customBlockEditorBuilder,
+                    imageBuilder,
+                    onSourcePaste = { onModeChanged?.invoke(MarkdownEditorMode.SOURCE) },
+                )
+            }
         }
     }
     }
@@ -533,6 +591,8 @@ private fun FormattedBlockPane(
     onSourcePaste: () -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
+    val searchUi = LocalFormattedSearch.current
+    val searchColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
     val blocks = controller.semanticDocument().blocks
     val pendingExit = controller.pendingListExit
     val clipboard = LocalClipboardManager.current
@@ -636,6 +696,7 @@ private fun FormattedBlockPane(
         .padding(editorTheme.contentPadding ?: 16.dp)) {
         var pendingRendered = false
         blocks.forEach { block ->
+            val bringIntoView = remember(block.id) { BringIntoViewRequester() }
             if (!pendingRendered && pendingExit != null && pendingExit.offset < block.range.min) {
                 PendingEmptyParagraphField(controller, Modifier.fillMaxWidth().padding(bottom = 10.dp))
                 pendingRendered = true
@@ -644,6 +705,12 @@ private fun FormattedBlockPane(
                 block.kind in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST)) pendingRendered = true
             val custom = customBlockMatcher?.invoke(block) == true &&
                 (customBlockBuilder != null || customBlockEditorBuilder != null)
+            LaunchedEffect(searchUi.active?.sourceRange, block.id, custom) {
+                if (!custom && searchUi.active?.target?.blockId == block.id) {
+                    withFrameNanos { }
+                    bringIntoView.bringIntoView()
+                }
+            }
             if (custom) {
                 val sourceSnapshot = controller.text
                 val replace: (String) -> Boolean = { markdown ->
@@ -677,7 +744,7 @@ private fun FormattedBlockPane(
             val enclosedTextBlock = textEndpoints?.takeIf { it.source == controller.text }
                 ?.containsCompleteBlock(blocks, block.id) == true
             Surface(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).bringIntoViewRequester(bringIntoView)
                     .border(1.dp, editorTheme.blockBorderColor ?: MaterialTheme.colorScheme.outlineVariant,
                         RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp))
                     .clip(RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp)),
@@ -795,6 +862,7 @@ private fun FormattedBlockPane(
                             else null
                         val decorated = AnnotatedString.Builder(inline?.annotated(MaterialTheme.colorScheme.primary)
                             ?: AnnotatedString(editableText)).apply {
+                            highlightSearch(searchUi.ranges(FormattedSearchTarget.Text(block.id)), searchColor)
                             textEndpoints?.visibleRange(blocks, block.id, visibleLength)?.let { range ->
                                 addStyle(SpanStyle(background = editorTheme.selectionColor
                                     ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
@@ -892,8 +960,11 @@ private fun FormattedBlockPane(
                             }
                         }
                     } else {
+                        val displayed = AnnotatedString.Builder(block.source).apply {
+                            highlightSearch(searchUi.ranges(FormattedSearchTarget.Raw(block.id)), searchColor)
+                        }.toAnnotatedString()
                         Text(
-                            block.source,
+                            displayed,
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1053,10 +1124,13 @@ private fun FormattedQuote(
     onEnd: (MarkdownFormattedTextPosition) -> Unit,
 ) {
     val theme = LocalMarkdownEditorTheme.current
+    val searchUi = LocalFormattedSearch.current
     val blocks = controller.semanticDocument().blocks
     val linkColor = MaterialTheme.colorScheme.primary
     var activeLine by remember(quote.block.id) { mutableIntStateOf(-1) }
     quote.lines.forEach { line ->
+        val target = FormattedSearchTarget.QuoteLine(quote.block.id, line.index)
+        val searchFocusRequester = remember(quote.block.id, line.index) { FocusRequester() }
         val inline = line.inline(controller.enableWikilinks)
         var draft by remember(quote.block.id, line.index) {
             mutableStateOf(TextFieldValue(inline.visible, TextRange.Zero))
@@ -1069,7 +1143,14 @@ private fun FormattedQuote(
                         draft.selection.end.coerceIn(0, length)))
             }
         }
+        LaunchedEffect(searchUi.navigationId) {
+            if (searchUi.navigationId > 0 && searchUi.active?.target == target) {
+                draft = draft.copy(selection = searchUi.active.visibleRange)
+                searchFocusRequester.requestFocus()
+            }
+        }
         val decorated = AnnotatedString.Builder(inline.annotated(linkColor)).apply {
+            highlightSearch(searchUi.ranges(target), linkColor.copy(alpha = 0.22f))
             endpoints?.quoteVisibleRange(blocks, quote.block.id, line.index, inline.visible.length)?.let { range ->
                 addStyle(SpanStyle(background = theme.selectionColor ?: linkColor.copy(alpha = 0.28f)),
                     range.min, range.max)
@@ -1091,7 +1172,8 @@ private fun FormattedQuote(
                         draft = TextFieldValue(inline.visible, TextRange(next.selection.end.coerceIn(0, length)))
                     }
                 },
-                modifier = Modifier.weight(1f).testTag("formatted-quote-line-${quote.block.id}-${line.index}")
+                modifier = Modifier.weight(1f).focusRequester(searchFocusRequester)
+                    .testTag("formatted-quote-line-${quote.block.id}-${line.index}")
                     .onFocusChanged { if (it.isFocused) activeLine = line.index },
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(linkColor),
@@ -1236,6 +1318,7 @@ private fun FormattedListTextField(
     onSetEnd: (MarkdownFormattedTextPosition) -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
+    val searchUi = LocalFormattedSearch.current
     val inline = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks)
     val active = controller.activeFormattedBlockId == blockId && controller.activeFormattedListPath == path &&
         controller.activeFormattedListLine == lineIndex
@@ -1255,6 +1338,8 @@ private fun FormattedListTextField(
     }
     val blocks = controller.semanticDocument().blocks
     val decorated = AnnotatedString.Builder(inline.annotated(MaterialTheme.colorScheme.primary)).apply {
+        highlightSearch(searchUi.ranges(FormattedSearchTarget.ListLine(blockId, path, lineIndex)),
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
         textEndpoints?.listVisibleRange(blocks, blockId, path, lineIndex, inline.visible.length, list)?.let { range ->
             addStyle(SpanStyle(background = editorTheme.selectionColor
                 ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
@@ -1318,20 +1403,30 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                            onSetStart: (MarkdownFormattedTextPosition) -> Unit,
                            onSetEnd: (MarkdownFormattedTextPosition) -> Unit) {
     val editorTheme = LocalMarkdownEditorTheme.current
+    val searchUi = LocalFormattedSearch.current
     val blocks = controller.semanticDocument().blocks
     Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
         .padding(editorTheme.tablePadding ?: 12.dp)) {
         fun displayCell(raw: String) = raw.replace("\\|", "|")
         @Composable fun cell(raw: String, header: Boolean, rowIndex: Int, columnIndex: Int) {
             val selectedRow = if (header) 0 else rowIndex + 1
+            val searchTarget = FormattedSearchTarget.TableCell(blockId, selectedRow, columnIndex)
+            val searchFocusRequester = remember(blockId, selectedRow, columnIndex) { FocusRequester() }
             val cellPosition = MarkdownTableCellPosition(selectedRow, columnIndex)
             val visible = displayCell(raw)
             var cellSelection by remember(blockId, selectedRow, columnIndex) { mutableStateOf(TextRange(visible.length)) }
             var focused by remember(blockId, selectedRow, columnIndex) { mutableStateOf(false) }
+            LaunchedEffect(searchUi.navigationId) {
+                if (searchUi.navigationId > 0 && searchUi.active?.target == searchTarget) {
+                    cellSelection = searchUi.active.visibleRange
+                    searchFocusRequester.requestFocus()
+                }
+            }
             val safeSelection = TextRange(cellSelection.start.coerceIn(0, visible.length),
                 cellSelection.end.coerceIn(0, visible.length))
             val textTracker = rememberFormattedTextFieldTracker(textPositions, blockId, controller.text, visible, cellPosition)
             val decorated = AnnotatedString.Builder(visible).apply {
+                highlightSearch(searchUi.ranges(searchTarget), MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
                 textEndpoints?.tableVisibleRange(blocks, blockId, cellPosition, visible.length)?.let { range ->
                     addStyle(SpanStyle(background = editorTheme.selectionColor
                         ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
@@ -1361,7 +1456,7 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                                 it.replaceCell(rowIndex, columnIndex, next.text, header)
                             }) cellSelection = next.selection
                     },
-                    modifier = Modifier.fillMaxWidth().then(textTracker.modifier)
+                    modifier = Modifier.fillMaxWidth().then(textTracker.modifier).focusRequester(searchFocusRequester)
                         .onFocusChanged { focused = it.isFocused }
                         .testTag("formatted-table-text-$blockId-$selectedRow-$columnIndex"),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(

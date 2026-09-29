@@ -184,6 +184,22 @@ class MarkdownEditorController(
         if (formattedBlockFocusTarget == blockId) formattedBlockFocusTarget = null
     }
 
+    /** Keeps Find in Formatted mode and activates an editable visible-text field when available. */
+    internal fun activateFormattedSearchMatch(match: FormattedSearchMatch) {
+        setSelection(match.sourceRange.min, match.sourceRange.max)
+        when (val target = match.target) {
+            is FormattedSearchTarget.Text -> {
+                setFormattedSelection(target.blockId, match.visibleRange)
+                formattedBlockFocusTarget = target.blockId
+            }
+            is FormattedSearchTarget.ListLine -> {
+                setFormattedListSelection(target.blockId, target.path, target.lineIndex, match.visibleRange)
+                formattedListFocusTarget = target.path to target.lineIndex
+            }
+            else -> Unit // Quote and table fields manage their local selection in the Compose pane.
+        }
+    }
+
     fun undo(): Boolean {
         if (!canUndo) return false
         redoStack.addLast(snapshot())
@@ -1304,6 +1320,8 @@ class MarkdownEditorController(
     }
 
     internal fun clearSourceFocusRequest() { sourceFocusRequested = false }
+
+    internal fun requestSourceFocus() { sourceFocusRequested = true }
 
     /** The old field selection resolves repeated-prefix paste that a text-only diff cannot locate. */
     private fun listLineInputChange(before: String, after: String, previousSelection: TextRange?): Pair<TextRange, String> {

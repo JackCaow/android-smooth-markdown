@@ -50,6 +50,15 @@ internal class MarkdownInlineEditing private constructor(
         return if (offset == 0) starts.firstOrNull() ?: 0 else ends[offset - 1]
     }
 
+    /** Exact source characters underlying a non-empty visible range, excluding its opening delimiters. */
+    fun sourceRangeForVisible(range: TextRange): TextRange? {
+        if (range.min < 0 || range.max > visible.length || range.min >= range.max ||
+            !validUtf16Boundary(range.min) || !validUtf16Boundary(range.max)) return null
+        val start = starts.getOrNull(range.min) ?: return null
+        val end = ends.getOrNull(range.max - 1) ?: return null
+        return TextRange(start, end).takeIf { it.min < it.max }
+    }
+
     /**
      * Split a visible selection into standalone Markdown fragments. Delimiters active at either
      * edge are closed or reopened so bold, italic, and link text outside a block paste survives.

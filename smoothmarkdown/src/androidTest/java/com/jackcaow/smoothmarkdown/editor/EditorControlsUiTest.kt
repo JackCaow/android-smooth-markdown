@@ -76,8 +76,9 @@ class EditorControlsUiTest {
 
         compose.onNodeWithTag("editor-find").performClick()
         compose.onNodeWithTag("editor-search-query").performTextInput("alpha")
-        compose.onNodeWithTag("editor-search-count").assertTextEquals("2 matches")
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("1/2")
         compose.onNodeWithTag("editor-search-next").performClick()
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("2/2")
         compose.runOnIdle {
             assertEquals(MarkdownEditorMode.SOURCE, controller.mode)
             assertEquals("Alpha beta alpha", controller.text)
@@ -100,7 +101,7 @@ class EditorControlsUiTest {
         }
         compose.onNodeWithTag("editor-search-query").assertExists()
         compose.onNodeWithTag("editor-search-query").performTextInput("alpha")
-        compose.onNodeWithTag("editor-search-count").assertTextEquals("2 matches")
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("1/2")
 
         compose.onNodeWithTag("editor-search-query").performKeyInput {
             keyDown(Key.CtrlLeft)
@@ -123,5 +124,24 @@ class EditorControlsUiTest {
             keyUp(Key.CtrlLeft)
         }
         compose.onNodeWithTag("editor-focus-mode").assertExists()
+    }
+
+    @Test fun formattedFindSearchesVisibleTextAndNavigatesWithoutLeavingFormattedMode() {
+        val source = "# **Alpha** [link](https://alpha.example)\n\n- alpha"
+        val controller = MarkdownEditorController(source).apply { mode = MarkdownEditorMode.FORMATTED }
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithTag("editor-find").performClick()
+        compose.onNodeWithTag("editor-search-query").performTextInput("alpha")
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("1/2")
+        compose.onNodeWithTag("editor-search-next").performClick()
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("2/2")
+        compose.runOnIdle {
+            assertEquals(MarkdownEditorMode.FORMATTED, controller.mode)
+            assertEquals("alpha", controller.selectedText)
+            check(!controller.canUndo)
+        }
+        compose.onNodeWithTag("editor-search-close").performClick()
+        compose.onNodeWithTag("editor-search-query").assertDoesNotExist()
     }
 }
