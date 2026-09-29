@@ -23,16 +23,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.GregorianCalendar
-import java.util.Locale
 import java.util.TimeZone
-
-private fun formatDay(day: Long): String = SimpleDateFormat("MMM d, yyyy", Locale.US).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}.format(Date(day * 86_400_000L))
 
 private fun currentLocalDay(): Long {
     val local = Calendar.getInstance()
@@ -51,6 +44,7 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
     val accent = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surfaceVariant
     val todayX = placement.todayMarkerX(currentLocalDay(), data.todayMarker)
+    val calendarTicks = placement.calendarTicks()
     Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
         Box(Modifier.size(layout.width.dp, layout.height.dp)) {
             Canvas(Modifier.fillMaxSize()) {
@@ -58,9 +52,15 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                 val chartRight = (placement.chartX + placement.chartWidth).dp.toPx()
                 val top = (placement.headerY + 48f).dp.toPx()
                 val bottom = (layout.height - 20f).dp.toPx()
-                for (step in 0..5) {
-                    val x = chartLeft + (chartRight - chartLeft) * step / 5f
-                    drawLine(foreground.copy(alpha = 0.18f), Offset(x, top), Offset(x, bottom), 1.dp.toPx())
+                val headerTop = placement.headerY.dp.toPx()
+                val headerBottom = (placement.headerY + 48f).dp.toPx()
+                drawLine(foreground.copy(alpha = 0.22f), Offset(chartLeft, headerBottom),
+                    Offset(chartRight, headerBottom), 1.dp.toPx())
+                calendarTicks.forEach { tick ->
+                    val x = tick.x.dp.toPx()
+                    drawLine(foreground.copy(alpha = if (tick.tier == MermaidGanttTickTier.MONTH) 0.32f else 0.18f),
+                        Offset(x, headerTop), Offset(x, headerBottom),
+                        (if (tick.tier == MermaidGanttTickTier.MONTH) 1.5f else 1f).dp.toPx())
                 }
                 placement.tasks.forEachIndexed { index, task ->
                     if (index % 2 == 0) {
@@ -99,11 +99,18 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                 Text(it, Modifier.offset(16.dp, 10.dp).width((layout.width - 32f).dp),
                     color = foreground, fontWeight = FontWeight.Bold, maxLines = 1)
             }
-            Text(formatDay(placement.minDay), Modifier.offset(placement.chartX.dp, placement.headerY.dp),
-                color = foreground, style = MaterialTheme.typography.labelSmall)
-            Text(formatDay(placement.maxDay),
-                Modifier.offset((placement.chartX + placement.chartWidth - 90f).dp, placement.headerY.dp),
-                color = foreground, style = MaterialTheme.typography.labelSmall)
+            calendarTicks.filter { it.label.isNotEmpty() }.forEach { tick ->
+                Text(tick.label,
+                    Modifier.offset((tick.x + 3f).dp,
+                        (placement.headerY + when (tick.tier) {
+                            MermaidGanttTickTier.MONTH -> if (calendarTicks.any { it.tier != MermaidGanttTickTier.MONTH }) 3f else 16f
+                            MermaidGanttTickTier.DAY, MermaidGanttTickTier.WEEK -> 28f
+                        }).dp)
+                        .width((if (tick.tier == MermaidGanttTickTier.DAY) 28f else 72f).dp),
+                    color = foreground, style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (tick.tier == MermaidGanttTickTier.MONTH) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             todayX?.let { x ->
                 Text("Today", Modifier.offset((x - 18f).dp, (placement.headerY + 31f).dp)
                     .background(Color(0xFFE91E63).copy(alpha = 0.1f)),
