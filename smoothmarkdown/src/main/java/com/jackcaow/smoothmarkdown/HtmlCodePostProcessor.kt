@@ -50,7 +50,7 @@ internal class HtmlCodePostProcessor(private val source: String) {
             else parent.sourceSpans.lastOrNull()?.let { it.inputIndex + it.length }
         if (contentEnd == null || contentEnd !in contentStart..source.length) return null
 
-        val replacement = Code(source.substring(contentStart, contentEnd))
+        val replacement = Code(inlineSource(parent, contentStart, contentEnd))
         open.insertBefore(replacement)
         var current: Node? = open
         while (current != null) {
@@ -60,6 +60,25 @@ internal class HtmlCodePostProcessor(private val source: String) {
             current = next
         }
         return replacement
+    }
+
+    private fun inlineSource(parent: Node, start: Int, end: Int): String {
+        val spans = parent.sourceSpans
+        if (spans.size < 2) return source.substring(start, end)
+        return buildString {
+            var previousEnd = start
+            for (span in spans) {
+                val segmentStart = maxOf(start, span.inputIndex)
+                val segmentEnd = minOf(end, span.inputIndex + span.length)
+                if (segmentStart >= segmentEnd) continue
+                if (segmentStart > previousEnd && isNotEmpty()) {
+                    val gap = source.substring(previousEnd, segmentStart)
+                    append(if ("\r\n" in gap) "\r\n" else "\n")
+                }
+                append(source, segmentStart, segmentEnd)
+                previousEnd = segmentEnd
+            }
+        }
     }
 
     private fun isOpeningCode(node: HtmlInline): Boolean = SafeHtml.lexTag(node.literal)?.let {

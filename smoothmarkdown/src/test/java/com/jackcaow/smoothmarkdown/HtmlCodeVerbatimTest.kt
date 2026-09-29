@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import org.commonmark.node.Code
+import org.commonmark.node.BlockQuote
 import org.commonmark.node.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,5 +59,10 @@ class HtmlCodeVerbatimTest {
         assertEquals("**body**", inlineText(details.body.single() as Paragraph, enableHtml = true).text)
         val plain = parseMarkdown("<code>**body**</code>").firstChild as Paragraph
         assertEquals("<code>body</code>", inlineText(plain, enableHtml = false).text)
+    }
+
+    @Test fun quotedMultilineCodeExcludesQuoteMarkers() {
+        val quote = parseMarkdown("> <code>a\n> **b**</code>", enableHtml = true).firstChild as BlockQuote
+        assertEquals("a\n**b**", inlineText(quote.firstChild as Paragraph, enableHtml = true).text)
     }
 }
