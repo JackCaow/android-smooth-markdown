@@ -991,6 +991,19 @@ private fun FormattedBlockPane(
                     textSelectionError = copied == null
                     if (copied != null) clipboard.setText(AnnotatedString(copied))
                 }, enabled = range != null, modifier = Modifier.testTag("formatted-text-copy")) { Text("Copy Markdown") }
+                listOf(
+                    Triple("Bold", MarkdownEditorCommand.BOLD, "bold"),
+                    Triple("Italic", MarkdownEditorCommand.ITALIC, "italic"),
+                    Triple("Strike", MarkdownEditorCommand.STRIKETHROUGH, "strike"),
+                    Triple("Code", MarkdownEditorCommand.INLINE_CODE, "code"),
+                ).forEach { (label, command, tag) ->
+                    TextButton(onClick = {
+                        textSelectionError = range?.let {
+                            controller.applyInlineCommandToFormattedTextSelection(it, command)
+                        } != true
+                        if (!textSelectionError) textEndpoints = null
+                    }, enabled = range != null, modifier = Modifier.testTag("formatted-text-$tag")) { Text(label) }
+                }
                 TextButton(onClick = {
                     textSelectionError = range?.let(controller::deleteFormattedTextSelection) != true
                     if (!textSelectionError) textEndpoints = null
