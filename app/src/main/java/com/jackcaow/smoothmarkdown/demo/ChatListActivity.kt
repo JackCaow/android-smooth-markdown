@@ -272,10 +272,12 @@ private fun ChatBubble(message: ChatMessage, dark: Boolean, onLinkClick: (String
             Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                 if (message.streamSession != null) {
                     StreamMarkdown(prefixes = message.streamSession.prefixes,
-                        styleSheet = style, onLinkClick = onLinkClick, scrollable = false)
+                        styleSheet = style, onLinkClick = onLinkClick, scrollable = false,
+                        useEnhancedComponents = !message.user)
                 } else if (message.content.isNotEmpty()) {
                     SmoothMarkdown(markdown = message.content, styleSheet = style,
-                        scrollable = false, onLinkClick = onLinkClick)
+                        scrollable = false, onLinkClick = onLinkClick,
+                        useEnhancedComponents = !message.user)
                 }
                 Text(
                     if (System.currentTimeMillis() - message.timestamp < 30_000) "Just now" else "Earlier",

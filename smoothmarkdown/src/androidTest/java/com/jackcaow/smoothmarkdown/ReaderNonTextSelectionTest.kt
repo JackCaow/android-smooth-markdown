@@ -29,7 +29,8 @@ class ReaderNonTextSelectionTest {
         compose.setContent {
             MaterialTheme {
                 SmoothMarkdown("Before.\n\n```kotlin\nfirst()\n```\n\nAfter.",
-                    selectable = false, selectionController = controller)
+                    selectable = false, selectionController = controller,
+                    useEnhancedComponents = true)
             }
         }
         compose.onNodeWithText("Copy").assertHasClickAction()
@@ -46,7 +47,7 @@ class ReaderNonTextSelectionTest {
         compose.setContent {
             MaterialTheme {
                 SmoothMarkdown(source, selectable = true, selectionController = controller,
-                    codeBlockOptions = options)
+                    codeBlockOptions = options, useEnhancedComponents = true)
             }
         }
         for (showButton in listOf(true, false)) {
