@@ -1,0 +1,42 @@
+name: Verify Android library and Demo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out Android
+        uses: actions/checkout@v7
+        with:
+          path: android-smooth-markdown
+      - name: Check out Flutter fixture source
+        uses: actions/checkout@v7
+        with:
+          repository: JackCaow/flutter-smooth-markdown
+          ref: 80e6bb608389c2f8849ff381cdd173eae5e891b7
+          path: flutter-smooth-markdown
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Install Android API 37
+        run: sdkmanager 'platforms;android-37.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Check Flutter Demo fixtures
+        working-directory: android-smooth-markdown
+        run: python3 tools/check_flutter_example_parity.py
+      - name: Test library and Demo; assemble Demo
+        working-directory: android-smooth-markdown
+        run: ./gradlew :smoothmarkdown:testDebugUnitTest :app:testDebugUnitTest :app:assembleDebug --no-daemon
