@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown
 import org.commonmark.node.CustomBlock
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
+import org.commonmark.node.SourceSpan
 import org.commonmark.parser.InlineParser
 import org.commonmark.parser.SourceLine
 import org.commonmark.parser.SourceLines
@@ -14,6 +15,10 @@ import org.commonmark.parser.block.MatchedBlockParser
 import org.commonmark.parser.block.ParserState
 
 internal class DetailsNode(val isOpen: Boolean) : CustomBlock() {
+    var summarySource: String = ""
+        internal set
+    var bodySource: String = ""
+        internal set
     var summary: List<Node> = emptyList()
         internal set
     var body: List<Node> = emptyList()
@@ -84,16 +89,19 @@ private class DetailsParser(isOpen: Boolean) : AbstractBlockParser() {
         }
         summaryText = summaryLines.filter { it.isNotEmpty() }.joinToString(" ")
         bodyMarkdown = bodyLines.joinToString("\n")
+        details.summarySource = summaryText
+        details.bodySource = bodyMarkdown
     }
 
     override fun parseInlines(inlineParser: InlineParser) {
         val summary = Paragraph()
         if (summaryText.isNotEmpty()) {
-            inlineParser.parse(SourceLines.of(SourceLine.of(summaryText, null)), summary)
+            summary.addSourceSpan(SourceSpan.of(0, 0, 0, summaryText.length))
+            inlineParser.parse(SourceLines.of(SourceLine.of(summaryText, SourceSpan.of(0, 0, 0, summaryText.length))), summary)
             FootnoteReferencePostProcessor(summaryText).process(summary)
         }
         details.summary = listOf(summary)
-        details.body = if (bodyMarkdown.isEmpty()) emptyList() else parseMarkdown(bodyMarkdown).children()
+        details.body = if (bodyMarkdown.isEmpty()) emptyList() else parseMarkdown(bodyMarkdown, enableCache = false).children()
     }
 
     private fun Node.children(): List<Node> = buildList {

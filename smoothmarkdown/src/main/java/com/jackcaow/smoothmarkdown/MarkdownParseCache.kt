@@ -15,21 +15,23 @@ object SmoothMarkdownCache {
 
     fun clear() = cache.clear()
 
-    internal fun get(markdown: String): Node? = cache.get(markdown)
+    internal fun get(markdown: String, enableHtml: Boolean = false): Node? = cache.get(markdown, enableHtml)
 
-    internal fun put(markdown: String, document: Node) = cache.put(markdown, document)
+    internal fun put(markdown: String, document: Node, enableHtml: Boolean = false) = cache.put(markdown, document, enableHtml)
 }
 
 internal class LruMarkdownParseCache(private val maxSize: Int) {
     init { require(maxSize > 0) }
 
-    private val entries = object : LinkedHashMap<String, Node>(maxSize, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Node>): Boolean = size > maxSize
+    private val entries = object : LinkedHashMap<Pair<String, Boolean>, Node>(maxSize, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<String, Boolean>, Node>): Boolean = size > maxSize
     }
 
-    @Synchronized fun get(markdown: String): Node? = entries[markdown]
+    @Synchronized fun get(markdown: String, enableHtml: Boolean = false): Node? = entries[markdown to enableHtml]
 
-    @Synchronized fun put(markdown: String, document: Node) { entries[markdown] = document }
+    @Synchronized fun put(markdown: String, document: Node, enableHtml: Boolean = false) {
+        entries[markdown to enableHtml] = document
+    }
 
     @Synchronized fun clear() { entries.clear() }
 
