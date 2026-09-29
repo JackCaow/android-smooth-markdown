@@ -148,7 +148,9 @@ internal fun NativeMath(latex: String, displayMode: Boolean, modifier: Modifier 
 @Composable
 internal fun BlockMath(node: BlockMathNode) {
     if (node.latex.isEmpty()) return
-    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-        NativeMath(node.latex, displayMode = true)
+    SelectableNonTextBlock {
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+            NativeMath(node.latex, displayMode = true)
+        }
     }
 }

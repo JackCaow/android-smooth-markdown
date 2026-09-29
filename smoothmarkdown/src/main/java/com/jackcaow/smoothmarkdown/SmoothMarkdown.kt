@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
+import android.content.ClipData
 import java.net.URI
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
@@ -62,6 +63,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -227,6 +231,7 @@ fun SmoothMarkdown(
         LocalMarkdownSelectionOptions provides MarkdownSelectionOptions(
             selectable = selectable || selectableAsSingleRegion,
             outerRegion = selectable || selectableAsSingleRegion,
+            nonTextSelectionAnchor = selectable && !selectableAsSingleRegion,
             onTextPositioned = onTextPositioned,
         ),
     ) {
@@ -260,15 +265,64 @@ private fun MarkdownSelectionRegion(
     controller: SmoothSelectionController?,
     content: @Composable () -> Unit,
 ) {
-    if (controller == null) {
-        SelectionContainer { content() }
-    } else {
-        val state = rememberSelectionState()
-        DisposableEffect(controller, state) {
-            controller.attach(state)
-            onDispose { controller.detach(state) }
+    val clipboard = LocalClipboard.current
+    val anchorRegistry = remember { NonTextAnchorRegistry() }
+    val filteringClipboard = remember(clipboard, anchorRegistry) { OverlayFilteringClipboard(clipboard, anchorRegistry) }
+    CompositionLocalProvider(LocalClipboard provides filteringClipboard, LocalNonTextAnchorRegistry provides anchorRegistry) {
+        if (controller == null) {
+            SelectionContainer { content() }
+        } else {
+            val state = rememberSelectionState()
+            DisposableEffect(controller, state) {
+                controller.attach(state)
+                onDispose { controller.detach(state) }
+            }
+            SelectionContainer(state = state) { content() }
         }
-        SelectionContainer(state = state) { content() }
+    }
+}
+
+/** Remove complete rows and edge fragments belonging to this mounted reader's random anchors. */
+internal fun removeNonTextSelectionOverlayLines(text: String, anchors: Set<String>): String = text.split('\n')
+    .mapNotNull { line ->
+        var clean = line
+        for (anchor in anchors) {
+            clean = clean.replace(anchor, "")
+            clean = removeAnchorEdgeFragment(clean, anchor, leading = true)
+            clean = removeAnchorEdgeFragment(clean, anchor, leading = false)
+        }
+        clean.takeUnless { it.isEmpty() && line.isNotEmpty() }
+    }
+    .joinToString("\n")
+
+/** At least 16 random anchor characters must match at a line edge. */
+private fun removeAnchorEdgeFragment(line: String, anchor: String, leading: Boolean): String {
+    if (line.length < 16) return line
+    if (anchor.contains(line)) return ""
+    for (length in minOf(line.length, anchor.length) downTo 16) {
+        if (leading && line.startsWith(anchor.takeLast(length))) return line.drop(length)
+        if (!leading && line.endsWith(anchor.take(length))) return line.dropLast(length)
+    }
+    return line
+}
+
+internal class OverlayFilteringClipboard(private val delegate: Clipboard, private val anchors: NonTextAnchorRegistry) : Clipboard {
+    override suspend fun getClipEntry(): ClipEntry? = delegate.getClipEntry()
+
+    override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+        val data = clipEntry?.clipData
+        if (data != null && data.itemCount == 1 && data.description.mimeTypeCount == 1 &&
+            data.description.getMimeType(0) == "text/plain") {
+            val original = data.getItemAt(0).text?.toString()
+            if (original != null) {
+                val filtered = removeNonTextSelectionOverlayLines(original, anchors.snapshot())
+                if (filtered != original) {
+                    delegate.setClipEntry(ClipEntry(ClipData.newPlainText(data.description.label, filtered)))
+                    return
+                }
+            }
+        }
+        delegate.setClipEntry(clipEntry)
     }
 }
 
@@ -370,11 +424,13 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 )
             }
         }
-        is ThematicBreak -> HorizontalDivider(
-            Modifier.padding(vertical = sheet.blockSpacing),
-            thickness = sheet.horizontalRuleThickness,
-            color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
-        )
+        is ThematicBreak -> SelectableNonTextBlock {
+            HorizontalDivider(
+                Modifier.padding(vertical = sheet.blockSpacing),
+                thickness = sheet.horizontalRuleThickness,
+                color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
+            )
+        }
         is HtmlBlock -> {
             val htmlImage = if (enableHtml) SafeHtml.imageTag(node.literal) else null
             val imageAlt = if (enableHtml) SafeHtml.imageAlt(node.literal) else null
@@ -382,11 +438,13 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             when {
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
                 imageAlt != null -> MarkdownText(AnnotatedString(imageAlt), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, textAlign)
-                html is SafeHtml.Block.Rule -> HorizontalDivider(
-                    Modifier.padding(vertical = sheet.blockSpacing),
-                    thickness = sheet.horizontalRuleThickness,
-                    color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
-                )
+                html is SafeHtml.Block.Rule -> SelectableNonTextBlock {
+                    HorizontalDivider(
+                        Modifier.padding(vertical = sheet.blockSpacing),
+                        thickness = sheet.horizontalRuleThickness,
+                        color = sheet.ruleColor ?: MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
                 html is SafeHtml.Block.Container -> {
                     val alignment = when (html.alignment) {
                         "left" -> TextAlign.Left
@@ -686,19 +744,23 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
     var imageModifier: Modifier = Modifier
     imageModifier = if (image.width != null) imageModifier.width(image.width.dp) else imageModifier.fillMaxWidth()
     if (image.height != null) imageModifier = imageModifier.height(image.height.dp)
-    Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-        .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
-        .clickable(role = Role.Button, onClickLabel = "Open image") {
-            dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
-        }) {
-        if (imageBuilder != null) Box(imageModifier) { imageBuilder(url, image.alt, image.title) }
-        else SubcomposeAsyncImage(
-            model = imageRequest(url, model),
-            contentDescription = null,
-            modifier = imageModifier,
-            loading = { androidx.compose.material3.CircularProgressIndicator() },
-            error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
-        )
+    SelectableNonTextBlock(onClick = {
+        dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
+    }) {
+        Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
+            .clickable(role = Role.Button, onClickLabel = "Open image") {
+                dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
+            }) {
+            if (imageBuilder != null) Box(imageModifier) { imageBuilder(url, image.alt, image.title) }
+            else SubcomposeAsyncImage(
+                model = imageRequest(url, model),
+                contentDescription = null,
+                modifier = imageModifier,
+                loading = { androidx.compose.material3.CircularProgressIndicator() },
+                error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
+            )
+        }
     }
 }
 
