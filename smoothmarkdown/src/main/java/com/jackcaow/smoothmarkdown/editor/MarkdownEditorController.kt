@@ -61,6 +61,8 @@ class MarkdownEditorController(
     val parserPlugins: ParserPluginRegistry? = null,
 ) {
     var mode by mutableStateOf(MarkdownEditorMode.SOURCE)
+    internal var sourceFocusRequested by mutableStateOf(false)
+        private set
     /** Controls editor parsing, suggestions and commands for Scratch-style note links. */
     var enableWikilinks by mutableStateOf(true)
     var value by mutableStateOf(TextFieldValue(initialText, TextRange(initialText.length)))
@@ -861,6 +863,31 @@ class MarkdownEditorController(
         formattedBlockFocusTarget = null
         return true
     }
+
+    /** Preserve a multiline paste that the formatted list fields cannot represent, then show its source. */
+    internal fun replaceFormattedListLineWithSourcePaste(blockId: String, itemPath: List<Int>, lineIndex: Int,
+                                                         nextVisible: String, previousSelection: TextRange? = null): Boolean {
+        if (mode != MarkdownEditorMode.FORMATTED || ('\n' !in nextVisible && '\r' !in nextVisible) ||
+            !hasWellFormedUtf16(nextVisible)) return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val raw = list.lineContent(itemPath, lineIndex) ?: return false
+        val inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
+        val (selectedRange, pasted) = listLineInputChange(inline.visible, nextVisible, previousSelection)
+        if ('\n' !in pasted && '\r' !in pasted) return false
+        val split = inline.splitVisibleRange(selectedRange) ?: return false
+        val edit = list.replaceLineForSourcePaste(itemPath, lineIndex, split.before, pasted, split.after) ?: return false
+        replaceRange(block.range.min, block.range.max, edit.source, selectedStart = edit.selectionOffset)
+        activeFormattedBlockId = null
+        activeFormattedListPath = null
+        formattedListFocusTarget = null
+        formattedBlockFocusTarget = null
+        sourceFocusRequested = true
+        mode = MarkdownEditorMode.SOURCE
+        return true
+    }
+
+    internal fun clearSourceFocusRequest() { sourceFocusRequested = false }
 
     /** The old field selection resolves repeated-prefix paste that a text-only diff cannot locate. */
     private fun listLineInputChange(before: String, after: String, previousSelection: TextRange?): Pair<TextRange, String> {
