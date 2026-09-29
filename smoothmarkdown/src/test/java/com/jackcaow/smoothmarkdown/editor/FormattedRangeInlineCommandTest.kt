@@ -68,4 +68,33 @@ class FormattedRangeInlineCommandTest {
         assertTrue(controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.BOLD))
         assertEquals("| A | B |\n| --- | --- |\n| **x** |  |", controller.text)
     }
+
+    @Test fun strikethroughAndCodeRangeCommandsRoundTripWithOneUndo() {
+        val blocks = MarkdownEditorController("First\n\n# Second")
+        assertTrue(blocks.beginFormattedBlockDrag("block-0"))
+        assertTrue(blocks.extendFormattedBlockDrag("block-1"))
+        assertTrue(blocks.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.STRIKETHROUGH))
+        assertEquals("~~First~~\n\n# ~~Second~~", blocks.text)
+        assertTrue(blocks.undo())
+        assertEquals("First\n\n# Second", blocks.text)
+
+        val table = MarkdownEditorController("| A | B |\n| --- | --- |\n| x | y |")
+        assertTrue(table.beginFormattedTableCellDrag("block-0", 1, 0))
+        assertTrue(table.extendFormattedTableCellDrag("block-0", 1, 1))
+        assertTrue(table.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.INLINE_CODE))
+        assertEquals("| A | B |\n| --- | --- |\n| `x` | `y` |", table.text)
+        assertTrue(table.undo())
+        assertEquals("| A | B |\n| --- | --- |\n| x | y |", table.text)
+    }
+
+    @Test fun selectedListItemsSupportStrikethroughWithoutChangingMarkers() {
+        val original = "- first\n- second\n- third"
+        val controller = MarkdownEditorController(original)
+        assertTrue(controller.beginFormattedListItemDrag("block-0", listOf(0)))
+        assertTrue(controller.extendFormattedListItemDrag("block-0", listOf(1)))
+        assertTrue(controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.STRIKETHROUGH))
+        assertEquals("- ~~first~~\n- ~~second~~\n- third", controller.text)
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+    }
 }
