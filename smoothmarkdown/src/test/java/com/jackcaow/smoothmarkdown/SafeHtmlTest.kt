@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.commonmark.node.Paragraph
@@ -79,6 +80,56 @@ class SafeHtmlTest {
         assertEquals(10.sp, customSup.fontSize)
         assertEquals(Color.Blue, customSup.color)
         assertEquals(BaselineShift.Superscript, customSup.baselineShift)
+    }
+
+    @Test fun htmlMarkAndUnderlineUseThemeDefaultsAndKeepInlineText() {
+        val paragraph = parseMarkdown("a <mark>bright</mark> <u>under</u> <ins>inserted</ins> z", enableHtml = true).firstChild!!
+        val light = inlineRender(paragraph, enableHtml = true, styleSheet = MarkdownStyleSheet.light()).text
+        assertEquals("a bright under inserted z", light.text)
+        val mark = light.spanStyles.single { light.text.substring(it.start, it.end) == "bright" }.item
+        assertEquals(Color(0xFFFFF176), mark.background)
+        assertEquals(Color(0xDD000000), mark.color)
+        listOf("under", "inserted").forEach { word ->
+            assertEquals(TextDecoration.Underline,
+                light.spanStyles.single { light.text.substring(it.start, it.end) == word }.item.textDecoration)
+        }
+
+        val dark = inlineRender(paragraph, enableHtml = true, styleSheet = MarkdownStyleSheet.dark()).text
+        assertEquals(Color(0xFF4D4400), dark.spanStyles.single {
+            dark.text.substring(it.start, it.end) == "bright"
+        }.item.background)
+
+        val disabled = inlineRender(paragraph, enableHtml = false).text
+        assertTrue(disabled.text.contains("<mark>"))
+        assertTrue(disabled.text.contains("<u>"))
+        assertTrue(disabled.spanStyles.isEmpty())
+    }
+
+    @Test fun htmlMarkAndUnderlineAllowCompleteStylesWhileKeepingLegacyHighlightColor() {
+        val paragraph = parseMarkdown("a <mark>color <u>nested</u></mark> <ins>inserted</ins>", enableHtml = true).firstChild!!
+        val style = MarkdownStyleSheet(
+            highlightColor = Color.Yellow,
+            highlightStyle = SpanStyle(background = Color.Magenta, color = Color.Black, fontWeight = FontWeight.Bold),
+            underlineStyle = SpanStyle(color = Color.Red, textDecoration = TextDecoration.LineThrough),
+        )
+        val rendered = inlineRender(paragraph, enableHtml = true, styleSheet = style).text
+        assertEquals("a color nested inserted", rendered.text)
+        val highlight = rendered.spanStyles.first { rendered.text.substring(it.start, it.end) == "color " }.item
+        assertEquals(Color.Magenta, highlight.background)
+        assertEquals(Color.Black, highlight.color)
+        assertEquals(FontWeight.Bold, highlight.fontWeight)
+        listOf("nested", "inserted").forEach { word ->
+            val underline = rendered.spanStyles.first { span ->
+                rendered.text.substring(span.start, span.end) == word && span.item.textDecoration != null
+            }.item
+            assertEquals(Color.Red, underline.color)
+            assertEquals(TextDecoration.LineThrough, underline.textDecoration)
+        }
+
+        val legacy = inlineRender(paragraph, enableHtml = true,
+            styleSheet = MarkdownStyleSheet(highlightColor = Color.Cyan)).text
+        assertEquals(Color.Cyan,
+            legacy.spanStyles.first { legacy.text.substring(it.start, it.end) == "color " }.item.background)
     }
 
     @Test fun withholdsOnlyPartialTagsOutsideCode() {
