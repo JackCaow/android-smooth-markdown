@@ -113,6 +113,10 @@ data class MarkdownStyleSheet(
     val linkStyle: SpanStyle? = null,
     /** Inline code and HTML code/kbd, merged over legacy inline-code colors. */
     val inlineCodeStyle: SpanStyle? = null,
+    /** HTML `<sub>` text style, merged over the default smaller, shifted text. */
+    val subscriptStyle: SpanStyle? = null,
+    /** HTML `<sup>` text style, merged over the default smaller, shifted text. */
+    val superscriptStyle: SpanStyle? = null,
     /** Per-edge table border; when absent, [tableBorderColor] colors a 1dp full grid. */
     val tableBorder: MarkdownTableBorder? = null,
 ) {
