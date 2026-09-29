@@ -8,10 +8,12 @@ import androidx.compose.ui.text.TextRange
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
     private var region: SelectionState? = null
+    private var anchors: NonTextAnchorRegistry? = null
     private val targets = mutableMapOf<Any, MarkdownSelectionTarget>()
 
-    /** The currently selected plain text, including visible Markdown blocks. */
-    val selectedText: String get() = region?.selectedTexts?.joinToString("") { it.text }.orEmpty()
+    /** The currently selected visible text, omitting non-text selection anchors. */
+    val selectedText: String
+        get() = region?.let { visibleSelectedText(it.selectedTexts, anchors?.snapshot().orEmpty()).text }.orEmpty()
 
     /** Select all text currently registered with the Compose selection region. */
     fun selectAll() { region?.selectAll() }
@@ -46,13 +48,15 @@ class SmoothSelectionController {
 
     internal fun removeTarget(key: Any) { targets.remove(key) }
 
-    internal fun attach(state: SelectionState) {
+    internal fun attach(state: SelectionState, anchorRegistry: NonTextAnchorRegistry) {
         region = state
+        anchors = anchorRegistry
     }
 
     internal fun detach(state: SelectionState) {
         if (region === state) {
             region = null
+            anchors = null
             targets.clear()
         }
     }

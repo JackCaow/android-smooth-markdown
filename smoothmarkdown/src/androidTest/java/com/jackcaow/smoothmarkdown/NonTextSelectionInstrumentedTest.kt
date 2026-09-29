@@ -87,15 +87,24 @@ class NonTextSelectionInstrumentedTest {
         assertTrue("overlay must be hidden from accessibility", anchors[1].fetchSemanticsNode().config.contains(SemanticsProperties.HideFromAccessibility))
         compose.runOnIdle { controller.selectAll() }
         compose.runOnIdle {
-            assertTrue("anchors absent from selection registrar: ${controller.selectedText.length}",
-                controller.selectedText.contains("smd"))
+            assertTrue("anchors absent from selection registrar",
+                selectionState(controller).selectedTexts.any { it.text.contains("smd") })
+            assertEquals("Before.\nAfter.", controller.selectedText)
             controller.clear()
         }
         anchors[0].performTouchInput { longClick() }
-        compose.runOnIdle { assertTrue("rule did not start selection: ${controller.selectedText.length}", controller.selectedText.contains("smd")) }
+        compose.runOnIdle {
+            assertTrue("rule did not start selection",
+                selectionState(controller).selectedTexts.any { it.text.contains("smd") })
+            assertTrue("rule anchor leaked to host", !controller.selectedText.contains("smd"))
+        }
         compose.runOnIdle { controller.clear() }
         anchors[1].performTouchInput { longClick() }
-        compose.runOnIdle { assertTrue("image did not start selection", controller.selectedText.contains("smd")) }
+        compose.runOnIdle {
+            assertTrue("image did not start selection",
+                selectionState(controller).selectedTexts.any { it.text.contains("smd") })
+            assertTrue("image anchor leaked to host", !controller.selectedText.contains("smd"))
+        }
         compose.runOnIdle { controller.clear() }
         compose.onNodeWithContentDescription("Diagram", useUnmergedTree = true).performTouchInput { click() }
         compose.runOnIdle { assertEquals(1, imageTaps) }

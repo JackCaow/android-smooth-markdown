@@ -381,8 +381,8 @@ private fun MarkdownSelectionRegion(
     ) {
         val state = rememberSelectionState()
         stateHolder.state = state
-        DisposableEffect(controller, state) {
-            controller?.attach(state)
+        DisposableEffect(controller, state, anchorRegistry) {
+            controller?.attach(state, anchorRegistry)
             onDispose {
                 controller?.detach(state)
                 if (stateHolder.state === state) stateHolder.state = null
