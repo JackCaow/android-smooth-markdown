@@ -30,4 +30,18 @@ class FormattedTextEndpointsTest {
         assertEquals(TextRange(3, 5), started.copy(anchor = MarkdownFormattedTextPosition("block-0", 5))
             .withFocus(MarkdownFormattedTextPosition("block-0", 3)).visibleRange(blocks, "block-0", 8))
     }
+
+    @Test fun completeInterveningListCodeAndTableAreMarkedInEitherDirection() {
+        val source = "First\n\n- item\n\n```\ncode\n```\n\n| A |\n| --- |\n| B |\n\nLast"
+        val blocks = MarkdownEditorController(source).semanticDocument().blocks
+        val forward = FormattedTextEndpoints(source, MarkdownFormattedTextPosition("block-0", 2))
+            .withFocus(MarkdownFormattedTextPosition("block-4", 2))
+        val reverse = forward.copy(anchor = forward.focus!!, focus = forward.anchor)
+        for (selected in listOf(forward, reverse)) {
+            for (index in 1..3) assertEquals(true, selected.containsCompleteBlock(blocks, "block-$index"))
+            assertEquals(false, selected.containsCompleteBlock(blocks, "block-0"))
+            assertEquals(false, selected.containsCompleteBlock(blocks, "block-4"))
+        }
+        assertEquals(false, forward.copy(focus = null).containsCompleteBlock(blocks, "block-1"))
+    }
 }

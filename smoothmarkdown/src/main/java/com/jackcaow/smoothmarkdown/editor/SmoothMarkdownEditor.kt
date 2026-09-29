@@ -670,12 +670,15 @@ private fun FormattedBlockPane(
                 }
             } else {
             val editableText = MarkdownFormattedBlock.text(block)
+            val enclosedTextBlock = textEndpoints?.takeIf { it.source == controller.text }
+                ?.containsCompleteBlock(blocks, block.id) == true
             Surface(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
                     .border(1.dp, editorTheme.blockBorderColor ?: MaterialTheme.colorScheme.outlineVariant,
                         RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp))
                     .clip(RoundedCornerShape(editorTheme.blockBorderRadius ?: 8.dp)),
-                color = if (blockSelection?.let { blocks.indexOf(block) in it.firstIndex..it.lastIndex } == true)
+                color = if (blockSelection?.let { blocks.indexOf(block) in it.firstIndex..it.lastIndex } == true ||
+                    enclosedTextBlock)
                     editorTheme.selectionColor ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 else editorTheme.blockColor ?: if (block.kind == MarkdownBlockKind.CODE) MaterialTheme.colorScheme.surfaceVariant
                     else MaterialTheme.colorScheme.surface,

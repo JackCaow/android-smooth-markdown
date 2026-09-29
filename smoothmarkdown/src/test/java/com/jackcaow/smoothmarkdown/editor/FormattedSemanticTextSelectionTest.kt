@@ -78,13 +78,59 @@ class FormattedSemanticTextSelectionTest {
         assertEquals(source, editor.text)
     }
 
-    @Test fun selectionRejectsUnsupportedInterveningBlockStaleSourceAndHalfEmojiAtomically() {
-        val source = "😀 first\n\n- item\n\n# Last"
+    @Test fun listCodeAndTableBetweenCharacterEndpointsCopyDeleteAndReplaceAsCompleteSourceBlocks() {
+        val middleBlocks = listOf(
+            "- one\n  - nested\n- two",
+            "1. one\n2. two",
+            "```kotlin\nval answer = 42\n```",
+            "| Key | Value |\n| --- | --- |\n| A | B |",
+        )
+        middleBlocks.forEach { middle ->
+            val source = "outside before\n\nLeft**bold**\n\n$middle\n\nRightTail\n\noutside after"
+            val selected = selection(source, 1, 4, 3, 5)
+            val copyEditor = MarkdownEditorController(source)
+            assertEquals("**bold**\n\n$middle\n\nRight", copyEditor.copyFormattedTextSelectionAsMarkdown(selected))
+            assertEquals(source, copyEditor.text)
+            assertFalse(copyEditor.canUndo)
+            val deleteEditor = MarkdownEditorController(source)
+            assertTrue("delete across $middle", deleteEditor.deleteFormattedTextSelection(selected))
+            assertEquals("outside before\n\nLeftTail\n\noutside after", deleteEditor.text)
+            assertTrue(deleteEditor.undo())
+            assertEquals(source, deleteEditor.text)
+            assertFalse(deleteEditor.canUndo)
+            assertTrue(deleteEditor.redo())
+            assertEquals("outside before\n\nLeftTail\n\noutside after", deleteEditor.text)
+            val replaceEditor = MarkdownEditorController(source)
+            assertTrue("replace across $middle", replaceEditor.replaceFormattedTextSelectionWithMarkdown(selected, "# Inserted"))
+            assertEquals("outside before\n\nLeft\n\n# Inserted\n\nTail\n\noutside after", replaceEditor.text)
+            assertTrue(replaceEditor.undo())
+            assertEquals(source, replaceEditor.text)
+            assertFalse(replaceEditor.canUndo)
+        }
+    }
+
+    @Test fun reverseAndBoundaryOnlySelectionsKeepInterveningSourceExact() {
+        val source = "😀 first\r\n\r\n```js\r\nconst n = 1\r\n```\r\n\r\n# Last"
+        val selected = selection(source, 0, 8, 2, 0)
         val editor = MarkdownEditorController(source)
-        val acrossList = selection(source, 0, 2, 2, 2)
-        assertNull(editor.copyFormattedTextSelectionAsMarkdown(acrossList))
-        assertFalse(editor.deleteFormattedTextSelection(acrossList))
-        assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(acrossList, "Body"))
+        val reversed = selected.copy(anchor = selected.focus, focus = selected.anchor)
+        assertEquals("```js\r\nconst n = 1\r\n```", editor.copyFormattedTextSelectionAsMarkdown(reversed))
+        assertTrue(editor.deleteFormattedTextSelection(reversed))
+        assertEquals("😀 firstLast", editor.text)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+    }
+
+    @Test fun selectionRejectsUnsupportedInterveningBlockStaleSourceAndHalfEmojiAtomically() {
+        val source = "😀 first\n\n> quote\n\n# Last"
+        val editor = MarkdownEditorController(source)
+        val acrossQuote = selection(source, 0, 2, 2, 2)
+        assertNull(editor.copyFormattedTextSelectionAsMarkdown(acrossQuote))
+        assertFalse(editor.deleteFormattedTextSelection(acrossQuote))
+        assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(acrossQuote, "Body"))
+        val endpointInQuote = selection(source, 0, 2, 1, 2)
+        assertNull(editor.copyFormattedTextSelectionAsMarkdown(endpointInQuote))
+        assertFalse(editor.deleteFormattedTextSelection(endpointInQuote))
         val halfEmoji = selection(source, 0, 1, 0, 3)
         assertFalse(editor.deleteFormattedTextSelection(halfEmoji))
         assertNull(editor.copyFormattedTextSelectionAsMarkdown(halfEmoji))
