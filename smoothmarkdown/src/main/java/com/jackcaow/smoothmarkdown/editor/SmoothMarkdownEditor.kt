@@ -619,7 +619,9 @@ private fun FormattedBlockPane(
                 listOf(selection.anchor, selection.focus).forEach { position ->
                     textPositions.cursorWindowPoint(position, controller.text)?.let { windowPoint ->
                         val local = coordinates.windowToLocal(windowPoint)
-                        drawCircle(handleColor, radius = 5.dp.toPx(), center = local)
+                        if (local.x in 0f..size.width && local.y in 0f..size.height) {
+                            drawCircle(handleColor, radius = 5.dp.toPx(), center = local)
+                        }
                     }
                 }
             }
