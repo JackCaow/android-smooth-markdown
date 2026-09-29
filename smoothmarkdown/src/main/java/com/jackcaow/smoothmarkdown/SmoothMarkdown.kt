@@ -1317,7 +1317,9 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
     val border = resolveTableBorder(sheet, MaterialTheme.colorScheme.outline)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val minimumWidth = (sheet.tableCellPadding * 2 + 1.dp) * columns
-        val tableWidth = maxOf(maxWidth, minimumWidth)
+        val viewportWidth = maxWidth.takeIf { it.value.isFinite() && it.value > 0f }
+            ?: LocalConfiguration.current.screenWidthDp.dp
+        val tableWidth = maxOf(viewportWidth, minimumWidth)
         Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
             .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
             rows.forEachIndexed { rowIndex, row ->
