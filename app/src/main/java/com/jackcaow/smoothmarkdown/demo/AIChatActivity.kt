@@ -513,7 +513,8 @@ private fun AIChatScreen(
                 text = {
                     SelectionContainer {
                         Text(message.content, modifier = Modifier.heightIn(max = 480.dp)
-                                .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()),
+                                .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())
+                                .testTag("ai-source-content"),
                             fontFamily = FontFamily.Monospace)
                     }
                 },
