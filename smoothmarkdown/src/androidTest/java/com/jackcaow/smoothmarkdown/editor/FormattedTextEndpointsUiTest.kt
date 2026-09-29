@@ -21,6 +21,37 @@ import org.junit.Test
 class FormattedTextEndpointsUiTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun quoteLineCaretButtonsCopyAndDeleteSourceBackedText() {
+        val original = "> BeforeX\n> YAfter\n> Keep"
+        val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }
+        var copied: AnnotatedString? = null
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString? = copied
+            override fun setText(annotatedString: AnnotatedString) { copied = annotatedString }
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) }
+            }
+        }
+
+        compose.onNodeWithTag("formatted-quote-line-block-0-0").performClick()
+            .performTextInputSelection(TextRange(6))
+        compose.onNodeWithTag("formatted-quote-text-start-block-0-0").performClick()
+        compose.onNodeWithTag("formatted-quote-line-block-0-1").performClick()
+            .performTextInputSelection(TextRange(1))
+        compose.onNodeWithTag("formatted-quote-text-end-block-0-1").performClick()
+        compose.onNodeWithTag("formatted-text-selection-status").performScrollTo()
+        compose.onNodeWithTag("formatted-text-copy").performClick()
+        compose.runOnIdle { assertEquals("> X\n> Y", copied?.text) }
+        compose.onNodeWithTag("formatted-text-delete").performClick()
+        compose.runOnIdle {
+            assertEquals("> BeforeAfter\n> Keep", controller.text)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+        }
+    }
+
     @Test fun continuationAndNestedCaretButtonsCopyAndDeleteWithoutTouchingRootSibling() {
         val original = "- root\n  BeforeX\n  - YAfter\n- keep"
         val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }

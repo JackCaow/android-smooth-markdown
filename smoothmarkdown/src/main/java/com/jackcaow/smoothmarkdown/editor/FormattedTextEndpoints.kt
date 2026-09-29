@@ -21,7 +21,7 @@ internal data class FormattedTextEndpoints(
         if (anchorIndex < 0 || focusIndex < 0 || index < 0) return false
         if (index !in minOf(anchorIndex, focusIndex) + 1 until maxOf(anchorIndex, focusIndex)) return false
         return blocks[index].kind in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST,
-            MarkdownBlockKind.CODE, MarkdownBlockKind.TABLE)
+            MarkdownBlockKind.CODE, MarkdownBlockKind.TABLE, MarkdownBlockKind.QUOTE)
     }
 
     /** Visible UTF-16 range to paint inside a paragraph or ATX heading. */
@@ -88,6 +88,45 @@ internal data class FormattedTextEndpoints(
             if (currentStart == lastStart) last.offset else length
         } else length
         if (start !in 0..length || finish !in start..length || start == finish) return null
+        return TextRange(start, finish)
+    }
+
+    /** Paint the selected visible characters inside one source-backed quote line. */
+    fun quoteVisibleRange(blocks: List<MarkdownDocumentBlock>, blockId: String, lineIndex: Int,
+                          length: Int): TextRange? {
+        val end = focus ?: return null
+        val blockIndex = blocks.indexOfFirst { it.id == blockId }
+        val anchorIndex = blocks.indexOfFirst { it.id == anchor.blockId }
+        val focusIndex = blocks.indexOfFirst { it.id == end.blockId }
+        if (blockIndex < 0 || anchorIndex < 0 || focusIndex < 0) return null
+        val quote = MarkdownSourceQuote.parse(blocks[blockIndex]) ?: return null
+        val current = quote.lines.getOrNull(lineIndex) ?: return null
+        fun key(position: MarkdownFormattedTextPosition, index: Int): Pair<Int, Int>? {
+            val local = if (position.quoteLineIndex != null) {
+                val source = MarkdownSourceQuote.parse(blocks[index]) ?: return null
+                val line = source.lines.getOrNull(position.quoteLineIndex) ?: return null
+                line.contentStart + position.offset
+            } else position.offset
+            return index to local
+        }
+        val firstKey = key(anchor, anchorIndex) ?: return null
+        val lastKey = key(end, focusIndex) ?: return null
+        val forward = compareValuesBy(firstKey, lastKey, { it.first }, { it.second }) <= 0
+        val first = if (forward) anchor else end
+        val last = if (forward) end else anchor
+        val firstIndex = minOf(anchorIndex, focusIndex)
+        val lastIndex = maxOf(anchorIndex, focusIndex)
+        if (blockIndex !in firstIndex..lastIndex) return null
+        val start = if (blockIndex == firstIndex && first.quoteLineIndex != null) {
+            if (lineIndex < first.quoteLineIndex) return null
+            if (lineIndex == first.quoteLineIndex) first.offset else 0
+        } else 0
+        val finish = if (blockIndex == lastIndex && last.quoteLineIndex != null) {
+            if (lineIndex > last.quoteLineIndex) return null
+            if (lineIndex == last.quoteLineIndex) last.offset else length
+        } else length
+        if (start !in 0..length || finish !in start..length || start == finish ||
+            current.content.isEmpty()) return null
         return TextRange(start, finish)
     }
     /** Paint only the displayed characters of a table cell endpoint. */

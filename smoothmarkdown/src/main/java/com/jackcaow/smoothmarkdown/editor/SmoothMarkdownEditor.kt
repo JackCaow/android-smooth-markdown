@@ -743,6 +743,21 @@ private fun FormattedBlockPane(
                                 focusManager.clearFocus()
                             })
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
+                    } else if (block.kind == MarkdownBlockKind.QUOTE) {
+                        val quote = MarkdownSourceQuote.parse(block)
+                        if (quote != null) FormattedQuote(controller, quote, textEndpoints,
+                            { position ->
+                                controller.clearFormattedBlockSelection()
+                                controller.clearFormattedListItemSelection()
+                                controller.resetFormattedTableCellSelection()
+                                textEndpoints = FormattedTextEndpoints(controller.text, position)
+                                textSelectionError = false
+                            }, { position ->
+                                textEndpoints = textEndpoints?.withFocus(position)
+                                textSelectionError = false
+                                focusManager.clearFocus()
+                            })
+                        else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
                         val rawSelection = if (controller.activeFormattedBlockId == block.id) controller.formattedSelection else TextRange.Zero
@@ -1020,6 +1035,79 @@ private fun PendingEmptyParagraphField(controller: MarkdownEditorController, mod
             Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) { inner() }
         },
     )
+}
+
+@Composable
+private fun FormattedQuote(
+    controller: MarkdownEditorController,
+    quote: MarkdownSourceQuote,
+    endpoints: FormattedTextEndpoints?,
+    onStart: (MarkdownFormattedTextPosition) -> Unit,
+    onEnd: (MarkdownFormattedTextPosition) -> Unit,
+) {
+    val theme = LocalMarkdownEditorTheme.current
+    val blocks = controller.semanticDocument().blocks
+    val linkColor = MaterialTheme.colorScheme.primary
+    var activeLine by remember(quote.block.id) { mutableIntStateOf(-1) }
+    quote.lines.forEach { line ->
+        val inline = line.inline(controller.enableWikilinks)
+        var draft by remember(quote.block.id, line.index) {
+            mutableStateOf(TextFieldValue(inline.visible, TextRange.Zero))
+        }
+        LaunchedEffect(line.content) {
+            if (draft.text != inline.visible) {
+                val length = inline.visible.length
+                draft = TextFieldValue(inline.visible,
+                    TextRange(draft.selection.start.coerceIn(0, length),
+                        draft.selection.end.coerceIn(0, length)))
+            }
+        }
+        val decorated = AnnotatedString.Builder(inline.annotated(linkColor)).apply {
+            endpoints?.quoteVisibleRange(blocks, quote.block.id, line.index, inline.visible.length)?.let { range ->
+                addStyle(SpanStyle(background = theme.selectionColor ?: linkColor.copy(alpha = 0.28f)),
+                    range.min, range.max)
+            }
+        }.toAnnotatedString()
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Text("│".repeat(line.depth), color = linkColor,
+                modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyLarge)
+            val displayed = if (draft.text == inline.visible && draft.composition == null) decorated
+                else AnnotatedString(draft.text)
+            BasicTextField(
+                value = TextFieldValue(displayed, draft.selection, draft.composition),
+                onValueChange = { next ->
+                    draft = next
+                    if (next.composition == null && next.text != inline.visible &&
+                        !controller.replaceFormattedQuoteLineText(quote.block.id, line.index,
+                            next.text, next.selection)) {
+                        val length = inline.visible.length
+                        draft = TextFieldValue(inline.visible, TextRange(next.selection.end.coerceIn(0, length)))
+                    }
+                },
+                modifier = Modifier.weight(1f).testTag("formatted-quote-line-${quote.block.id}-${line.index}")
+                    .onFocusChanged { if (it.isFocused) activeLine = line.index },
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(linkColor),
+            )
+        }
+        if (activeLine == line.index) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = {
+                    onStart(MarkdownFormattedTextPosition(quote.block.id, draft.selection.start,
+                        quoteLineIndex = line.index))
+                }, modifier = Modifier.testTag("formatted-quote-text-start-${quote.block.id}-${line.index}")) {
+                    Text("Set start")
+                }
+                TextButton(onClick = {
+                    onEnd(MarkdownFormattedTextPosition(quote.block.id, draft.selection.end,
+                        quoteLineIndex = line.index))
+                }, enabled = endpoints != null,
+                    modifier = Modifier.testTag("formatted-quote-text-end-${quote.block.id}-${line.index}")) {
+                    Text("Set end")
+                }
+            }
+        }
+    }
 }
 
 @Composable
