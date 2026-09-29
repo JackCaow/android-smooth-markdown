@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown
 import androidx.compose.runtime.Composable
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
+import org.commonmark.node.Image
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -83,5 +84,14 @@ class ReaderDocumentTextTest {
         val projected = readerDocumentText(pluginDocument, false, plugins, null, emptyMap())
         assertTrue(projected.complete)
         assertEquals("inside", projected.text)
+    }
+
+    @Test fun standaloneImageBuilderMustOptInToTextCopy() {
+        val builders = MarkdownBuilderRegistry().register(Image::class, object : MarkdownNodeBuilder {
+            override fun canBuild(node: Node) = node is Image
+            @Composable override fun Render(node: Node, context: MarkdownBuilderContext) = Unit
+        })
+        val document = parseMarkdown("![alt](https://example.com/image.png)")
+        assertFalse(readerDocumentText(document, false, null, builders, emptyMap()).complete)
     }
 }

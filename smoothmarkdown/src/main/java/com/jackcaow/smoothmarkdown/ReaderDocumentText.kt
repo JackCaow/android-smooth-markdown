@@ -111,7 +111,15 @@ internal fun readerDocumentText(
         when (node) {
             is Heading, is Paragraph -> {
                 val sole = node.children().filterNot { it is Text && it.literal.isBlank() }.singleOrNull()
-                if (sole is Image || (enableHtml && sole is HtmlInline && SafeHtml.imageTag(sole.literal) != null)) return
+                if (node is Paragraph && sole is Image) {
+                    val custom = builders?.findBuilder(sole)
+                    if (custom != null) {
+                        val replacement = custom.documentText(sole)
+                        if (replacement == null) complete = false else append(path, replacement)
+                    }
+                    return
+                }
+                if (enableHtml && sole is HtmlInline && SafeHtml.imageTag(sole.literal) != null) return
                 append(path, inline(node))
             }
             is FencedCodeBlock -> append(path, node.literal.trimEnd('\n'))
