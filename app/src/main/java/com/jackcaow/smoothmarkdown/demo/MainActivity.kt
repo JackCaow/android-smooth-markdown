@@ -1,30 +1,490 @@
 package com.jackcaow.smoothmarkdown.demo
 
+import android.content.Intent
+import android.widget.Toast
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.FormatQuote
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.NoteAdd
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Schema
+import androidx.compose.material.icons.filled.Stream
+import androidx.compose.material.icons.filled.Title
+import com.jackcaow.smoothmarkdown.AdmonitionPlugin
+import com.jackcaow.smoothmarkdown.ArtifactPlugin
+import com.jackcaow.smoothmarkdown.EmojiPlugin
+import com.jackcaow.smoothmarkdown.HashtagPlugin
+import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
+import com.jackcaow.smoothmarkdown.MentionPlugin
+import com.jackcaow.smoothmarkdown.MermaidPlugin
+import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.ThinkingPlugin
+import com.jackcaow.smoothmarkdown.ToolCallPlugin
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorController
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection
+import com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode
+import com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditor
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+
+private val themeOptions = listOf(
+    "Default light" to MarkdownStyleSheet.light(),
+    "Default dark" to MarkdownStyleSheet.dark(),
+    "GitHub" to MarkdownStyleSheet.github(),
+    "GitHub dark" to MarkdownStyleSheet.github(dark = true),
+    "VS Code" to MarkdownStyleSheet.vscode(),
+    "VS Code dark" to MarkdownStyleSheet.vscode(dark = true),
+)
+
+private fun exampleIcon(index: Int): ImageVector = when (index) {
+    0 -> Icons.Filled.FormatBold
+    1 -> Icons.Filled.Title
+    2 -> Icons.Filled.FormatListBulleted
+    3 -> Icons.Filled.Code
+    4 -> Icons.Filled.FormatQuote
+    5 -> Icons.Filled.Link
+    6 -> Icons.Filled.AutoAwesome
+    7 -> Icons.Filled.Palette
+    8 -> Icons.Filled.Dashboard
+    else -> Icons.Filled.Article
+}
+
+private fun demoIcon(id: String): ImageVector = when (id) {
+    "math" -> Icons.Filled.Calculate
+    "stream" -> Icons.Filled.Stream
+    "footnote" -> Icons.Filled.NoteAdd
+    "html" -> Icons.Filled.Code
+    "chat-list" -> Icons.Filled.Chat
+    "ai" -> Icons.Filled.AutoAwesome
+    "conversation-list" -> Icons.Filled.Forum
+    "plugin" -> Icons.Filled.Extension
+    "mermaid" -> Icons.Filled.Schema
+    else -> Icons.Filled.Article
+}
+
+// Flutter's six presets share two chrome palettes: each preset selects its own
+// MarkdownStyleSheet, while its brightness controls the surrounding demo page.
+internal fun demoThemeIsDark(themeIndex: Int): Boolean = themeIndex in setOf(1, 3, 5)
+
+internal fun demoColorScheme(themeIndex: Int): ColorScheme = if (demoThemeIsDark(themeIndex)) {
+    darkColorScheme(
+        background = Color(0xFF0D1117),
+        surface = Color(0xFF161B22),
+        surfaceContainerLow = Color(0xFF161B22),
+    )
+} else {
+    lightColorScheme(background = Color.White, surface = Color.White)
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val examples = runCatching { loadExamples(assets) }
+        val staticPages = runCatching { loadDemoPageMarkdown(assets) }
+        val streamingFixture = runCatching { loadStreamingDemoFixture(assets) }
+        val localizations = runCatching { DemoLocalizations.load(assets) }
+        val preferences = getSharedPreferences("smooth-markdown-demo", MODE_PRIVATE)
         setContent {
-            MaterialTheme {
-                SmoothMarkdown(
-                    markdown = """
-                        # Smooth Markdown Android
-
-                        A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
-
-                        > This is the first vertical slice of the Flutter port.
-
-                        ```kotlin
-                        SmoothMarkdown(markdown = "Hello")
-                        ```
-                    """.trimIndent(),
+            var themeIndex by rememberSaveable { mutableStateOf(0) }
+            MaterialTheme(colorScheme = demoColorScheme(themeIndex)) {
+                if (examples.isFailure || staticPages.isFailure || streamingFixture.isFailure) {
+                    Text("Unable to load Markdown examples: ${examples.exceptionOrNull()?.message ?: staticPages.exceptionOrNull()?.message ?: streamingFixture.exceptionOrNull()?.message}",
+                        modifier = Modifier.safeDrawingPadding().testTag("example-load-error"))
+                } else if (localizations.isFailure) {
+                    Text("Unable to load demo languages: ${localizations.exceptionOrNull()?.message}",
+                        modifier = Modifier.safeDrawingPadding().testTag("language-load-error"))
+                } else DemoHome(
+                    examples = examples.getOrThrow(),
+                    staticPages = staticPages.getOrThrow(),
+                    streamingFixture = streamingFixture.getOrThrow(),
+                    localizations = localizations.getOrThrow(),
+                    initialLanguage = DemoLanguage.fromCode(preferences.getString("language", null)),
+                    onLanguageChange = { preferences.edit().putString("language", it.code).apply() },
+                    themeIndex = themeIndex,
+                    onThemeChange = { themeIndex = it },
+                    openMermaid = { startActivity(Intent(this, MermaidDemoActivity::class.java)) },
+                    openPerformance = { startActivity(Intent(this, PerformanceActivity::class.java)) },
+                    openChatList = {
+                        startActivity(Intent(this, ChatListActivity::class.java).apply {
+                            putExtra(ChatListActivity.EXTRA_PARENT_DARK, demoThemeIsDark(themeIndex))
+                        })
+                    },
+                    openAIChat = { startActivity(Intent(this, AIChatActivity::class.java)) },
+                    openConversationList = { startActivity(Intent(this, ConversationListActivity::class.java)) },
+                    openLink = { url -> Toast.makeText(this, "Link tapped: $url", Toast.LENGTH_SHORT).show() },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DemoHome(
+    examples: List<DemoExample>,
+    staticPages: Map<String, String>,
+    streamingFixture: StreamingDemoFixture,
+    localizations: DemoLocalizations,
+    initialLanguage: DemoLanguage,
+    onLanguageChange: (DemoLanguage) -> Unit,
+    themeIndex: Int,
+    onThemeChange: (Int) -> Unit,
+    openMermaid: () -> Unit,
+    openPerformance: () -> Unit,
+    openChatList: () -> Unit,
+    openAIChat: () -> Unit,
+    openConversationList: () -> Unit,
+    openLink: (String) -> Unit,
+) {
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val isDark = demoThemeIsDark(themeIndex)
+    var languageCode by rememberSaveable { mutableStateOf(initialLanguage.code) }
+    val language = DemoLanguage.fromCode(languageCode)
+    var exampleId by remember { mutableStateOf(examples.first().id) }
+    var pageId by remember { mutableStateOf(examples.first().id) }
+    var themeMenu by remember { mutableStateOf(false) }
+    var showSource by remember { mutableStateOf(false) }
+    var exportedLength by remember { mutableStateOf<Int?>(null) }
+    var pdfExportLength by remember { mutableStateOf<Int?>(null) }
+    var tappedWikilink by remember { mutableStateOf<String?>(null) }
+    val example = examples.first { it.id == exampleId }
+    val specialPage = dedicatedPages.firstOrNull { it.id == pageId }
+    val isEditor = pageId == "editor"
+    val isHome = pageId == exampleId
+    val currentMarkdown = if (pageId == exampleId) example.markdown
+        else staticPages[pageId] ?: dedicatedMarkdown(pageId)
+    val currentTitle = when (pageId) {
+        "editor" -> "Markdown Editor"
+        "math" -> "Math Formula Demo"
+        "stream" -> "Streaming Markdown Demo"
+        "footnote" -> "Footnotes Demo"
+        "html" -> "HTML Tags Demo"
+        "plugin" -> "Plugin System Demo"
+        else -> specialPage?.let { localizations.page(language, it) }
+            ?: example.title
+    }
+    val controller = remember(exampleId, isEditor) {
+        MarkdownEditorController(if (isEditor) staticPages.getValue("editor") else example.markdown).also {
+            if (isEditor) it.mode = MarkdownEditorMode.FORMATTED
+        }
+    }
+    val plugins = remember { ParserPluginRegistry().also {
+        it.registerAll(listOf(MentionPlugin(), HashtagPlugin(), EmojiPlugin(), AdmonitionPlugin(),
+            MermaidPlugin(), ThinkingPlugin(), ArtifactPlugin(), ToolCallPlugin()))
+    } }
+    BackHandler(enabled = !isHome && drawerState.isClosed) { pageId = exampleId }
+    fun select(id: String) {
+        if (examples.any { it.id == id }) exampleId = id
+        pageId = id
+        scope.launch { drawerState.close() }
+    }
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = isHome,
+        drawerContent = {
+            ModalDrawerSheet(drawerContainerColor = if (isDark) Color(0xFF0D1117) else MaterialTheme.colorScheme.surface) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().height(160.dp)
+                            .background(Brush.linearGradient(if (isDark)
+                                listOf(Color(0xFF161B22), Color(0xFF21262D))
+                            else listOf(Color.Blue, Color(0xFF9C27B0))))
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.Bottom,
+                    ) {
+                        Icon(Icons.Filled.Article, contentDescription = null,
+                            modifier = Modifier.size(48.dp), tint = Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Text(localizations.text(language, "drawer_header_title"),
+                            fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    NavigationDrawerItem(label = {
+                        Column {
+                            Text("Markdown Editor", color = if (isDark) Color.White else Color.Unspecified)
+                            Text("Scratch-style editing preview", fontSize = 11.sp,
+                                color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray)
+                        }
+                    }, icon = { Icon(Icons.Filled.EditNote, contentDescription = null) },
+                        selected = isEditor, onClick = { select("editor") },
+                        modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-editor"))
+                    HorizontalDivider()
+                    Text(localizations.chrome(language, "examples"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    examples.forEachIndexed { index, item ->
+                        NavigationDrawerItem(label = { Text(localizations.example(language, item)) },
+                            icon = { Icon(exampleIcon(index), contentDescription = null) },
+                            selected = pageId == item.id,
+                            onClick = { select(item.id) },
+                            modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
+                    }
+                    HorizontalDivider()
+                    Text(localizations.text(language, "drawer_demos"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    dedicatedPages.forEach { item ->
+                        NavigationDrawerItem(label = {
+                            Column {
+                                Text(localizations.page(language, item))
+                                if (item.id in setOf("html", "chat-list", "ai", "conversation-list", "plugin", "mermaid")) {
+                                    Text(item.subtitle, fontSize = 11.sp,
+                                        color = if (isDark) Color.White.copy(alpha = 0.38f) else Color.Gray)
+                                }
+                            }
+                        }, icon = { Icon(demoIcon(item.id), contentDescription = null) },
+                            selected = pageId == item.id,
+                            onClick = {
+                                if (item.id == "mermaid") scope.launch { drawerState.close(); openMermaid() }
+                                else if (item.id == "performance") scope.launch { drawerState.close(); openPerformance() }
+                                else if (item.id == "chat-list") scope.launch { drawerState.close(); openChatList() }
+                                else if (item.id == "ai") scope.launch { drawerState.close(); openAIChat() }
+                                else if (item.id == "conversation-list") scope.launch { drawerState.close(); openConversationList() }
+                                else select(item.id)
+                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("nav-${item.id}"))
+                    }
+                    HorizontalDivider()
+                    Text(localizations.text(language, "language"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isDark) Color.White.copy(alpha = 0.54f) else Color.Gray,
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp))
+                    DemoLanguage.entries.forEach { option ->
+                        NavigationDrawerItem(label = { Text(option.nativeName) },
+                            icon = { Icon(Icons.Filled.Language, contentDescription = null) },
+                            selected = language == option,
+                            onClick = {
+                                languageCode = option.code
+                                onLanguageChange(option)
+                                scope.launch { drawerState.close() }
+                            }, modifier = Modifier.padding(horizontal = 12.dp).testTag("language-${option.code}"))
+                    }
+                }
+            }
+        },
+    ) {
+        Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+        Column(Modifier.fillMaxSize()) {
+            if (isHome) {
+                Row(Modifier.fillMaxWidth().height(56.dp)
+                    .background(if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.surface),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { scope.launch { drawerState.open() } },
+                        modifier = Modifier.testTag("open-navigation")) {
+                        Icon(Icons.Filled.Menu, contentDescription = localizations.chrome(language, "examples"))
+                    }
+                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f))
+                    IconButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
+                        Icon(Icons.Filled.EditNote, contentDescription = localizations.chrome(language, "edit"))
+                    }
+                    Box {
+                        IconButton(onClick = { themeMenu = true }, modifier = Modifier.testTag("open-theme")) {
+                            Icon(Icons.Filled.Palette,
+                                contentDescription = localizations.text(language, "tooltip_theme"))
+                        }
+                        DropdownMenu(expanded = themeMenu, onDismissRequest = { themeMenu = false }) {
+                            themeOptions.forEachIndexed { index, item ->
+                                DropdownMenuItem(text = { Text(localizations.theme(language, index)) },
+                                    leadingIcon = { Icon(if (index == themeIndex) Icons.Filled.CheckCircle
+                                        else Icons.Filled.RadioButtonUnchecked, contentDescription = null,
+                                        tint = if (index == themeIndex) Color(0xFF2196F3)
+                                        else MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    trailingIcon = { Icon(if (demoThemeIsDark(index)) Icons.Filled.DarkMode
+                                        else Icons.Filled.LightMode, contentDescription = null,
+                                        modifier = Modifier.size(16.dp)) }, onClick = {
+                                    onThemeChange(index)
+                                    themeMenu = false
+                                }, modifier = Modifier.testTag("theme-$index"))
+                            }
+                        }
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(if (isDark) Color(0xFF161B22) else MaterialTheme.colorScheme.primaryContainer)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val titleColor = if (isDark) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+                    val exampleIndex = examples.indexOfFirst { it.id == exampleId }.coerceAtLeast(0)
+                    Icon(exampleIcon(exampleIndex), contentDescription = null, tint = titleColor)
+                    Spacer(Modifier.width(12.dp))
+                    Text(currentTitle, style = MaterialTheme.typography.titleLarge, color = titleColor,
+                        modifier = Modifier.weight(1f).testTag("current-title"))
+                    Row(
+                        Modifier.background(if (isDark) Color(0xFF21262D) else Color.White.copy(alpha = 0.3f),
+                            RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("current-theme"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(if (isDark) Icons.Filled.DarkMode else Icons.Filled.LightMode,
+                            contentDescription = null, tint = titleColor, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(localizations.theme(language, themeIndex), fontSize = 12.sp, color = titleColor)
+                    }
+                }
+                HorizontalDivider(color = if (isDark) Color(0xFF30363D) else Color(0xFFE0E0E0))
+            } else {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back")) {
+                        Text("‹ ${localizations.chrome(language, "examples")}")
+                    }
+                    Text(currentTitle, style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.testTag("current-title"))
+                }
+            }
+            if (isEditor) {
+                Text("Scratch-style editor preview", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("editor-intro"))
+                Text("Toolbar, slash commands, wikilinks, source and formatted modes, Markdown import/export, image selection, table editing, search, and focus mode.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                exportedLength?.let {
+                    Text("Last export: $it characters",
+                        modifier = Modifier.testTag("export-status"))
+                }
+                pdfExportLength?.let {
+                    Text("PDF export requested for $it characters",
+                        modifier = Modifier.testTag("pdf-export-status"))
+                }
+                tappedWikilink?.let { Text("Wikilink: $it", modifier = Modifier.testTag("wikilink-tap-status")) }
+                SmoothMarkdownEditor(
+                    controller = controller,
+                    modifier = Modifier.weight(1f),
+                    onPickImage = { MarkdownEditorImageSelection("https://picsum.photos/640/360", "Sample image", "Demo image") },
+                    onImportMarkdown = { "## Imported markdown\n\nThis came from the host callback." },
+                    onExportMarkdown = { exportedLength = it.length },
+                    onExportPdf = { markdown, _ -> pdfExportLength = markdown.length },
+                    wikilinkSuggestions = listOf("Daily Notes", "Project Plan", "Research Index", "Scratch Reference"),
+                    onTapWikilink = { tappedWikilink = it },
+                )
+            } else if (pageId == "stream") {
+                StreamingDemo(
+                    fixture = streamingFixture,
+                    styleSheet = themeOptions[themeIndex].second,
+                    plugins = plugins,
+                    onLinkClick = openLink,
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (pageId == "html") {
+                HtmlDemo(
+                    markdown = currentMarkdown,
+                    styleSheet = themeOptions[themeIndex].second,
+                    plugins = plugins,
+                    onLinkClick = openLink,
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (pageId == "plugin") {
+                PluginDemo(
+                    markdown = currentMarkdown,
+                    styleSheet = themeOptions[themeIndex].second,
+                    plugins = plugins,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                SmoothMarkdown(currentMarkdown, Modifier.weight(1f), onLinkClick = openLink,
+                    enableHtml = pageId == "html" || pageId == "details-summary",
+                    styleSheet = themeOptions[themeIndex].second, plugins = plugins)
+            }
+        }
+        if (isHome) FloatingActionButton(onClick = { showSource = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("open-source")) {
+            Icon(Icons.Filled.Code, contentDescription = localizations.chrome(language, "source_title"))
+        }
+        }
+        }
+        if (showSource) {
+            AlertDialog(
+                onDismissRequest = { showSource = false },
+                title = { Text(localizations.chrome(language, "source_title")) },
+                text = {
+                    SelectionContainer {
+                        Text(if (isEditor) controller.text else currentMarkdown,
+                            modifier = Modifier.verticalScroll(rememberScrollState()).testTag("markdown-source"),
+                            fontFamily = FontFamily.Monospace)
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showSource = false }) {
+                    Text(localizations.chrome(language, "close"))
+                } },
+            )
         }
     }
 }
