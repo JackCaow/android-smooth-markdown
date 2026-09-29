@@ -1,6 +1,8 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.ui.text.TextRange
+import com.jackcaow.smoothmarkdown.ParserPluginRegistry
+import com.jackcaow.smoothmarkdown.SourceBlockParserPlugin
 import com.jackcaow.smoothmarkdown.parseMarkdown
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.node.BlockQuote
@@ -36,10 +38,11 @@ data class MarkdownDocument(val source: String, val blocks: List<MarkdownDocumen
 
 /** Converts rendered Markdown syntax into source-backed editable blocks. */
 object MarkdownDocumentCodec {
-    fun parse(source: String): MarkdownDocument {
+    fun parse(source: String, plugins: ParserPluginRegistry? = null): MarkdownDocument {
         val lines = lineRanges(source)
+        val sourceLines = lines.map { (start, end) -> source.substring(start, end) }
         val blocks = mutableListOf<MarkdownDocumentBlock>()
-        var node: Node? = parseMarkdown(source).firstChild
+        var node: Node? = parseMarkdown(source, plugins).firstChild
         var previousEnd = 0
         while (node != null) {
             val spans = node.sourceSpans
@@ -48,9 +51,14 @@ object MarkdownDocumentCodec {
                 val last = spans.maxOf { it.lineIndex }
                 if (first in lines.indices && last in lines.indices) {
                     val start = lines[first].first
-                    val end = lines[last].second
+                    val sourceOverride = plugins?.sourceBlockPlugins?.firstNotNullOfOrNull { plugin ->
+                        validSourceEnd(plugin, sourceLines, first, last, node)
+                    }
+                    val endLine = sourceOverride?.first ?: last
+                    val end = lines[endLine].second
                     if (start >= previousEnd && end > start) {
-                        val (kind, level, language) = classify(node)
+                        val (kind, level, language) = if (sourceOverride == null) classify(node)
+                            else Triple(MarkdownBlockKind.RAW, null, null)
                         blocks += MarkdownDocumentBlock(
                             id = "block-${blocks.size}", kind = kind,
                             source = source.substring(start, end), range = TextRange(start, end),
@@ -58,11 +66,40 @@ object MarkdownDocumentCodec {
                         )
                         previousEnd = end
                     }
+                    if (sourceOverride != null) {
+                        node = sourceOverride.second
+                        continue
+                    }
                 }
             }
             node = node.next
         }
         return MarkdownDocument(source, blocks)
+    }
+
+    /** Accept only complete top-level blocks so a plugin cannot consume part of a CommonMark node. */
+    private fun validSourceEnd(
+        plugin: SourceBlockParserPlugin,
+        lines: List<String>,
+        first: Int,
+        currentLast: Int,
+        current: Node,
+    ): Pair<Int, Node?>? {
+        if (!plugin.canParse(lines[first], lines, first)) return null
+        val consumed = plugin.parse(lines, first)?.linesConsumed ?: return null
+        if (consumed !in 1..(lines.size - first)) return null
+        val endLine = first + consumed - 1
+        if (endLine < currentLast) return null
+        var next = current.next
+        while (next != null) {
+            val spans = next.sourceSpans
+            if (spans.isEmpty()) return null
+            val nextFirst = spans.minOf { it.lineIndex }
+            if (nextFirst > endLine) break
+            if (spans.maxOf { it.lineIndex } > endLine) return null
+            next = next.next
+        }
+        return endLine to next
     }
 
     /** Start and content-end offsets, excluding each line's CR/LF delimiter. */
@@ -98,8 +135,8 @@ object MarkdownDocumentCodec {
 }
 
 /** Small semantic editing layer with stable block IDs for unchanged blocks and snapshot undo/redo. */
-class MarkdownDocumentEditor(initialSource: String) {
-    var document: MarkdownDocument = MarkdownDocumentCodec.parse(initialSource)
+class MarkdownDocumentEditor(initialSource: String, private val plugins: ParserPluginRegistry? = null) {
+    var document: MarkdownDocument = MarkdownDocumentCodec.parse(initialSource, plugins)
         private set
     private val undo = ArrayDeque<MarkdownDocument>()
     private val redo = ArrayDeque<MarkdownDocument>()
@@ -109,10 +146,10 @@ class MarkdownDocumentEditor(initialSource: String) {
 
     fun replaceBlockSource(id: String, replacement: String): Boolean {
         val block = document.blockById(id) ?: return false
-        val candidate = MarkdownDocumentCodec.parse(replacement)
+        val candidate = MarkdownDocumentCodec.parse(replacement, plugins)
         if (candidate.blocks.size != 1 || candidate.blocks.single().range != TextRange(0, replacement.length)) return false
         val nextSource = document.source.replaceRange(block.range.min, block.range.max, replacement)
-        val reparsed = MarkdownDocumentCodec.parse(nextSource)
+        val reparsed = MarkdownDocumentCodec.parse(nextSource, plugins)
         val index = document.blocks.indexOf(block)
         if (reparsed.blocks.size != document.blocks.size || reparsed.blocks.getOrNull(index)?.source != replacement) return false
         undo.addLast(document)

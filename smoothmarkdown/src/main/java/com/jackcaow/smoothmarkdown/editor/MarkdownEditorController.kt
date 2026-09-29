@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 
 data class MarkdownDocumentBlockSelection(
     val source: String,
@@ -17,7 +18,11 @@ data class MarkdownDocumentBlockSelection(
 }
 
 /** Source-backed editing commands. Offsets use UTF-16, matching Compose selections. */
-class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100) {
+class MarkdownEditorController(
+    initialText: String = "",
+    historyLimit: Int = 100,
+    val parserPlugins: ParserPluginRegistry? = null,
+) {
     var mode by mutableStateOf(MarkdownEditorMode.SOURCE)
     /** Controls editor parsing, suggestions and commands for Scratch-style note links. */
     var enableWikilinks by mutableStateOf(true)
@@ -169,7 +174,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     /** A source-backed semantic snapshot for block-level editing. */
-    fun semanticDocument(): MarkdownDocument = MarkdownDocumentCodec.parse(text)
+    fun semanticDocument(): MarkdownDocument = MarkdownDocumentCodec.parse(text, parserPlugins)
 
     /** Tap one block to anchor; tap another to extend the inclusive range. */
     fun selectFormattedBlock(blockId: String): Boolean {
@@ -200,14 +205,14 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val document = selectedFormattedDocument() ?: return false
         val selection = formattedBlockSelection ?: return false
         val replacementBlocks = if (markdown.isEmpty()) emptyList() else {
-            val parsed = MarkdownDocumentCodec.parse(markdown).blocks
+            val parsed = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
             if (parsed.isEmpty() || parsed.first().range.min != 0 || parsed.last().range.max != markdown.length) return false
             parsed
         }
         val first = document.blocks[selection.firstIndex]
         val last = document.blocks[selection.lastIndex]
         val candidate = text.replaceRange(first.range.min, last.range.max, markdown)
-        val reparsed = MarkdownDocumentCodec.parse(candidate).blocks
+        val reparsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
         val before = document.blocks.take(selection.firstIndex)
         val after = document.blocks.drop(selection.lastIndex + 1)
         if (reparsed.size != before.size + replacementBlocks.size + after.size) return false
@@ -229,7 +234,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     fun replaceSemanticBlock(blockId: String, markdown: String): Boolean {
         val current = semanticDocument()
         val block = current.blockById(blockId) ?: return false
-        val editor = MarkdownDocumentEditor(current.source)
+        val editor = MarkdownDocumentEditor(current.source, parserPlugins)
         if (!editor.replaceBlockSource(blockId, markdown)) return false
         replaceRange(block.range.min, block.range.max, markdown)
         return true
@@ -242,12 +247,12 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val index = current.blocks.indexOfFirst { it.id == block.id }
         if (index < 0 || current.blocks[index] != block) return false
         val replacement = if (markdown.isEmpty()) emptyList() else {
-            MarkdownDocumentCodec.parse(markdown).blocks.also {
+            MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks.also {
                 if (it.isEmpty() || it.first().range.min != 0 || it.last().range.max != markdown.length) return false
             }
         }
         val candidate = text.replaceRange(block.range.min, block.range.max, markdown)
-        val reparsed = MarkdownDocumentCodec.parse(candidate).blocks
+        val reparsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
         val before = current.blocks.take(index)
         val after = current.blocks.drop(index + 1)
         if (reparsed.size != before.size + replacement.size + after.size) return false
@@ -308,7 +313,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     /** Changes an ATX heading level while preserving its text and surrounding source. */
     fun setSemanticHeadingLevel(blockId: String, level: Int): Boolean {
         val block = semanticDocument().blockById(blockId) ?: return false
-        val editor = MarkdownDocumentEditor(text)
+        val editor = MarkdownDocumentEditor(text, parserPlugins)
         if (!editor.setHeadingLevel(blockId, level)) return false
         val replacement = editor.document.blocks.firstOrNull { it.id == blockId }?.source ?: return false
         replaceRange(block.range.min, block.range.max, replacement)
@@ -441,7 +446,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
         val lift = list.liftTopLevel(itemPath) ?: return false
         val candidate = text.replaceRange(block.range.min, block.range.max, lift.source)
         val targetOffset = block.range.min + lift.paragraphOffset
-        val target = MarkdownDocumentCodec.parse(candidate).blocks.firstOrNull {
+        val target = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks.firstOrNull {
             it.range.min <= targetOffset && targetOffset < it.range.max &&
                 it.kind in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING)
         } ?: return false
@@ -490,7 +495,7 @@ class MarkdownEditorController(initialText: String = "", historyLimit: Int = 100
     }
 
     private fun validatedListTarget(block: MarkdownDocumentBlock, edit: MarkdownSourceList.StructureEdit): MarkdownSourceList.Item? {
-        val parsed = MarkdownDocumentCodec.parse(edit.source)
+        val parsed = MarkdownDocumentCodec.parse(edit.source, parserPlugins)
         if (parsed.blocks.size != 1 || parsed.blocks.single().range != TextRange(0, edit.source.length) ||
             parsed.blocks.single().kind != block.kind) return null
         return MarkdownSourceList.parse(parsed.blocks.single())?.item(edit.targetPath)

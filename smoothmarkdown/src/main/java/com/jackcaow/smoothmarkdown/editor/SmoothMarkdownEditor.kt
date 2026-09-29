@@ -83,8 +83,11 @@ fun SmoothMarkdownEditor(
     customBlockEditorBuilder: MarkdownEditorCustomBlockEditorBuilder? = null,
 ) {
     SideEffect { controller.enableWikilinks = enableWikilinks }
-    val previewPlugins = remember(enableWikilinks) {
-        if (enableWikilinks) ParserPluginRegistry().also { it.register(WikilinkPlugin()) } else null
+    val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
+        controller.parserPlugins?.copy()?.also { registry ->
+            if (enableWikilinks && registry.getInlinePlugin("wikilink") == null) registry.register(WikilinkPlugin())
+            if (!enableWikilinks) registry.unregisterInline("wikilink")
+        } ?: if (enableWikilinks) ParserPluginRegistry().also { it.register(WikilinkPlugin()) } else null
     }
     val scope = rememberCoroutineScope()
     var hostActionBusy by remember { mutableStateOf(false) }
