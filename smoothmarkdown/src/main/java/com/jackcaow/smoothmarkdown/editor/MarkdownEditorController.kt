@@ -115,6 +115,8 @@ class MarkdownEditorController(
     private val undoStack = ArrayDeque<EditorSnapshot>()
     private val redoStack = ArrayDeque<EditorSnapshot>()
     private val valueObservers = linkedSetOf<(TextFieldValue) -> Unit>()
+    private val pendingValueNotifications = ArrayDeque<TextFieldValue>()
+    private var notifyingValueObservers = false
     private var historyRevision by mutableIntStateOf(0)
     private var transactionDepth = 0
     private var transactionBefore: EditorSnapshot? = null
@@ -1151,7 +1153,18 @@ class MarkdownEditorController(
     private fun publishValue(next: TextFieldValue) {
         if (next == value) return
         value = next
-        valueObservers.toList().forEach { it(next) }
+        pendingValueNotifications.addLast(next)
+        if (notifyingValueObservers) return
+        notifyingValueObservers = true
+        try {
+            while (pendingValueNotifications.isNotEmpty()) {
+                val emitted = pendingValueNotifications.removeFirst()
+                valueObservers.toList().forEach { it(emitted) }
+            }
+        } finally {
+            pendingValueNotifications.clear()
+            notifyingValueObservers = false
+        }
     }
 
     private fun push(stack: ArrayDeque<EditorSnapshot>, snapshot: EditorSnapshot) {

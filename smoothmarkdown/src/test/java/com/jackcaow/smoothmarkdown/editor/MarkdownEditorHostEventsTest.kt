@@ -52,4 +52,19 @@ class MarkdownEditorHostEventsTest {
         assertEquals(listOf("A中文"), source)
         assertEquals(listOf(TextRange(2), TextRange(3)), selections)
     }
+
+    @Test fun reentrantHostEditKeepsAllObserversInCommitOrder() {
+        val controller = MarkdownEditorController("First")
+        val seen = mutableListOf<String>()
+        controller.addValueObserver { value ->
+            seen += "first:${value.text}"
+            if (value.text == "Second") controller.text = "Third"
+        }
+        controller.addValueObserver { value -> seen += "second:${value.text}" }
+
+        controller.text = "Second"
+
+        assertEquals("Third", controller.text)
+        assertEquals(listOf("first:Second", "second:Second", "first:Third", "second:Third"), seen)
+    }
 }
