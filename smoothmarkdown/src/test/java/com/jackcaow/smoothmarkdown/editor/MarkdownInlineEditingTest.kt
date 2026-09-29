@@ -98,6 +98,73 @@ class MarkdownInlineEditingTest {
         assertEquals("**bold** and *italic*", controller.text)
     }
 
+    @Test fun partialVisibleRangeCanNestInsideExistingBoldItalicAndLink() {
+        val cases = listOf(
+            Triple("**bold**", InlineMarkKind.ITALIC, InlineMarkKind.BOLD),
+            Triple("*bold*", InlineMarkKind.BOLD, InlineMarkKind.ITALIC),
+            Triple("[bold](https://example.com/path)", InlineMarkKind.ITALIC, InlineMarkKind.LINK),
+        )
+        cases.forEach { (source, addedKind, originalKind) ->
+            val model = MarkdownInlineEditing.parse(source)
+            val wrapped = model.wrap(TextRange(1, 3), addedKind)
+            assertTrue("$source must support its inner visible range", wrapped != null)
+            val after = MarkdownInlineEditing.parse(wrapped!!)
+            assertEquals("bold", after.visible)
+            assertTrue(after.marks.any { it.kind == originalKind && it.range == TextRange(0, 4) })
+            assertTrue(after.marks.any { it.kind == addedKind && it.range == TextRange(1, 3) })
+            if (originalKind == InlineMarkKind.LINK) {
+                assertEquals("https://example.com/path", after.marks.first { it.kind == InlineMarkKind.LINK }.destination)
+            }
+        }
+    }
+
+    @Test fun nestedAsteriskDelimitersKeepOuterEmphasisAndInnerStrong() {
+        val model = MarkdownInlineEditing.parse("*b**ol**d*")
+        assertEquals("bold", model.visible)
+        assertTrue(model.marks.any { it.kind == InlineMarkKind.ITALIC && it.range == TextRange(0, 4) })
+        assertTrue(model.marks.any { it.kind == InlineMarkKind.BOLD && it.range == TextRange(1, 3) })
+    }
+
+    @Test fun headingPartialVisibleFormattingPreservesMarkerNeighborsAndOneUndo() {
+        val original = "before\r\n\r\n## [bold](https://example.com/path) ##\r\n\r\nafter"
+        val controller = MarkdownEditorController(original)
+        controller.mode = MarkdownEditorMode.FORMATTED
+        val heading = controller.semanticDocument().blocks[1]
+        controller.setFormattedSelection(heading.id, TextRange(1, 3))
+        assertTrue(controller.applyFormattedInlineMark(MarkdownEditorCommand.BOLD))
+        assertTrue(controller.text.startsWith("before\r\n\r\n## "))
+        assertTrue(controller.text.endsWith(" ##\r\n\r\nafter"))
+        assertTrue(controller.text.contains("https://example.com/path"))
+        val next = MarkdownFormattedBlock.inline(controller.semanticDocument().blocks[1])!!
+        assertEquals("bold", next.visible)
+        assertTrue(next.marks.any { it.kind == InlineMarkKind.BOLD && it.range == TextRange(1, 3) })
+        assertTrue(controller.undo())
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun partialLinkInsideExistingLinkIsRejectedWithoutHistory() {
+        val original = "[bold](https://example.com/path)"
+        val controller = MarkdownEditorController(original)
+        controller.mode = MarkdownEditorMode.FORMATTED
+        val id = controller.semanticDocument().blocks.single().id
+        controller.setFormattedSelection(id, TextRange(1, 3))
+        assertFalse(controller.applyFormattedInlineMark(MarkdownEditorCommand.LINK, "https://another.example"))
+        assertEquals(original, controller.text)
+        assertFalse(controller.canUndo)
+    }
+
+    @Test fun unsafeLinkDestinationAndHalfEmojiSelectionAreRejected() {
+        val model = MarkdownInlineEditing.parse("A **bold** 😀")
+        val selection = TextRange(2, 4)
+        assertEquals(null, model.wrap(selection, InlineMarkKind.LINK, "javascript:alert(1)"))
+        assertEquals(null, model.wrap(selection, InlineMarkKind.LINK, "   "))
+        assertEquals(null, model.wrap(selection, InlineMarkKind.LINK, "https://example.com/) **injected**"))
+        assertEquals(null, model.wrap(selection, InlineMarkKind.LINK, "https://example.com/(broken)"))
+        val emoji = model.visible.indexOf("😀")
+        assertEquals(null, model.wrap(TextRange(emoji + 1, emoji + 2), InlineMarkKind.BOLD))
+    }
+
     @Test fun unmatchedMarkupAndIntrawordUnderscoresStayLiteral() {
         val source = "a_b_c ![mark](asset.png) and *unfinished"
         val model = MarkdownInlineEditing.parse(source)

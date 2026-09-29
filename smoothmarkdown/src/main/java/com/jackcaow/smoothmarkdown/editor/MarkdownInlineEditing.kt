@@ -9,10 +9,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import com.jackcaow.smoothmarkdown.SafeHtml
 import org.commonmark.node.Emphasis
 import org.commonmark.node.Link
 import org.commonmark.node.Node
 import org.commonmark.node.Paragraph
+import org.commonmark.node.SoftLineBreak
+import org.commonmark.node.HardLineBreak
 import org.commonmark.node.StrongEmphasis
 import org.commonmark.node.Text
 import org.commonmark.parser.Parser
@@ -96,6 +99,8 @@ internal class MarkdownInlineEditing private constructor(
     fun wrap(selection: TextRange, kind: InlineMarkKind, destination: String? = null): String? {
         val lower = selection.min.coerceIn(0, visible.length)
         val upper = selection.max.coerceIn(lower, visible.length)
+        if (!validUtf16Boundary(lower) || !validUtf16Boundary(upper)) return null
+        if (kind == InlineMarkKind.LINK && !safeMarkdownDestination(linkDestination(destination))) return null
         val existing = marks.firstOrNull { it.kind == kind && it.range.min == lower && it.range.max == upper }
         if (existing != null && kind != InlineMarkKind.LINK) {
             val delimiterLength = if (kind == InlineMarkKind.BOLD || kind == InlineMarkKind.STRIKETHROUGH || kind == InlineMarkKind.WIKILINK) 2 else 1
@@ -106,6 +111,10 @@ internal class MarkdownInlineEditing private constructor(
                 it.kind in setOf(InlineMarkKind.LINK, InlineMarkKind.WIKILINK) && lower < it.range.max && upper > it.range.min
             }) return null
         if (marks.any { it.kind == InlineMarkKind.CODE && lower < it.range.max && upper > it.range.min }) return null
+        if (lower < upper && kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK) &&
+            marks.all { it.kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK) }) {
+            return wrapMappedRange(lower, upper, kind, destination)
+        }
         val rawStart = if (lower < starts.size) starts[lower] else ends.lastOrNull() ?: 0
         val rawEnd = if (upper > lower) ends[upper - 1] else rawStart
         val body = source.substring(rawStart, rawEnd).ifEmpty {
@@ -123,37 +132,172 @@ internal class MarkdownInlineEditing private constructor(
             InlineMarkKind.ITALIC -> "*" to "*"
             InlineMarkKind.STRIKETHROUGH -> "~~" to "~~"
             InlineMarkKind.CODE -> "`" to "`"
-            InlineMarkKind.LINK -> "[" to "](${destination?.takeIf(String::isNotBlank) ?: "https://example.com"})"
+            InlineMarkKind.LINK -> "[" to "](${linkDestination(destination)})"
             InlineMarkKind.WIKILINK -> "[[" to "]]"
         }
         if (kind == InlineMarkKind.CODE && body.contains('`')) return null
         return source.replaceRange(rawStart, rawEnd, prefix + body + suffix)
     }
 
+    private fun validUtf16Boundary(offset: Int): Boolean = offset == 0 || offset == visible.length ||
+        !(visible[offset - 1].isHighSurrogate() && visible[offset].isLowSurrogate())
+
+    private fun linkDestination(value: String?): String = value?.takeIf(String::isNotEmpty) ?: "https://example.com"
+
+    private fun safeMarkdownDestination(value: String): Boolean = SafeHtml.isSafeLink(value) &&
+        value.none { it.isWhitespace() || it.isISOControl() || it in "()\\<>[]" }
+
+    /** Preserve each existing mark while wrapping a mapped visible range, including nested text. */
+    private fun wrapMappedRange(lower: Int, upper: Int, kind: InlineMarkKind, destination: String?): String? {
+        val before = semanticInline(source) ?: return null
+        if (before.visible != visible || before.marks.coverage(visible.length) !=
+            marks.map { it.semantic() }.coverage(visible.length)) return null
+        val start = boundary(lower) ?: return null
+        val end = boundary(upper) ?: return null
+        if (start.offset > end.offset) return null
+        val delimiters = when (kind) {
+            InlineMarkKind.BOLD -> listOf("**" to "**", "__" to "__")
+            InlineMarkKind.ITALIC -> listOf("*" to "*", "_" to "_")
+            InlineMarkKind.LINK -> listOf("[" to "](${linkDestination(destination)})")
+            else -> return null
+        }
+        val added = SemanticMark(kind, TextRange(lower, upper),
+            if (kind == InlineMarkKind.LINK) linkDestination(destination) else null)
+        val expected = (before.marks + added).coverage(visible.length)
+        for (splitBoundaryMarks in listOf(false, true)) {
+            for ((open, close) in delimiters) {
+                val startPrefix = if (splitBoundaryMarks) start.closeTokens else ""
+                val startSuffix = if (splitBoundaryMarks) start.openTokens else ""
+                val endPrefix = if (splitBoundaryMarks) end.closeTokens else ""
+                val endSuffix = if (splitBoundaryMarks) end.openTokens else ""
+                val candidate = source.substring(0, start.offset) + startPrefix + open + startSuffix +
+                    source.substring(start.offset, end.offset) + endPrefix + close + endSuffix +
+                    source.substring(end.offset)
+                val next = semanticInline(candidate) ?: continue
+                if (next.visible != visible || next.marks.coverage(visible.length) != expected) continue
+                val mapped = parse(candidate, enableWikilinks)
+                if (mapped.visible == visible && mapped.marks.map { it.semantic() }.coverage(visible.length) == expected) {
+                    return candidate
+                }
+            }
+        }
+        return null
+    }
+
+    private data class SemanticMark(val kind: InlineMarkKind, val range: TextRange, val destination: String? = null)
+    private data class InlineSemantic(val visible: String, val marks: List<SemanticMark>)
+
+    private fun InlineMark.semantic(): SemanticMark = SemanticMark(kind, range, destination)
+
+    private fun List<SemanticMark>.coverage(length: Int): List<Map<Pair<InlineMarkKind, String?>, Int>> {
+        val counts = MutableList(length) { mutableMapOf<Pair<InlineMarkKind, String?>, Int>() }
+        for (mark in this) {
+            if (mark.range.min < 0 || mark.range.max > length) return emptyList()
+            for (index in mark.range.min until mark.range.max) {
+                val key = mark.kind to mark.destination
+                counts[index][key] = (counts[index][key] ?: 0) + 1
+            }
+        }
+        return counts
+    }
+
+    private data class InlineBoundary(val offset: Int, val closeTokens: String, val openTokens: String)
+
+    private fun boundary(visibleOffset: Int): InlineBoundary? {
+        val default = when (visibleOffset) {
+            0 -> 0
+            visible.length -> source.length
+            else -> ends[visibleOffset - 1]
+        }
+        val ending = marks.filter { it.range.max == visibleOffset && it.range.min < visibleOffset }
+        val starting = marks.filter { it.range.min == visibleOffset && it.range.max > visibleOffset }
+        val offset = ending.maxOfOrNull { it.sourceEnd } ?: starting.minOfOrNull { it.sourceStart } ?: default
+        val active = marks.filter { it.range.min < visibleOffset && visibleOffset < it.range.max }
+            .sortedWith(compareBy<InlineMark> { it.sourceStart }.thenByDescending { it.sourceEnd })
+        val tokens = active.map { mark ->
+            when (mark.kind) {
+                InlineMarkKind.BOLD, InlineMarkKind.ITALIC -> {
+                    val length = if (mark.kind == InlineMarkKind.BOLD) 2 else 1
+                    source.substring(mark.sourceStart, mark.sourceStart + length) to
+                        source.substring(mark.sourceEnd - length, mark.sourceEnd)
+                }
+                InlineMarkKind.LINK -> {
+                    val closeAt = source.lastIndexOf("](", mark.sourceEnd - 1)
+                    if (closeAt <= mark.sourceStart) return null
+                    "[" to source.substring(closeAt, mark.sourceEnd)
+                }
+                else -> return null
+            }
+        }
+        return InlineBoundary(offset, tokens.asReversed().joinToString("") { it.second },
+            tokens.joinToString("") { it.first })
+    }
+
+    /** CommonMark is the authority for candidate syntax; reject unsupported inline node trees. */
+    private fun semanticInline(markdown: String): InlineSemantic? {
+        val document = Parser.builder().build().parse(markdown)
+        val paragraph = document.firstChild as? Paragraph ?: return null
+        if (paragraph !== document.lastChild) return null
+        val text = StringBuilder()
+        val semanticMarks = mutableListOf<SemanticMark>()
+        lateinit var visit: (Node) -> Boolean
+        fun children(node: Node): Boolean {
+            var child = node.firstChild
+            while (child != null) {
+                if (!visit(child)) return false
+                child = child.next
+            }
+            return true
+        }
+        fun mark(node: Node, kind: InlineMarkKind, destination: String? = null): Boolean {
+            val start = text.length
+            if (!children(node)) return false
+            semanticMarks += SemanticMark(kind, TextRange(start, text.length), destination)
+            return true
+        }
+        visit = { node -> when (node) {
+            is Text -> { text.append(node.literal); true }
+            is SoftLineBreak, is HardLineBreak -> { text.append('\n'); true }
+            is StrongEmphasis -> mark(node, InlineMarkKind.BOLD)
+            is Emphasis -> mark(node, InlineMarkKind.ITALIC)
+            is Link -> mark(node, InlineMarkKind.LINK, node.destination)
+            else -> false
+        } }
+        if (!children(paragraph)) return null
+        return InlineSemantic(text.toString(), semanticMarks)
+    }
+
     /** Complete-line batch wrapping for a single simple nested emphasis/link node. */
-    fun wrapComplete(kind: InlineMarkKind, destination: String? = null): String? {
+    fun wrapComplete(kind: InlineMarkKind, destination: String? = null, allowMixed: Boolean = false): String? {
         if (visible.isEmpty()) return null
         val full = TextRange(0, visible.length)
         if (marks.isEmpty() || (marks.size == 1 && marks[0].kind == kind && marks[0].range == full)) {
             return wrap(full, kind, destination)
         }
-        if (kind !in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC)) return null
-        val inner = marks.singleOrNull() ?: return null
-        if (inner.range != full || inner.sourceStart != 0 || inner.sourceEnd != source.length ||
-            inner.kind !in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK)) return null
-        if (!simpleInlineTreeMatches(source, inner.kind, visible, inner.destination)) return null
-        val delimiters = if (kind == InlineMarkKind.BOLD) listOf("__", "**") else listOf("_", "*")
-        return delimiters.firstNotNullOfOrNull { delimiter ->
-            val candidate = delimiter + source + delimiter
-            val parsed = parse(candidate, enableWikilinks)
-            val expected = setOf(
-                Triple(inner.kind, full, inner.destination),
-                Triple(kind, full, null),
-            )
-            val actual = parsed.marks.map { Triple(it.kind, it.range, it.destination) }.toSet()
-            if (parsed.visible == visible && parsed.marks.size == 2 && actual == expected &&
-                nestedInlineTreeMatches(candidate, kind, inner.kind, visible, inner.destination)) candidate else null
+        if (kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC)) {
+            val inner = marks.singleOrNull()
+            if (inner != null && inner.range == full && inner.sourceStart == 0 && inner.sourceEnd == source.length &&
+                inner.kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK) &&
+                simpleInlineTreeMatches(source, inner.kind, visible, inner.destination)) {
+                val delimiters = if (kind == InlineMarkKind.BOLD) listOf("__", "**") else listOf("_", "*")
+                delimiters.firstNotNullOfOrNull { delimiter ->
+                    val candidate = delimiter + source + delimiter
+                    val parsed = parse(candidate, enableWikilinks)
+                    val expected = setOf(
+                        Triple(inner.kind, full, inner.destination),
+                        Triple(kind, full, null),
+                    )
+                    val actual = parsed.marks.map { Triple(it.kind, it.range, it.destination) }.toSet()
+                    if (parsed.visible == visible && parsed.marks.size == 2 && actual == expected &&
+                        nestedInlineTreeMatches(candidate, kind, inner.kind, visible, inner.destination)) candidate else null
+                }?.let { return it }
+            }
         }
+        if (allowMixed && kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK) &&
+            marks.all { it.kind in setOf(InlineMarkKind.BOLD, InlineMarkKind.ITALIC, InlineMarkKind.LINK) }) {
+            return wrap(full, kind, destination)
+        }
+        return null
     }
 
     private fun simpleInlineTreeMatches(source: String, kind: InlineMarkKind, text: String, destination: String?): Boolean {
@@ -211,6 +355,11 @@ internal class MarkdownInlineEditing private constructor(
             fun closing(token: String, from: Int, until: Int): Int {
                 var index = from
                 while (index + token.length <= until) {
+                    // A nested strong delimiter is not the closing delimiter for emphasis.
+                    if (token.length == 1 && token[0] in "*_" && source.startsWith(token + token, index)) {
+                        index += 2
+                        continue
+                    }
                     if (source.startsWith(token, index) && (index == 0 || source[index - 1] != '\\') &&
                         (token[0] != '_' || index + token.length == until || !source[index + token.length].isLetterOrDigit())) return index
                     index++
