@@ -902,6 +902,15 @@ class MarkdownEditorController(
         return applyInlineToFormattedTextRanges(document, ranges, command, destination)
     }
 
+    /** Groups selected prose into one list/quote or changes each block to a paragraph/ATX heading. */
+    fun applyBlockCommandToFormattedBlockSelection(command: MarkdownEditorCommand): Boolean {
+        val document = selectedFormattedDocument() ?: return false
+        val selection = formattedBlockSelection ?: return false
+        val blocks = document.blocks.subList(selection.firstIndex, selection.lastIndex + 1)
+        val replacement = FormattedBlockTransforms.replacement(text, blocks, command) ?: return false
+        return replaceFormattedBlockSelectionWithMarkdown(replacement)
+    }
+
     /** Applies one inline command to visible text across paragraph/heading blocks in one undo step. */
     fun applyInlineCommandToFormattedTextSelection(
         selected: MarkdownFormattedTextSelection,
