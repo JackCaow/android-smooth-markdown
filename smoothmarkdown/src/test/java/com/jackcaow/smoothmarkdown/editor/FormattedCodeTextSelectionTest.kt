@@ -26,7 +26,7 @@ class FormattedCodeTextSelectionTest {
         assertEquals("before\r\n\r\n~~~ kotlin\r\nBeforeAfter\r\n~~~  \r\n\r\nafter", editor.text)
         val replacement = MarkdownEditorController(source)
         assertTrue(replacement.replaceFormattedTextSelectionWithMarkdown(selection, "new"))
-        assertEquals("before\r\n\r\n~~~ kotlin\r\nBefore\r\n~~~  \r\n\r\nnew\r\n\r\n~~~ kotlin\r\nAfter\r\n~~~  \r\n\r\nafter", replacement.text)
+        assertEquals("before\r\n\r\n~~~ kotlin\r\nBeforenewAfter\r\n~~~  \r\n\r\nafter", replacement.text)
         assertTrue(replacement.undo())
         assertEquals(source, replacement.text)
     }
@@ -96,6 +96,25 @@ class FormattedCodeTextSelectionTest {
         val editor = MarkdownEditorController(source)
         assertTrue(editor.deleteFormattedTextSelection(selected(source, 0, 6, 0, 7)))
         assertEquals("```js\r\nBefore\n```\n\nafter", editor.text)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+    }
+
+    @Test fun partialCodeMarkdownBlockReplacementCanStillSplitTheFence() {
+        val source = "```js\nBeforeXAfter\n```\n\noutside"
+        val editor = MarkdownEditorController(source)
+        assertTrue(editor.replaceFormattedTextSelectionWithMarkdown(selected(source, 0, 6, 0, 7), "# Inserted"))
+        assertEquals("```js\nBefore\n```\n\n# Inserted\n\n```js\nAfter\n```\n\noutside", editor.text)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+        assertFalse(editor.canUndo)
+    }
+
+    @Test fun softLinePlainReplacementStaysInCodeBody() {
+        val source = "```text\r\nBeforeXAfter\r\n```"
+        val editor = MarkdownEditorController(source)
+        assertTrue(editor.replaceFormattedTextSelectionWithMarkdown(selected(source, 0, 6, 0, 7), "one\r\ntwo"))
+        assertEquals("```text\r\nBeforeone\r\ntwoAfter\r\n```", editor.text)
         assertTrue(editor.undo())
         assertEquals(source, editor.text)
     }
