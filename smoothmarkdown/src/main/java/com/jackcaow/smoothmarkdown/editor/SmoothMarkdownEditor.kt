@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -52,6 +55,13 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.focus.onFocusChanged
@@ -71,6 +81,7 @@ import com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.WikilinkPlugin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Compose content placed before or after the native editor toolbar controls. */
 typealias MarkdownEditorToolbarSlot = @Composable () -> Unit
@@ -526,6 +537,9 @@ private fun FormattedBlockPane(
     val tableSelection = controller.formattedTableCellSelection?.takeIf { it.source == controller.text }
     val dragSelection = remember(controller, controller.text) { FormattedDragSelection(controller) }
     val textPositions = remember(controller, controller.text) { FormattedTextPositionRegistry() }
+    val textGesture = remember(textPositions) { FormattedTextGesture(textPositions) }
+    val paneCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val focusManager = LocalFocusManager.current
     var textEndpoints by remember(controller, controller.text) { mutableStateOf<FormattedTextEndpoints?>(null) }
     var textSelectionError by remember(controller, controller.text) { mutableStateOf(false) }
     var textReplacement by remember(controller) { mutableStateOf("") }
@@ -533,7 +547,84 @@ private fun FormattedBlockPane(
     var tableReplacement by remember(controller) { mutableStateOf("") }
     var blockSelectionError by remember(controller) { mutableStateOf(false) }
     var activeCustomBlock by remember(controller) { mutableStateOf<Pair<String, String>?>(null) }
-    Column(modifier.fillMaxSize().background(editorTheme.previewColor ?: MaterialTheme.colorScheme.surface)
+    val handleColor = MaterialTheme.colorScheme.primary
+    Box(modifier.fillMaxSize()
+        .onGloballyPositioned { paneCoordinates[0] = it }
+        .pointerInput(textPositions, controller) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                val source = controller.text
+                val origin = paneCoordinates[0]?.localToWindow(down.position) ?: return@awaitEachGesture
+                val selection = textEndpoints
+                val handle = selection?.let { textGesture.hitHandle(it, origin, source, 22.dp.toPx()) }
+                if (selection != null && handle != null) {
+                    down.consume()
+                    while (true) {
+                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val point = paneCoordinates[0]?.localToWindow(change.position) ?: continue
+                        textGesture.move(textEndpoints ?: selection, handle, point, source, 22.dp.toPx())
+                            ?.let { textEndpoints = it }
+                        change.consume()
+                    }
+                } else {
+                    val anchor = textPositions.positionAt(origin, source)
+                    if (anchor != null) {
+                        // Observe before the child field consumes events. Ordinary taps, scrolling,
+                        // and selection inside one field remain owned by BasicTextField.
+                        var canceled = false
+                        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (!canceled) {
+                                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+                                canceled = change == null || !change.pressed ||
+                                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                            }
+                        }
+                        if (!canceled) {
+                            var claimed = false
+                            while (true) {
+                                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                val point = paneCoordinates[0]?.localToWindow(change.position) ?: continue
+                                if (!claimed) {
+                                    val started = textGesture.beginCrossFieldDrag(anchor, point, source)
+                                    if (started != null) {
+                                        // Crossing another prose field is the only point where
+                                        // this document-level gesture claims the pointer stream.
+                                        controller.clearFormattedBlockSelection()
+                                        controller.clearFormattedListItemSelection()
+                                        controller.resetFormattedTableCellSelection()
+                                        textEndpoints = started
+                                        textSelectionError = false
+                                        focusManager.clearFocus()
+                                        claimed = true
+                                    }
+                                } else {
+                                    textGesture.move(textEndpoints ?: break, FormattedTextHandle.FOCUS, point, source, 22.dp.toPx())
+                                        ?.let { textEndpoints = it }
+                                }
+                                if (claimed) change.consume()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .drawWithContent {
+            drawContent()
+            textPositions.geometryRevision
+            val selection = textEndpoints?.selection()?.takeIf { it.anchor != it.focus && it.source == controller.text }
+            val coordinates = paneCoordinates[0]
+            if (selection != null && coordinates != null) {
+                listOf(selection.anchor, selection.focus).forEach { position ->
+                    textPositions.cursorWindowPoint(position, controller.text)?.let { windowPoint ->
+                        val local = coordinates.windowToLocal(windowPoint)
+                        drawCircle(handleColor, radius = 5.dp.toPx(), center = local)
+                    }
+                }
+            }
+        }) {
+    Column(Modifier.fillMaxSize().background(editorTheme.previewColor ?: MaterialTheme.colorScheme.surface)
         .verticalScroll(rememberScrollState()).testTag("editor-formatted-scroll")
         .padding(editorTheme.contentPadding ?: 16.dp)) {
         var pendingRendered = false
@@ -648,8 +739,7 @@ private fun FormattedBlockPane(
                             }
                         }
                         val dragModifier = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
-                            Modifier.formattedDragSelectionTarget(dragSelection, FormattedDragTarget.Block(block.id))
-                                .testTag("formatted-block-drag-${block.id}") else Modifier
+                            Modifier.testTag("formatted-block-drag-${block.id}") else Modifier
                         val textTracker = if (block.kind == MarkdownBlockKind.PARAGRAPH || block.kind == MarkdownBlockKind.HEADING)
                             rememberFormattedTextFieldTracker(textPositions, block.id, controller.text, inline?.visible ?: editableText)
                             else null
@@ -727,6 +817,7 @@ private fun FormattedBlockPane(
                                     textEndpoints = textEndpoints?.withFocus(
                                         MarkdownFormattedTextPosition(block.id, controller.formattedSelection.end))
                                     textSelectionError = false
+                                    focusManager.clearFocus()
                                 }, enabled = textEndpoints != null,
                                     modifier = Modifier.testTag("formatted-text-end-${block.id}")) { Text("Set end") }
                             }
@@ -882,6 +973,7 @@ private fun FormattedBlockPane(
                 label = { Text("Replacement TSV") },
                 modifier = Modifier.fillMaxWidth().testTag("formatted-table-replacement"))
         }
+    }
     }
 }
 
