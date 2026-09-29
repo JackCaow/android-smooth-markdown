@@ -12,6 +12,18 @@ internal data class FormattedTextEndpoints(
 
     fun selection(): MarkdownFormattedTextSelection? = focus?.let { MarkdownFormattedTextSelection(source, anchor, it) }
 
+    /** A structured block fully enclosed by the two prose character endpoints. */
+    fun containsCompleteBlock(blocks: List<MarkdownDocumentBlock>, blockId: String): Boolean {
+        if (focus == null) return false
+        val anchorIndex = blocks.indexOfFirst { it.id == anchor.blockId }
+        val focusIndex = blocks.indexOfFirst { it.id == focus.blockId }
+        val index = blocks.indexOfFirst { it.id == blockId }
+        if (anchorIndex < 0 || focusIndex < 0 || index < 0) return false
+        if (index !in minOf(anchorIndex, focusIndex) + 1 until maxOf(anchorIndex, focusIndex)) return false
+        return blocks[index].kind in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST,
+            MarkdownBlockKind.CODE, MarkdownBlockKind.TABLE)
+    }
+
     /** Visible UTF-16 range to paint inside a paragraph or ATX heading. */
     fun visibleRange(blocks: List<MarkdownDocumentBlock>, blockId: String, length: Int): TextRange? {
         val end = focus ?: return null
