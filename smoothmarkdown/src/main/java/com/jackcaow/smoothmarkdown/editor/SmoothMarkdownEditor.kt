@@ -596,7 +596,6 @@ private fun FormattedBlockPane(
                                         controller.resetFormattedTableCellSelection()
                                         textEndpoints = started
                                         textSelectionError = false
-                                        focusManager.clearFocus()
                                         claimed = true
                                     }
                                 } else {
@@ -605,6 +604,8 @@ private fun FormattedBlockPane(
                                 }
                                 if (claimed) change.consume()
                             }
+                            // Dismissing the IME during a drag changes viewport geometry mid-gesture.
+                            if (claimed) focusManager.clearFocus()
                         }
                     }
                 }
