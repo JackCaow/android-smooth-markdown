@@ -854,6 +854,8 @@ private fun FormattedListTextField(
             val newline = next.text.indexOf('\n')
             if (newline >= 0 && next.text.removeRange(newline, newline + 1) == inline.visible) {
                 controller.splitFormattedListLine(blockId, path, lineIndex, newline)
+            } else if (controller.replaceFormattedListLineWithBlocks(blockId, path, lineIndex, next.text)) {
+                // The pasted child list replaces this field; its last item receives focus.
             } else if (next.text == inline.visible || controller.replaceFormattedListLineText(blockId, path, lineIndex, next.text)) {
                 controller.setFormattedListSelection(blockId, path, lineIndex, next.selection, next.composition)
             }
