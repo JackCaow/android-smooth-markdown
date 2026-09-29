@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
@@ -192,6 +193,7 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
 
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }
 private val LocalMarkdownBuilders = compositionLocalOf<MarkdownBuilderRegistry?> { null }
+private val LocalReaderSelectionController = compositionLocalOf<SmoothSelectionController?> { null }
 private val LocalMarkdownEnableHtml = compositionLocalOf { false }
 private val LocalOnImageClickWithMetadata = compositionLocalOf<((String, String?, String?) -> Unit)?> { null }
 private val LocalImageBuilder = compositionLocalOf<(@Composable (String, String?, String?) -> Unit)?> { null }
@@ -267,6 +269,10 @@ fun SmoothMarkdown(
         )
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
+    DisposableEffect(activeController, document, enableHtml, plugins, builderRegistry) {
+        activeController?.bindDocument(document, enableHtml, plugins, builderRegistry)
+        onDispose { activeController?.unbindDocument(document) }
+    }
     val targetCallback = remember(activeController, onTextPositioned) {
         if (activeController == null) onTextPositioned
         else { target: MarkdownSelectionTarget ->
@@ -285,6 +291,7 @@ fun SmoothMarkdown(
         LocalMarkdownStyleSheet provides styleSheet,
         LocalParserPlugins provides plugins,
         LocalMarkdownBuilders provides builderRegistry,
+        LocalReaderSelectionController provides activeController,
         LocalMarkdownEnableHtml provides enableHtml,
         LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
         LocalImageBuilder provides imageBuilder,
@@ -381,8 +388,8 @@ private fun MarkdownSelectionRegion(
     ) {
         val state = rememberSelectionState()
         stateHolder.state = state
-        DisposableEffect(controller, state, anchorRegistry) {
-            controller?.attach(state, anchorRegistry)
+        DisposableEffect(controller, state, anchorRegistry, clipboard) {
+            controller?.attach(state, anchorRegistry, copyVisible)
             onDispose {
                 controller?.detach(state)
                 if (stateHolder.state === state) stateHolder.state = null
@@ -736,6 +743,8 @@ private fun MarkdownDetails(
 ) {
     val sheet = LocalMarkdownStyleSheet.current
     val expanded = rememberSaveable(node) { mutableStateOf(node.isOpen) }
+    val selectionController = LocalReaderSelectionController.current
+    SideEffect { selectionController?.setDetailsExpanded(node, expanded.value) }
     val shape = RoundedCornerShape(6.dp)
     Column(
         Modifier.fillMaxWidth().padding(vertical = 8.dp)
@@ -748,7 +757,10 @@ private fun MarkdownDetails(
                 .clickable(
                     role = Role.Button,
                     onClickLabel = if (expanded.value) "Collapse details" else "Expand details",
-                ) { expanded.value = !expanded.value }
+                ) {
+                    expanded.value = !expanded.value
+                    selectionController?.setDetailsExpanded(node, expanded.value)
+                }
                 .padding(12.dp),
         ) {
             DisableSelection {
@@ -762,7 +774,10 @@ private fun MarkdownDetails(
                     MarkdownInlineText(
                         inlineRender(summary, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                         onLinkClick, onImageClick, bottomPadding = 0.dp,
-                        onPlainTextTap = { expanded.value = !expanded.value },
+                        onPlainTextTap = {
+                            expanded.value = !expanded.value
+                            selectionController?.setDetailsExpanded(node, expanded.value)
+                        },
                     )
                 } else {
                     Column {
@@ -1448,7 +1463,7 @@ internal fun dispatchTextTap(
 internal fun isSafeImage(value: String): Boolean =
     runCatching { URI(value).scheme?.lowercase() }.getOrNull() in setOf("http", "https")
 
-private fun Node.children(): Sequence<Node> = sequence {
+internal fun Node.children(): Sequence<Node> = sequence {
     var child = firstChild
     while (child != null) {
         yield(child)
