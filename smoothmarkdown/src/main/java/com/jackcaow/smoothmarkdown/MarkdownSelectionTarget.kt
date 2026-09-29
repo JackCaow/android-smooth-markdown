@@ -18,6 +18,7 @@ data class MarkdownSelectionTarget(
 internal data class MarkdownSelectionOptions(
     val selectable: Boolean = false,
     val outerRegion: Boolean = false,
+    val nonTextSelectionAnchor: Boolean = false,
     val onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
 )
 
