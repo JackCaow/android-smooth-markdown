@@ -1,0 +1,16 @@
+Device: SmoothMarkdownAcceptance read-only AVD, Pixel 7 profile, Android API 35.
+Selection: trailing range of the rendered thematic-rule anchor plus the first visible character of "After.".
+Visible selection text expected on clipboard: A
+
+Before the fix:
+- Android floating Copy was visible in the screenshot and tapped with `adb shell input tap 340 425`.
+- Instrumentation observed clipboard content containing hidden anchor characters followed by A.
+- SelectionState.selectedTexts retained one anchor annotation; the platform Copy wrote through LocalClipboard, bypassing the existing menu wrappers.
+
+After the fix:
+- Built `:smoothmarkdown:assembleDebugAndroidTest` offline.
+- Installed the test APK and ran `SystemFloatingCopyProbeTest`; tapped the same floating Copy menu with `adb shell input tap 340 425`.
+- Result: `OK (1 test)`; clipboard content was exactly A.
+- `NonTextSelectionInstrumentedTest`: `OK (5 tests)`, including clipboard passthrough checks.
+
+The manual probe source was deliberately kept out of the PR because it waits for external adb touch and is not suitable for unattended CI. The screenshot captures the real floating menu and selected range before tapping Copy.

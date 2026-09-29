@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.text.contextmenu.builder.item
 import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.testTag
@@ -306,73 +308,107 @@ private fun MarkdownSelectionRegion(
 ) {
     val clipboard = LocalClipboard.current
     val anchorRegistry = remember { NonTextAnchorRegistry() }
-    val state = rememberSelectionState()
+    // SelectionState captures LocalClipboard when it is created. Keep a stable
+    // reference so the clipboard can inspect annotated ranges at Copy time.
+    val stateHolder = remember { ReaderSelectionStateHolder() }
+    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry) {
+        object : Clipboard {
+            override suspend fun getClipEntry(): ClipEntry? = clipboard.getClipEntry()
+            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                clipboard.setClipEntry(readerCopyClipEntry(
+                    clipEntry, stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()))
+            }
+        }
+    }
     val scope = rememberCoroutineScope()
     val copyVisible: (String) -> Unit = { text ->
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("selection", text)))
         }
-        state.clear()
+        stateHolder.state?.clear()
     }
     val toolbarProvider = LocalTextContextMenuToolbarProvider.current
     val dropdownProvider = LocalTextContextMenuDropdownProvider.current
     val legacyToolbar = LocalTextToolbar.current
-    val wrappedToolbar = remember(toolbarProvider, state, anchorRegistry, clipboard) {
+    val wrappedToolbar = remember(toolbarProvider, stateHolder, anchorRegistry, clipboard) {
         toolbarProvider?.let { provider ->
             ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) }, copyVisible)
+                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
         }
     }
-    val wrappedDropdown = remember(dropdownProvider, state, anchorRegistry, clipboard) {
+    val wrappedDropdown = remember(dropdownProvider, stateHolder, anchorRegistry, clipboard) {
         dropdownProvider?.let { provider ->
             ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) }, copyVisible)
+                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
         }
     }
-    val wrappedLegacyToolbar = remember(legacyToolbar, state, anchorRegistry, clipboard, showDefaultCopyAction) {
+    val wrappedLegacyToolbar = remember(legacyToolbar, stateHolder, anchorRegistry, clipboard, showDefaultCopyAction) {
         ReaderCopyTextToolbar(legacyToolbar,
-            { visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()) },
+            { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) },
             copyVisible, showDefaultCopyAction)
-    }
-    DisposableEffect(controller, state) {
-        controller?.attach(state)
-        onDispose { controller?.detach(state) }
-    }
-    val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
-        it.key != TextContextMenuKeys.CopyKey
-    }
-    val menuModifier = if (menuActions.isEmpty()) filterModifier else filterModifier.appendTextContextMenuComponents {
-        if (state.selectedTexts.any { it.isNotEmpty() }) {
-            separator()
-            for (action in menuActions) {
-                item(key = action.key, label = action.label) {
-                    action.onClick(visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()).text)
-                    close()
-                }
-            }
-        }
-    }
-    val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
-        if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
-            (event.isCtrlPressed || event.isMetaPressed)) {
-            val selected = visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot())
-            if (selected.hadAnchor) {
-                copyVisible(selected.text)
-                true
-            } else false
-        } else false
     }
     CompositionLocalProvider(
         LocalNonTextAnchorRegistry provides anchorRegistry,
         LocalTextContextMenuToolbarProvider provides wrappedToolbar,
         LocalTextContextMenuDropdownProvider provides wrappedDropdown,
         LocalTextToolbar provides wrappedLegacyToolbar,
+        LocalClipboard provides readerClipboard,
     ) {
+        val state = rememberSelectionState()
+        stateHolder.state = state
+        DisposableEffect(controller, state) {
+            controller?.attach(state)
+            onDispose {
+                controller?.detach(state)
+                if (stateHolder.state === state) stateHolder.state = null
+            }
+        }
+        val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
+            it.key != TextContextMenuKeys.CopyKey
+        }
+        val menuModifier = if (menuActions.isEmpty()) filterModifier else filterModifier.appendTextContextMenuComponents {
+            if (state.selectedTexts.any { it.isNotEmpty() }) {
+                separator()
+                for (action in menuActions) {
+                    item(key = action.key, label = action.label) {
+                        action.onClick(visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()).text)
+                        close()
+                    }
+                }
+            }
+        }
+        val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
+                (event.isCtrlPressed || event.isMetaPressed)) {
+                val selected = visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot())
+                if (selected.hadAnchor) {
+                    copyVisible(selected.text)
+                    true
+                } else false
+            } else false
+        }
         SelectionContainer(state = state, modifier = menuModifier.then(keyboardCopy)) { content() }
     }
 }
 
+private class ReaderSelectionStateHolder {
+    var state: SelectionState? = null
+}
+
 internal data class VisibleSelection(val text: String, val hadAnchor: Boolean)
+
+/** Compose's system floating Copy writes directly through LocalClipboard on Android. */
+internal fun readerCopyClipEntry(
+    entry: ClipEntry?,
+    selectedTexts: List<AnnotatedString>,
+    anchors: Set<String>,
+): ClipEntry? {
+    if (entry == null || entry.clipData.itemCount != 1) return entry
+    val incoming = entry.clipData.getItemAt(0).text?.toString() ?: return entry
+    val selected = visibleSelectedText(selectedTexts, anchors)
+    if (!selected.hadAnchor || incoming != selectedTexts.joinToString("\n") { it.text }) return entry
+    return ClipEntry(ClipData.newPlainText(entry.clipData.description.label ?: "selection", selected.text))
+}
 
 /** Strip only selected ranges annotated by this mounted Reader's nontext blocks. */
 internal fun visibleSelectedText(selectedTexts: List<AnnotatedString>, anchors: Set<String>): VisibleSelection {

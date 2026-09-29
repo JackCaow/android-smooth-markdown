@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -38,6 +40,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -45,6 +48,23 @@ import androidx.test.platform.app.InstrumentationRegistry
 
 class NonTextSelectionInstrumentedTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun platformClipboardWriteFiltersOneCharacterBesideAnchorOnlyForTheSelectedPayload() {
+        val anchor = "smd" + "a".repeat(497)
+        val tagged = buildAnnotatedString {
+            append(anchor)
+            addStringAnnotation(nonTextAnchorAnnotationTag, anchor, 0, length)
+        }
+        val selected = listOf(tagged.subSequence(249, 250), AnnotatedString("A"))
+        val nativeCopy = ClipEntry(ClipData.newPlainText("plain text", "a\nA"))
+        val filtered = readerCopyClipEntry(nativeCopy, selected, setOf(anchor))
+        assertEquals("A", filtered?.clipData?.getItemAt(0)?.text?.toString())
+        assertEquals("plain text", filtered?.clipData?.description?.label?.toString())
+
+        val unrelated = ClipEntry(ClipData.newPlainText("plain text", "A"))
+        assertSame(unrelated, readerCopyClipEntry(unrelated, selected, setOf(anchor)))
+        assertSame(nativeCopy, readerCopyClipEntry(nativeCopy, selected, emptySet()))
+    }
 
     @Test fun longPressStartsOnRuleAndImageAndImageTapStillOpens() {
         val controller = SmoothSelectionController()
