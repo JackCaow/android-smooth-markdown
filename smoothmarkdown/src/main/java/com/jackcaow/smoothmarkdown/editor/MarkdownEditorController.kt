@@ -24,6 +24,8 @@ data class MarkdownFormattedTextPosition(
     val listPath: List<Int>? = null,
     val listLineIndex: Int = 0,
     val tableCell: MarkdownTableCellPosition? = null,
+    /** Physical line of an explicitly marked block quote, when this endpoint is inside one. */
+    val quoteLineIndex: Int? = null,
 )
 
 /** A source-revision-bound text selection across prose and source-backed list lines. */
@@ -481,6 +483,8 @@ class MarkdownEditorController(
 
     /** Serializes rendered characters and complete intervening list/code/table blocks. */
     fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
+        if (selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null)
+            return MarkdownQuoteTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.copy()
         if (selected.anchor.tableCell != null || selected.focus.tableCell != null)
             return MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.copy()
         if (selected.anchor.listPath != null || selected.focus.listPath != null)
@@ -515,6 +519,13 @@ class MarkdownEditorController(
 
     /** Replaces one rendered range with complete parsed Markdown blocks. */
     fun replaceFormattedTextSelectionWithMarkdown(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null) {
+            val quote = MarkdownQuoteTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)
+                ?: return false
+            val edit = quote.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
         if (selected.anchor.tableCell != null || selected.focus.tableCell != null) {
             val table = MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)
                 ?: return false
@@ -1177,6 +1188,23 @@ class MarkdownEditorController(
             return true
         }
         return replaceSemanticBlock(blockId, updated.toMarkdown())
+    }
+
+    /** Edits one explicit quote line's rendered text, retaining markers and neighboring lines. */
+    fun replaceFormattedQuoteLineText(blockId: String, lineIndex: Int, visibleText: String,
+                                      visibleSelection: TextRange = TextRange(visibleText.length)): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val quote = MarkdownSourceQuote.parse(block) ?: return false
+        val markdown = quote.replaceVisibleLine(lineIndex, visibleText, enableWikilinks) ?: return false
+        val next = MarkdownSourceQuote.parse(MarkdownDocumentBlock(block.id, block.kind, markdown,
+            TextRange(0, markdown.length))) ?: return false
+        val line = next.lines.getOrNull(lineIndex) ?: return false
+        val inline = line.inline(enableWikilinks)
+        val sourceOffset = inline.sourceOffsetAtVisible(visibleSelection.end.coerceIn(0, inline.visible.length))
+            ?: line.content.length
+        if (!replaceSemanticBlock(blockId, markdown)) return false
+        setSelection(block.range.min + line.contentStart + sourceOffset)
+        return true
     }
 
     /** Edits one list item's visible primary text while retaining its marker and neighboring source. */
