@@ -4,6 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import androidx.compose.ui.text.style.BaselineShift
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.em
 
 class StreamMarkdownBufferTest {
@@ -78,6 +80,24 @@ class StreamMarkdownBufferTest {
         val rendered = inlineRender(parseMarkdown(buffer.visibleText, enableHtml = true).firstChild!!, enableHtml = true)
         assertEquals("Press Ctrl+C", rendered.text.text)
         assertEquals(listOf("Ctrl"), rendered.kbds.values.toList())
+    }
+
+    @Test fun splitMarkAndUnderlineTagsWaitForCompleteOpeningsThenKeepTheirStyles() {
+        val buffer = StreamMarkdownBuffer(startMillis = 0, enableHtml = true)
+        assertNull(buffer.append("a <mar", 50))
+        assertEquals("a ", buffer.visibleText)
+        assertNull(buffer.append("k>bright <u", 100))
+        assertEquals("a <mark>bright ", buffer.visibleText)
+        assertNull(buffer.append(">under</u></mark> z", 150))
+        val rendered = inlineRender(parseMarkdown(buffer.visibleText, enableHtml = true).firstChild!!,
+            enableHtml = true, styleSheet = MarkdownStyleSheet.dark()).text
+        assertEquals("a bright under z", rendered.text)
+        assertEquals(Color(0xFF4D4400), rendered.spanStyles.first {
+            rendered.text.substring(it.start, it.end) == "under" && it.item.background != Color.Unspecified
+        }.item.background)
+        assertEquals(TextDecoration.Underline, rendered.spanStyles.first {
+            rendered.text.substring(it.start, it.end) == "under" && it.item.textDecoration != null
+        }.item.textDecoration)
     }
 
     @Test fun completedStreamRevealsUnfinishedTagAsLiteralSource() {

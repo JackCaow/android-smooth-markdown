@@ -1129,6 +1129,8 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
     val boldSpan = SpanStyle(fontWeight = FontWeight.Bold).merge(styleSheet.boldStyle)
     val italicSpan = SpanStyle(fontStyle = FontStyle.Italic).merge(styleSheet.italicStyle)
     val strikeSpan = SpanStyle(textDecoration = TextDecoration.LineThrough).merge(styleSheet.strikethroughStyle)
+    val underlineSpan = SpanStyle(textDecoration = TextDecoration.Underline).merge(styleSheet.underlineStyle)
+    val highlightSpan = SpanStyle(background = styleSheet.highlightColor).merge(styleSheet.highlightStyle)
     val linkSpan = SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline).merge(styleSheet.linkStyle)
     val codeSpan = SpanStyle(
         fontFamily = FontFamily.Monospace,
@@ -1154,8 +1156,8 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
             "b", "strong" -> addStyle(boldSpan, start, end)
             "i", "em" -> addStyle(italicSpan, start, end)
             "s", "del", "strike" -> addStyle(strikeSpan, start, end)
-            "u", "ins" -> addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
-            "mark" -> addStyle(SpanStyle(background = styleSheet.highlightColor), start, end)
+            "u", "ins" -> addStyle(underlineSpan, start, end)
+            "mark" -> addStyle(highlightSpan, start, end)
             "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)
                 .merge(styleSheet.subscriptStyle), start, end)
             "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)
