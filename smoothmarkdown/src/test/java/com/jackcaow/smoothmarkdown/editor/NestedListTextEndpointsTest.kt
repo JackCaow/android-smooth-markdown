@@ -103,6 +103,9 @@ class NestedListTextEndpointsTest {
         val source = "- BeforeX\n\n  ```text\n  code\n  ```\n\n  YAfter\n- keep"
         val selected = between(source, at(0, listOf(0), 0, 6), at(0, listOf(0), 1, 1))
         val editor = MarkdownEditorController(source)
+        assertEquals("YAfter", MarkdownSourceList.parse(editor.semanticDocument().blocks.first())
+            ?.lineContent(listOf(0), 1))
+        assertTrue(editor.copyFormattedTextSelectionAsMarkdown(selected)?.contains("```text") == true)
         assertFalse(editor.deleteFormattedTextSelection(selected))
         assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(selected, "New"))
         assertEquals(source, editor.text)
