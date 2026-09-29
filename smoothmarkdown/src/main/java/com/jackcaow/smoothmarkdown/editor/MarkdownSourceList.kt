@@ -12,6 +12,7 @@ import org.commonmark.node.Paragraph
 /** Source-backed list tree. Every editable line points at its own original source slice. */
 internal class MarkdownSourceList private constructor(
     private val source: String,
+    private val kind: MarkdownBlockKind,
     val items: List<Item>,
 ) {
     sealed interface Part {
@@ -48,6 +49,9 @@ internal class MarkdownSourceList private constructor(
         return item
     }
 
+    private fun siblings(parentPath: List<Int>): List<Item>? = if (parentPath.isEmpty()) items else
+        item(parentPath)?.parts?.filterIsInstance<NestedList>()?.flatMap { it.items }
+
     fun lineContent(path: List<Int>, lineIndex: Int): String? = item(path)?.lines?.getOrNull(lineIndex)?.let {
         source.substring(it.start, it.end)
     }
@@ -58,6 +62,82 @@ internal class MarkdownSourceList private constructor(
         if ('\n' in content || '\r' in content) return null
         val line = item(path)?.lines?.getOrNull(lineIndex) ?: return null
         return source.replaceRange(line.start, line.end, content)
+    }
+
+    data class BlockPasteEdit(
+        val source: String,
+        val selectionOffset: Int,
+        val focusPath: List<Int>,
+        val focusLine: Int,
+    )
+
+    /** Inserts parsed blocks under the active list item without rewriting its marker or siblings. */
+    fun replaceLineWithBlocks(path: List<Int>, lineIndex: Int, before: String, blocks: String, after: String): BlockPasteEdit? {
+        val selected = item(path) ?: return null
+        val line = selected.lines.getOrNull(lineIndex) ?: return null
+        val lineStart = source.lastIndexOf('\n', line.start - 1) + 1
+        val prefix = source.substring(lineStart, line.start)
+        if ('\t' in prefix) return null
+        val itemStart = source.lastIndexOf('\n', selected.contentStart - 1) + 1
+        val itemEnd = source.indexOfAny(charArrayOf('\r', '\n'), itemStart)
+            .let { if (it < 0) source.length else it }
+        val markerMatch = marker.find(source.substring(itemStart, itemEnd)) ?: return null
+        if (markerMatch.range.first != 0 || '\t' in markerMatch.value) return null
+        // A task checkbox belongs to paragraph content, not the CommonMark list marker.
+        val contentIndent = markerMatch.groupValues[1].length + markerMatch.groupValues[2].length +
+            markerMatch.groupValues[3].length
+        val indent = " ".repeat(contentIndent)
+        val newline = if ("\r\n" in source) "\r\n" else "\n"
+        val normalized = blocks.replace("\r\n", "\n").replace('\r', '\n')
+        val nested = normalized.split('\n').joinToString(newline) { if (it.isEmpty()) "" else indent + it }
+        val leading = before + newline + nested
+        val replacement = leading + if (after.isEmpty()) "" else newline + newline + indent + after
+        val candidate = source.replaceRange(line.start, line.end, replacement)
+        val block = MarkdownDocumentCodec.parse(candidate).blocks.singleOrNull() ?: return null
+        if (block.kind != kind || block.range != TextRange(0, candidate.length)) return null
+        val parsed = parse(block) ?: return null
+        for (depth in path.indices) {
+            val parentPath = path.take(depth)
+            val oldSiblings = siblings(parentPath) ?: return null
+            val newSiblings = parsed.siblings(parentPath) ?: return null
+            if (oldSiblings.map { it.marker } != newSiblings.map { it.marker }) return null
+            for (index in oldSiblings.indices) {
+                if (index != path[depth] && copySiblingItems(parentPath, index, index) !=
+                    parsed.copySiblingItems(parentPath, index, index)) return null
+            }
+        }
+        val parsedItem = parsed.item(path) ?: return null
+        val beforeLine = parsedItem.lines.getOrNull(lineIndex) ?: return null
+        if (parsed.source.substring(beforeLine.start, beforeLine.end).trimEnd() != before.trimEnd()) return null
+        val caret = line.start + leading.length
+        if (after.isNotEmpty()) {
+            val preservedAfter = parsedItem.lines.any { candidateLine ->
+                candidateLine.start >= caret &&
+                    parsed.source.substring(candidateLine.start, candidateLine.end).trimStart() == after.trimStart()
+            }
+            if (!preservedAfter) return null
+        }
+        val focus = parsed.editableLineEndingAt(caret) ?: return null
+        if (focus.first.size <= path.size || focus.first.take(path.size) != path) return null
+        return BlockPasteEdit(candidate, caret, focus.first, focus.second)
+    }
+
+    private fun editableLineEndingAt(offset: Int): Pair<List<Int>, Int>? {
+        fun visit(items: List<Item>, prefix: List<Int>, indexBase: Int): Pair<List<Int>, Int>? {
+            items.forEachIndexed { index, item ->
+                val path = prefix + (indexBase + index)
+                item.lines.forEachIndexed { lineIndex, line ->
+                    if (line.end == offset) return path to lineIndex
+                }
+                var childBase = 0
+                item.parts.filterIsInstance<NestedList>().forEach { nested ->
+                    visit(nested.items, path, childBase)?.let { return it }
+                    childBase += nested.items.size
+                }
+            }
+            return null
+        }
+        return visit(items, emptyList(), 0)
     }
 
     fun content(index: Int): String? = items.getOrNull(index)?.let { source.substring(it.contentStart, it.contentEnd) }
@@ -397,7 +477,7 @@ internal class MarkdownSourceList private constructor(
                 return items
             }
 
-            return parseItems(root).takeIf { it.isNotEmpty() }?.let { MarkdownSourceList(source, it) }
+            return parseItems(root).takeIf { it.isNotEmpty() }?.let { MarkdownSourceList(source, block.kind, it) }
         }
     }
 }

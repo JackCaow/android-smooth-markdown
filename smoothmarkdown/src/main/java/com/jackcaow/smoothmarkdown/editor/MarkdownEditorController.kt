@@ -667,17 +667,7 @@ class MarkdownEditorController(
     internal fun replaceFormattedTextWithBlocks(blockId: String, nextVisible: String): Boolean {
         if (mode != MarkdownEditorMode.FORMATTED) return false
         if ('\n' !in nextVisible && '\r' !in nextVisible) return false
-        var utf16Index = 0
-        while (utf16Index < nextVisible.length) {
-            when {
-                nextVisible[utf16Index].isHighSurrogate() -> {
-                    if (utf16Index + 1 >= nextVisible.length || !nextVisible[utf16Index + 1].isLowSurrogate()) return false
-                    utf16Index += 2
-                }
-                nextVisible[utf16Index].isLowSurrogate() -> return false
-                else -> utf16Index++
-            }
-        }
+        if (!hasWellFormedUtf16(nextVisible)) return false
         val document = semanticDocument()
         val index = document.blocks.indexOfFirst { it.id == blockId }
         val block = document.blocks.getOrNull(index) ?: return false
@@ -812,6 +802,57 @@ class MarkdownEditorController(
         val updated = MarkdownInlineEditing.parse(raw, enableWikilinks).replaceVisible(visibleText) ?: return false
         val markdown = list.replaceLine(itemPath, lineIndex, updated) ?: return false
         return markdown != block.source && replaceSemanticBlock(blockId, markdown)
+    }
+
+    /** A formatted list-line paste becomes child list items while retaining the parent marker. */
+    internal fun replaceFormattedListLineWithBlocks(blockId: String, itemPath: List<Int>, lineIndex: Int, nextVisible: String): Boolean {
+        if (mode != MarkdownEditorMode.FORMATTED || ('\n' !in nextVisible && '\r' !in nextVisible)) return false
+        if (!hasWellFormedUtf16(nextVisible)) return false
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val list = MarkdownSourceList.parse(block) ?: return false
+        val raw = list.lineContent(itemPath, lineIndex) ?: return false
+        val inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
+        val commonPrefix = inline.visible.commonPrefixWith(nextVisible).length
+        val oldTail = inline.visible.substring(commonPrefix)
+        val newTail = nextVisible.substring(commonPrefix)
+        val commonSuffix = oldTail.commonSuffixWith(newTail).length
+        val selectedRange = TextRange(commonPrefix, inline.visible.length - commonSuffix)
+        val pasted = nextVisible.substring(commonPrefix, nextVisible.length - commonSuffix)
+        if ('\n' !in pasted && '\r' !in pasted) return false
+        val markdown = pasted.trim('\r', '\n')
+        if (markdown.isBlank()) return false
+        val parsedBlocks = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+        if (parsedBlocks.isEmpty() || parsedBlocks.first().range.min != 0 ||
+            parsedBlocks.last().range.max != markdown.length ||
+            parsedBlocks.any { it.kind != MarkdownBlockKind.BULLET_LIST && it.kind != MarkdownBlockKind.ORDERED_LIST }) return false
+        val split = inline.splitVisibleRange(selectedRange) ?: return false
+        val edit = list.replaceLineWithBlocks(itemPath, lineIndex, split.before, markdown, split.after) ?: return false
+        val nextBlock = MarkdownDocumentCodec.parse(edit.source, parserPlugins).blocks.singleOrNull() ?: return false
+        val nextList = MarkdownSourceList.parse(nextBlock) ?: return false
+        val focusRaw = nextList.lineContent(edit.focusPath, edit.focusLine) ?: return false
+        val focusLength = MarkdownInlineEditing.parse(focusRaw, enableWikilinks).visible.length
+        replaceRange(block.range.min, block.range.max, edit.source, selectedStart = edit.selectionOffset)
+        setFormattedListSelection(blockId, edit.focusPath, edit.focusLine, TextRange(focusLength))
+        formattedListFocusTarget = edit.focusPath to edit.focusLine
+        formattedSelection = TextRange.Zero
+        formattedComposition = null
+        formattedBlockFocusTarget = null
+        return true
+    }
+
+    private fun hasWellFormedUtf16(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            when {
+                value[index].isHighSurrogate() -> {
+                    if (index + 1 >= value.length || !value[index + 1].isLowSurrogate()) return false
+                    index += 2
+                }
+                value[index].isLowSurrogate() -> return false
+                else -> index++
+            }
+        }
+        return true
     }
 
     /** Toggles a task marker in one list item using the source undo history. */
