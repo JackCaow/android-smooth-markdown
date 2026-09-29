@@ -7,10 +7,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
-import com.jackcaow.smoothmarkdown.parseMarkdown
-import org.commonmark.node.Paragraph
-import org.commonmark.node.SoftLineBreak
-import org.commonmark.node.Text
 
 data class MarkdownDocumentBlockSelection(
     val source: String,
@@ -809,19 +805,15 @@ class MarkdownEditorController(
     }
 
     /** A formatted list-line paste becomes child list items while retaining the parent marker. */
-    internal fun replaceFormattedListLineWithBlocks(blockId: String, itemPath: List<Int>, lineIndex: Int, nextVisible: String): Boolean {
+    internal fun replaceFormattedListLineWithBlocks(blockId: String, itemPath: List<Int>, lineIndex: Int,
+                                                    nextVisible: String, previousSelection: TextRange? = null): Boolean {
         if (mode != MarkdownEditorMode.FORMATTED || ('\n' !in nextVisible && '\r' !in nextVisible)) return false
         if (!hasWellFormedUtf16(nextVisible)) return false
         val block = semanticDocument().blockById(blockId) ?: return false
         val list = MarkdownSourceList.parse(block) ?: return false
         val raw = list.lineContent(itemPath, lineIndex) ?: return false
         val inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
-        val commonPrefix = inline.visible.commonPrefixWith(nextVisible).length
-        val oldTail = inline.visible.substring(commonPrefix)
-        val newTail = nextVisible.substring(commonPrefix)
-        val commonSuffix = oldTail.commonSuffixWith(newTail).length
-        val selectedRange = TextRange(commonPrefix, inline.visible.length - commonSuffix)
-        val pasted = nextVisible.substring(commonPrefix, nextVisible.length - commonSuffix)
+        val (selectedRange, pasted) = listLineInputChange(inline.visible, nextVisible, previousSelection)
         if ('\n' !in pasted && '\r' !in pasted) return false
         val markdown = pasted.trim('\r', '\n')
         if (markdown.isBlank()) return false
@@ -846,33 +838,18 @@ class MarkdownEditorController(
 
     /** Plain multi-line paste remains one soft-break paragraph inside the current list item. */
     internal fun replaceFormattedListLineWithPlainLines(blockId: String, itemPath: List<Int>, lineIndex: Int,
-                                                        nextVisible: String): Boolean {
+                                                        nextVisible: String, previousSelection: TextRange? = null): Boolean {
         if (mode != MarkdownEditorMode.FORMATTED || ('\n' !in nextVisible && '\r' !in nextVisible) ||
             !hasWellFormedUtf16(nextVisible)) return false
         val block = semanticDocument().blockById(blockId) ?: return false
         val list = MarkdownSourceList.parse(block) ?: return false
         val raw = list.lineContent(itemPath, lineIndex) ?: return false
         val inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
-        val commonPrefix = inline.visible.commonPrefixWith(nextVisible).length
-        val oldTail = inline.visible.substring(commonPrefix)
-        val newTail = nextVisible.substring(commonPrefix)
-        val commonSuffix = oldTail.commonSuffixWith(newTail).length
-        val selectedRange = TextRange(commonPrefix, inline.visible.length - commonSuffix)
-        val pasted = nextVisible.substring(commonPrefix, nextVisible.length - commonSuffix)
+        val (selectedRange, inserted) = listLineInputChange(inline.visible, nextVisible, previousSelection)
+        val pasted = inserted
             .replace("\r\n", "\n").replace('\r', '\n')
         val lines = pasted.split('\n')
-        if (lines.size < 2 || lines.any { it.isBlank() } ||
-            lines.any { MarkdownInlineEditing.parse(it, enableWikilinks).marks.isNotEmpty() }) return false
-        val parsedPaste = MarkdownDocumentCodec.parse(pasted, parserPlugins).blocks
-        if (parsedPaste.size != 1 || parsedPaste.single().kind != MarkdownBlockKind.PARAGRAPH ||
-            parsedPaste.single().range != TextRange(0, pasted.length)) return false
-        val paragraph = parseMarkdown(pasted, parserPlugins).firstChild as? Paragraph ?: return false
-        if (paragraph.next != null) return false
-        var inlineNode = paragraph.firstChild
-        while (inlineNode != null) {
-            if (inlineNode !is Text && inlineNode !is SoftLineBreak) return false
-            inlineNode = inlineNode.next
-        }
+        if (lines.size < 2 || lines.any { it.isBlank() }) return false
         val split = inline.splitVisibleRange(selectedRange) ?: return false
         val edit = list.replaceLineWithPlainLines(itemPath, lineIndex, split.before, lines, split.after,
                                                   nextVisible, enableWikilinks) ?: return false
@@ -883,6 +860,22 @@ class MarkdownEditorController(
         formattedComposition = null
         formattedBlockFocusTarget = null
         return true
+    }
+
+    /** The old field selection resolves repeated-prefix paste that a text-only diff cannot locate. */
+    private fun listLineInputChange(before: String, after: String, previousSelection: TextRange?): Pair<TextRange, String> {
+        if (previousSelection != null) {
+            val start = previousSelection.min
+            val end = previousSelection.max
+            if (start >= 0 && end <= before.length && after.startsWith(before.substring(0, start)) &&
+                after.endsWith(before.substring(end)) && after.length >= start + before.length - end) {
+                return TextRange(start, end) to after.substring(start, after.length - (before.length - end))
+            }
+        }
+        val commonPrefix = before.commonPrefixWith(after).length
+        val commonSuffix = before.substring(commonPrefix).commonSuffixWith(after.substring(commonPrefix)).length
+        return TextRange(commonPrefix, before.length - commonSuffix) to
+            after.substring(commonPrefix, after.length - commonSuffix)
     }
 
     private fun hasWellFormedUtf16(value: String): Boolean {

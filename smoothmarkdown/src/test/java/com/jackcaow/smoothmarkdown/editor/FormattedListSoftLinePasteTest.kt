@@ -43,20 +43,14 @@ class FormattedListSoftLinePasteTest {
         assertEquals("1. Before alpha\r\n   beta\r\n2. Keep", ordered.text)
     }
 
-    @Test fun markdownBlocksMarksAndBlankLinesDoNotEnterPlainSoftLinePath() {
+    @Test fun markdownBlocksAndBlankLinesDoNotEnterPlainSoftLinePath() {
         val original = "- Before target\n- Keep"
         val controller = MarkdownEditorController(original).apply { mode = MarkdownEditorMode.FORMATTED }
         val id = controller.semanticDocument().blocks.single().id
         assertFalse(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
             "Before - child\n- other"))
         assertFalse(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
-            "Before **bold**\nplain"))
-        assertFalse(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
             "Before one\n\ntwo"))
-        assertFalse(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
-            "Before ![image](https://example.com/a.png)\nplain"))
-        assertFalse(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
-            "Before <span>html</span>\nplain"))
         assertEquals(original, controller.text)
         assertFalse(controller.canUndo)
     }
@@ -78,5 +72,35 @@ class FormattedListSoftLinePasteTest {
         assertTrue(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
             "Before first\nsecond after"))
         assertEquals("- **Before** first\n  second after\n- Keep", controller.text)
+    }
+
+    @Test fun repeatedPrefixUsesPriorFieldSelectionToLocatePastedText() {
+        val controller = MarkdownEditorController("- aaaa\n- Keep").apply { mode = MarkdownEditorMode.FORMATTED }
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
+            "a\nbaaaa", TextRange(0)))
+        assertEquals("- a\n  baaaa\n- Keep", controller.text)
+        assertEquals(TextRange(1), controller.formattedListSelection)
+    }
+
+    @Test fun plainInlineMarkupIsPastedLiterallyInsteadOfDropped() {
+        val controller = MarkdownEditorController("- target\n- Keep").apply { mode = MarkdownEditorMode.FORMATTED }
+        val id = controller.semanticDocument().blocks.single().id
+        assertTrue(controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
+            "one *two*\nthree", TextRange(0, "target".length)))
+        assertEquals("- one \\*two\\*\n  three\n- Keep", controller.text)
+        assertEquals(TextRange("three".length), controller.formattedListSelection)
+    }
+
+    @Test fun plainHtmlImageAndEntitySyntaxStayLiteral() {
+        for (firstLine in listOf("![image](url)", "<span>", "&copy;", "![image](url) <span> &copy;")) {
+            val controller = MarkdownEditorController("- target\n- Keep").apply { mode = MarkdownEditorMode.FORMATTED }
+            val id = controller.semanticDocument().blocks.single().id
+            assertTrue(firstLine, controller.replaceFormattedListLineWithPlainLines(id, listOf(0), 0,
+                "$firstLine\nnext", TextRange(0, "target".length)))
+            val list = MarkdownSourceList.parse(controller.semanticDocument().blocks.single())!!
+            assertEquals(firstLine, MarkdownInlineEditing.parse(list.lineContent(listOf(0), 0)!!, false).visible)
+            assertEquals("- Keep", list.copySiblingItems(emptyList(), 1, 1))
+        }
     }
 }

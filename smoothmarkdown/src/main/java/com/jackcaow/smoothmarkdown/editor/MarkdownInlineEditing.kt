@@ -362,8 +362,12 @@ internal class MarkdownInlineEditing private constructor(
     }
 
     companion object {
-        internal fun escapedPlainText(text: String, enableWikilinks: Boolean): String =
-            escapeMarkdown(text, enableWikilinks)
+        internal fun escapedPlainText(text: String, enableWikilinks: Boolean): String = buildString {
+            text.forEach { char ->
+                if (char in "\\*_`~<>&" || (!enableWikilinks && char in "[]")) append('\\')
+                append(char)
+            }
+        }
 
         fun parse(source: String, enableWikilinks: Boolean = false): MarkdownInlineEditing {
             val visible = StringBuilder()
@@ -392,7 +396,7 @@ internal class MarkdownInlineEditing private constructor(
             fun parseRange(from: Int, until: Int) {
                 var index = from
                 while (index < until) {
-                    if (source[index] == '\\' && index + 1 < until && source[index + 1] in "\\*_`[]~") {
+                    if (source[index] == '\\' && index + 1 < until && source[index + 1] in "\\*_`[]~<>&") {
                         emit(source[index + 1], index, index + 2)
                         index += 2
                         continue
