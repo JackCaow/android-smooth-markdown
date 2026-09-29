@@ -17,7 +17,7 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
-/** UTF-16 offset in a formatted prose block or a list item's first text line. */
+/** UTF-16 offset in formatted prose, a fenced code body, or a list item's first text line. */
 data class MarkdownFormattedTextPosition(
     val blockId: String,
     val offset: Int,
@@ -482,6 +482,7 @@ class MarkdownEditorController(
     fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
         if (selected.anchor.listPath != null || selected.focus.listPath != null)
             return copyListEndpointSelection(selected)
+        MarkdownCodeTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.let { return it.copy() }
         val resolved = resolveFormattedTextSelection(selected) ?: return null
         val fragments = (resolved.firstIndex..resolved.lastIndex).mapNotNull { index ->
             val block = resolved.document.blocks[index]
@@ -514,6 +515,11 @@ class MarkdownEditorController(
         if (selected.anchor.listPath != null || selected.focus.listPath != null)
             return replaceListEndpointSelection(selected, markdown)
         if (!hasWellFormedUtf16(markdown)) return false
+        MarkdownCodeTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.let { code ->
+            val edit = code.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
         val resolved = resolveFormattedTextSelection(selected) ?: return false
         val first = resolved.first
         val last = resolved.last

@@ -139,4 +139,36 @@ class FormattedTextEndpointsUiTest {
             check(!controller.canUndo)
         }
     }
+    @Test fun caretInsideCodeBodyCanSelectThroughFollowingProse() {
+        val original = "```js\nBeforeX\n```\n\nYAfter\n\nOutside"
+        val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }
+        var copied: AnnotatedString? = null
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString? = copied
+            override fun setText(annotatedString: AnnotatedString) { copied = annotatedString }
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) }
+            }
+        }
+
+        compose.onNodeWithTag("formatted-block-drag-block-0").performClick()
+            .performTextInputSelection(TextRange(6))
+        compose.onNodeWithTag("formatted-text-start-block-0").performClick()
+        compose.onNodeWithTag("formatted-block-drag-block-1").performScrollTo().performClick()
+            .performTextInputSelection(TextRange(1))
+        compose.onNodeWithTag("formatted-text-end-block-1").performClick()
+        compose.onNodeWithTag("formatted-text-selection-status").performScrollTo()
+        compose.onNodeWithTag("formatted-text-copy").performClick()
+        compose.runOnIdle { assertEquals("```js\nX\n```\n\nY", copied?.text) }
+        compose.onNodeWithTag("formatted-text-delete").performClick()
+        compose.runOnIdle {
+            assertEquals("```js\nBefore\n```\n\nAfter\n\nOutside", controller.text)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+            check(!controller.canUndo)
+        }
+    }
+
 }
