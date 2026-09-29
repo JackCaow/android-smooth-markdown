@@ -236,19 +236,17 @@ fun SmoothMarkdownEditor(
                     controller.redo()
                     true
                 }
-                event.key == Key.B && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.BOLD)
-                event.key == Key.I && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.ITALIC)
-                event.key == Key.K && !event.isShiftPressed -> applyEditorCommand(MarkdownEditorCommand.LINK)
-                event.key == Key.F && !event.isShiftPressed -> {
+                event.key == Key.F && !event.isShiftPressed && !event.isAltPressed -> {
                     searchOpen = true
                     searchFocusRequest++
                     true
                 }
-                event.key == Key.Enter && event.isShiftPressed -> {
+                event.key == Key.Enter && event.isShiftPressed && !event.isAltPressed -> {
                     toggleFocusMode()
                     true
                 }
-                else -> false
+                else -> formatShortcutCommand(event.key, event.isShiftPressed, event.isAltPressed)
+                    ?.let(::applyEditorCommand) ?: false
             }
         }
     }) {
@@ -438,6 +436,34 @@ private fun editorToolbarLabel(command: MarkdownEditorCommand): String = when (c
     MarkdownEditorCommand.UNORDERED_LIST -> "List"
     MarkdownEditorCommand.TASK_LIST -> "Task"
     else -> command.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercaseChar)
+}
+
+/** Flutter editor formatting bindings, expressed independently of the host key event. */
+internal fun formatShortcutCommand(key: Key, shift: Boolean, alt: Boolean): MarkdownEditorCommand? = when {
+    alt && !shift -> when (key) {
+        Key.One, Key.NumPad1 -> MarkdownEditorCommand.HEADING1
+        Key.Two, Key.NumPad2 -> MarkdownEditorCommand.HEADING2
+        Key.Three, Key.NumPad3 -> MarkdownEditorCommand.HEADING3
+        Key.Four, Key.NumPad4 -> MarkdownEditorCommand.HEADING4
+        Key.Five, Key.NumPad5 -> MarkdownEditorCommand.HEADING5
+        Key.Six, Key.NumPad6 -> MarkdownEditorCommand.HEADING6
+        Key.C -> MarkdownEditorCommand.CODE_BLOCK
+        else -> null
+    }
+    shift && !alt -> when (key) {
+        Key.B -> MarkdownEditorCommand.BLOCKQUOTE
+        Key.Seven, Key.NumPad7 -> MarkdownEditorCommand.ORDERED_LIST
+        Key.Eight, Key.NumPad8 -> MarkdownEditorCommand.UNORDERED_LIST
+        else -> null
+    }
+    !shift && !alt -> when (key) {
+        Key.B -> MarkdownEditorCommand.BOLD
+        Key.I -> MarkdownEditorCommand.ITALIC
+        Key.E -> MarkdownEditorCommand.INLINE_CODE
+        Key.K -> MarkdownEditorCommand.LINK
+        else -> null
+    }
+    else -> null
 }
 
 @Composable

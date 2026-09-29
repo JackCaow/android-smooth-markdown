@@ -23,6 +23,47 @@ import org.junit.Test
 class EditorFormatShortcutsUiTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun flutterFormattingChordsApplyThroughEditorAndRemainUndoable() {
+        val controller = MarkdownEditorController("alpha")
+        val commands = mutableListOf<MarkdownEditorCommand>()
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(), onCommand = { commands += it })
+            }
+        }
+        val input = compose.onNodeWithTag("editor-source-input")
+        input.performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.E); keyUp(Key.E); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("`alpha`", controller.text)
+            check(controller.undo())
+            assertEquals("alpha", controller.text)
+            controller.setSelection(0, 5)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.AltLeft); keyDown(Key.Two)
+            keyUp(Key.Two); keyUp(Key.AltLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("## alpha", controller.text)
+            check(controller.undo())
+            assertEquals("alpha", controller.text)
+            controller.setSelection(0, 5)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.ShiftLeft); keyDown(Key.B)
+            keyUp(Key.B); keyUp(Key.ShiftLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("> alpha", controller.text)
+            assertEquals(listOf(MarkdownEditorCommand.INLINE_CODE,
+                MarkdownEditorCommand.HEADING2, MarkdownEditorCommand.BLOCKQUOTE), commands)
+        }
+    }
+
     @Test fun ctrlBUsesSourceSelectionAndOneUndoStep() {
         val controller = MarkdownEditorController("alpha beta")
         val commands = mutableListOf<MarkdownEditorCommand>()
@@ -55,6 +96,39 @@ class EditorFormatShortcutsUiTest {
         compose.runOnIdle {
             assertEquals("alpha beta", controller.text)
             assertFalse(controller.canUndo)
+        }
+    }
+
+    @Test fun newFormattingChordsRespectHostHookAndCapabilities() {
+        val controller = MarkdownEditorController("alpha")
+        val commands = mutableListOf<MarkdownEditorCommand>()
+        var hostSawInlineCode = false
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(),
+                    capabilities = MarkdownEditorCapabilities(setOf(MarkdownEditorCommand.INLINE_CODE)),
+                    onShortcut = { event, _ ->
+                        (event.key == Key.E && event.isCtrlPressed).also {
+                            if (it) hostSawInlineCode = true
+                        }
+                    },
+                    onCommand = { commands += it })
+            }
+        }
+        val input = compose.onNodeWithTag("editor-source-input")
+        input.performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.E); keyUp(Key.E); keyUp(Key.CtrlLeft)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.AltLeft); keyDown(Key.Two)
+            keyUp(Key.Two); keyUp(Key.AltLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            check(hostSawInlineCode)
+            assertEquals("alpha", controller.text)
+            assertEquals(emptyList<MarkdownEditorCommand>(), commands)
         }
     }
 
