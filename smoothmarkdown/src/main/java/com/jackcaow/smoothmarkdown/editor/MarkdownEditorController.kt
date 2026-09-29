@@ -17,10 +17,15 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
-/** UTF-16 offset in the visible text of a formatted paragraph or heading. */
-data class MarkdownFormattedTextPosition(val blockId: String, val offset: Int)
+/** UTF-16 offset in a formatted prose block or a list item's first text line. */
+data class MarkdownFormattedTextPosition(
+    val blockId: String,
+    val offset: Int,
+    val listPath: List<Int>? = null,
+    val listLineIndex: Int = 0,
+)
 
-/** A source-revision-bound text selection across contiguous top-level prose blocks. */
+/** A source-revision-bound text selection across prose and eligible list lines. */
 data class MarkdownFormattedTextSelection(
     val source: String,
     val anchor: MarkdownFormattedTextPosition,
@@ -475,6 +480,8 @@ class MarkdownEditorController(
 
     /** Serializes rendered characters and complete intervening list/code/table blocks. */
     fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
+        if (selected.anchor.listPath != null || selected.focus.listPath != null)
+            return copyListEndpointSelection(selected)
         val resolved = resolveFormattedTextSelection(selected) ?: return null
         val fragments = (resolved.firstIndex..resolved.lastIndex).mapNotNull { index ->
             val block = resolved.document.blocks[index]
@@ -504,6 +511,8 @@ class MarkdownEditorController(
 
     /** Replaces one rendered range with complete parsed Markdown blocks. */
     fun replaceFormattedTextSelectionWithMarkdown(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (selected.anchor.listPath != null || selected.focus.listPath != null)
+            return replaceListEndpointSelection(selected, markdown)
         if (!hasWellFormedUtf16(markdown)) return false
         val resolved = resolveFormattedTextSelection(selected) ?: return false
         val first = resolved.first
@@ -569,6 +578,123 @@ class MarkdownEditorController(
         val start: Int,
         val end: Int,
     )
+
+    private data class SourceTextEndpoint(
+        val blockIndex: Int,
+        val block: MarkdownDocumentBlock,
+        val inline: MarkdownInlineEditing,
+        val offset: Int,
+        val lineStart: Int,
+        val contentStart: Int,
+        val contentEnd: Int,
+        val isListLine: Boolean,
+    ) {
+        fun fragment(start: Int, end: Int): String? {
+            if (start == end) return ""
+            val body = inline.sliceVisibleRange(TextRange(start, end)) ?: return null
+            return if (isListLine) block.source.substring(lineStart - block.range.min, contentStart - block.range.min) + body
+                else MarkdownFormattedBlock.markdown(block, body)
+        }
+    }
+
+    private fun resolveListEndpoints(selected: MarkdownFormattedTextSelection): Triple<MarkdownDocument, SourceTextEndpoint, SourceTextEndpoint>? {
+        if (selected.source != text) return null
+        val document = semanticDocument()
+        fun endpoint(position: MarkdownFormattedTextPosition): SourceTextEndpoint? {
+            val index = document.blocks.indexOfFirst { it.id == position.blockId }
+            val block = document.blocks.getOrNull(index) ?: return null
+            val path = position.listPath
+            val lineStart: Int
+            val contentStart: Int
+            val contentEnd: Int
+            val inline: MarkdownInlineEditing
+            if (path != null) {
+                if (block.kind !in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST) ||
+                    path.size != 1 || position.listLineIndex != 0) return null
+                val list = MarkdownSourceList.parse(block) ?: return null
+                val item = list.item(path) ?: return null
+                val line = item.lines.singleOrNull() ?: return null
+                if (item.parts.any { it !is MarkdownSourceList.Line } || line.start != item.contentStart ||
+                    line.end != item.contentEnd) return null
+                val raw = list.lineContent(path, 0) ?: return null
+                inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
+                contentStart = block.range.min + line.start
+                contentEnd = block.range.min + line.end
+                lineStart = text.lastIndexOf('\n', contentStart - 1) + 1
+            } else {
+                if (position.listLineIndex != 0) return null
+                inline = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return null
+                val localStart = if (block.kind == MarkdownBlockKind.HEADING)
+                    Regex("^ {0,3}#{1,6}[ \\t]+").find(block.source)?.value?.length ?: return null
+                    else 0
+                contentStart = block.range.min + localStart
+                contentEnd = contentStart + inline.source.length
+                lineStart = block.range.min
+            }
+            if (position.offset !in 0..inline.visible.length ||
+                inline.splitVisibleRange(TextRange(0, position.offset)) == null ||
+                inline.splitVisibleRange(TextRange(position.offset, inline.visible.length)) == null) return null
+            return SourceTextEndpoint(index, block, inline, position.offset, lineStart, contentStart, contentEnd, path != null)
+        }
+        val anchor = endpoint(selected.anchor) ?: return null
+        val focus = endpoint(selected.focus) ?: return null
+        val ordered = listOf(anchor, focus).sortedWith(compareBy({ it.blockIndex }, { it.contentStart }, { it.offset }))
+        val first = ordered[0]
+        val last = ordered[1]
+        if (first.blockIndex == last.blockIndex && first.contentStart == last.contentStart && first.offset == last.offset) return null
+        if ((first.blockIndex + 1 until last.blockIndex).any { document.blocks[it].kind !in setOf(
+                MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST, MarkdownBlockKind.CODE,
+                MarkdownBlockKind.TABLE, MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING,
+            ) }) return null
+        return Triple(document, first, last)
+    }
+
+    private fun copyListEndpointSelection(selected: MarkdownFormattedTextSelection): String? {
+        val (_, first, last) = resolveListEndpoints(selected) ?: return null
+        if (first.contentStart == last.contentStart && first.blockIndex == last.blockIndex)
+            return first.fragment(first.offset, last.offset)?.takeIf { it.isNotEmpty() }
+        val start = first.fragment(first.offset, first.inline.visible.length) ?: return null
+        val end = last.fragment(0, last.offset) ?: return null
+        val middleStart = if (first.isListLine) first.contentEnd else first.block.range.max
+        val middleEnd = if (last.isListLine) last.lineStart else last.block.range.min
+        if (middleStart > middleEnd) return null
+        val middle = text.substring(middleStart, middleEnd)
+        return (start + middle + end).trimStart('\r', '\n').trimEnd('\r', '\n').takeIf { it.isNotEmpty() }
+    }
+
+    private fun replaceListEndpointSelection(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (!hasWellFormedUtf16(markdown)) return false
+        val (document, first, last) = resolveListEndpoints(selected) ?: return false
+        if (markdown.isNotEmpty()) {
+            val inserted = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return false
+        }
+        val left = first.inline.splitVisibleRange(TextRange(first.offset, first.inline.visible.length))?.before ?: return false
+        val right = last.inline.splitVisibleRange(TextRange(0, last.offset))?.after ?: return false
+        if (markdown.isEmpty() && MarkdownInlineEditing.parse(left + right, enableWikilinks).visible !=
+            first.inline.visible.substring(0, first.offset) + last.inline.visible.substring(last.offset)) return false
+        val before = text.substring(first.block.range.min, first.contentStart) + left
+        val after = right + text.substring(last.contentEnd, last.block.range.max)
+        val separator = if (text.substring(first.block.range.min, last.block.range.max).contains("\r\n")) "\r\n\r\n" else "\n\n"
+        val replacement = if (markdown.isEmpty()) before + after else buildString {
+            append(before)
+            if (before.isNotEmpty()) append(separator)
+            append(markdown)
+            if (after.isNotEmpty()) append(separator)
+            append(after)
+        }
+        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return false
+        val candidate = text.replaceRange(first.block.range.min, last.block.range.max, replacement)
+        val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        val untouchedBefore = document.blocks.take(first.blockIndex)
+        val untouchedAfter = document.blocks.drop(last.blockIndex + 1)
+        if (parsed.size < untouchedBefore.size + untouchedAfter.size ||
+            untouchedBefore.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source } ||
+            untouchedAfter.zip(parsed.takeLast(untouchedAfter.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val caret = before.length + if (markdown.isEmpty()) 0 else (if (before.isNotEmpty()) separator.length else 0) + markdown.length
+        replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret)
+        return true
+    }
 
     private data class ResolvedFormattedTextSelection(
         val document: MarkdownDocument,

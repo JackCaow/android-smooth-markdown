@@ -12,6 +12,86 @@ class FormattedSemanticTextSelectionTest {
             MarkdownFormattedTextPosition("block-$fromBlock", from),
             MarkdownFormattedTextPosition("block-$toBlock", to))
 
+    private fun listPosition(block: Int, item: Int, offset: Int) =
+        MarkdownFormattedTextPosition("block-$block", offset, listOf(item))
+
+    @Test fun listItemTextEndpointsCopyDeleteReplaceAndUndo() {
+        val source = "outside\n\n- BeforeX\n- middle\n- YAfter\n\nend"
+        val selected = MarkdownFormattedTextSelection(source, listPosition(1, 0, 6), listPosition(1, 2, 1))
+        val copy = MarkdownEditorController(source)
+        assertEquals("- X\n- middle\n- Y", copy.copyFormattedTextSelectionAsMarkdown(selected))
+        assertFalse(copy.canUndo)
+        val delete = MarkdownEditorController(source)
+        assertTrue(delete.deleteFormattedTextSelection(selected))
+        assertEquals("outside\n\n- BeforeAfter\n\nend", delete.text)
+        assertTrue(delete.undo())
+        assertEquals(source, delete.text)
+        assertTrue(delete.redo())
+        assertEquals("outside\n\n- BeforeAfter\n\nend", delete.text)
+        val replace = MarkdownEditorController(source)
+        assertTrue(replace.replaceFormattedTextSelectionWithMarkdown(selected, "# New"))
+        assertEquals("outside\n\n- Before\n\n# New\n\nAfter\n\nend", replace.text)
+        assertTrue(replace.undo())
+        assertEquals(source, replace.text)
+    }
+
+    @Test fun listEndpointAcrossWholeStructuredBlocksPreservesUnselectedSource() {
+        val source = "top\r\n\r\n- BeforeX\r\n- second\r\n\r\n```js\r\nconst x = 1\r\n```\r\n\r\nRightTail\r\n\r\nbottom"
+        val selected = MarkdownFormattedTextSelection(source, listPosition(1, 0, 6),
+            MarkdownFormattedTextPosition("block-3", 5))
+        val copy = MarkdownEditorController(source)
+        assertEquals("- X\r\n- second\r\n\r\n```js\r\nconst x = 1\r\n```\r\n\r\nRight",
+            copy.copyFormattedTextSelectionAsMarkdown(selected))
+        val delete = MarkdownEditorController(source)
+        assertTrue(delete.deleteFormattedTextSelection(selected))
+        assertEquals("top\r\n\r\n- BeforeTail\r\n\r\nbottom", delete.text)
+        assertTrue(delete.undo())
+        assertEquals(source, delete.text)
+        val reverse = selected.copy(anchor = selected.focus, focus = selected.anchor)
+        assertEquals(copy.copyFormattedTextSelectionAsMarkdown(selected), copy.copyFormattedTextSelectionAsMarkdown(reverse))
+    }
+
+    @Test fun proseToOrderedListEndpointKeepsRemainingItemsAndTaskMarkers() {
+        val source = "top\n\nLeftX\n\n1. Before\n2. [x] YAfter\n3. keep\n\nbottom"
+        val selected = MarkdownFormattedTextSelection(source,
+            MarkdownFormattedTextPosition("block-1", 4), listPosition(2, 1, 1))
+        val editor = MarkdownEditorController(source)
+        assertEquals("X\n\n1. Before\n2. [x] Y", editor.copyFormattedTextSelectionAsMarkdown(selected))
+        assertTrue(editor.deleteFormattedTextSelection(selected))
+        assertEquals("top\n\nLeftAfter\n3. keep\n\nbottom", editor.text)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+    }
+
+    @Test fun listEndpointSplitsInlineMarksWithoutChangingUnselectedDestinations() {
+        val source = "- Left **bold** X\n- keep [link](https://example.com/a)\n\nRight tail"
+        val selected = MarkdownFormattedTextSelection(source, listPosition(0, 0, 8),
+            MarkdownFormattedTextPosition("block-1", 5))
+        val editor = MarkdownEditorController(source)
+        assertEquals("- **d** X\n- keep [link](https://example.com/a)\n\nRight",
+            editor.copyFormattedTextSelectionAsMarkdown(selected))
+        assertTrue(editor.deleteFormattedTextSelection(selected))
+        assertEquals("- Left **bol** tail", editor.text)
+        assertTrue(editor.undo())
+        assertEquals(source, editor.text)
+    }
+
+    @Test fun listEndpointRejectsStaleUnsafeAndUnsupportedNestedPositions() {
+        val source = "- 😀 first\n  - nested\n- last\n\nend"
+        val editor = MarkdownEditorController(source)
+        val halfEmoji = MarkdownFormattedTextSelection(source, listPosition(0, 0, 1), listPosition(0, 1, 2))
+        assertNull(editor.copyFormattedTextSelectionAsMarkdown(halfEmoji))
+        assertFalse(editor.deleteFormattedTextSelection(halfEmoji))
+        val nested = MarkdownFormattedTextSelection(source, listPosition(0, 0, 2),
+            MarkdownFormattedTextPosition("block-0", 2, listOf(0, 0)))
+        assertFalse(editor.deleteFormattedTextSelection(nested))
+        val stale = MarkdownFormattedTextSelection("older", listPosition(0, 1, 1),
+            MarkdownFormattedTextPosition("block-1", 1))
+        assertFalse(editor.replaceFormattedTextSelectionWithMarkdown(stale, "New"))
+        assertEquals(source, editor.text)
+        assertFalse(editor.canUndo)
+    }
+
     @Test fun crossBlockCopyKeepsInlineSyntaxAndSelectedHeading() {
         val source = "before\n\nStart **bold** end\n\n# Has [link](https://example.com/a) end\n\nafter"
         val editor = MarkdownEditorController(source)

@@ -719,7 +719,18 @@ private fun FormattedBlockPane(
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (block.kind == MarkdownBlockKind.BULLET_LIST || block.kind == MarkdownBlockKind.ORDERED_LIST) {
                         val list = MarkdownSourceList.parse(block)
-                        if (list != null) FormattedList(controller, block.id, list, dragSelection, onSourcePaste)
+                        if (list != null) FormattedList(controller, block.id, list, dragSelection, onSourcePaste,
+                            textEndpoints, { position ->
+                                controller.clearFormattedBlockSelection()
+                                controller.clearFormattedListItemSelection()
+                                controller.resetFormattedTableCellSelection()
+                                textEndpoints = FormattedTextEndpoints(controller.text, position)
+                                textSelectionError = false
+                            }, { position ->
+                                textEndpoints = textEndpoints?.withFocus(position)
+                                textSelectionError = false
+                                focusManager.clearFocus()
+                            })
                         else Text(block.source, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
                     } else if (editableText != null) {
                         val inline = MarkdownFormattedBlock.inline(block, controller.enableWikilinks)
@@ -1002,12 +1013,15 @@ private fun PendingEmptyParagraphField(controller: MarkdownEditorController, mod
 
 @Composable
 private fun FormattedList(controller: MarkdownEditorController, blockId: String, list: MarkdownSourceList,
-                          dragSelection: FormattedDragSelection, onSourcePaste: () -> Unit) {
+                          dragSelection: FormattedDragSelection, onSourcePaste: () -> Unit,
+                          textEndpoints: FormattedTextEndpoints?,
+                          onSetStart: (MarkdownFormattedTextPosition) -> Unit,
+                          onSetEnd: (MarkdownFormattedTextPosition) -> Unit) {
     val block = controller.semanticDocument().blockById(blockId)
     val pending = controller.pendingListExit
     val showPending = block != null && pending != null && pending.offset > block.range.min && pending.offset < block.range.max
     FormattedListItems(controller, blockId, list, list.items, emptyList(), 0, 0, showPending, dragSelection,
-        onSourcePaste)
+        onSourcePaste, textEndpoints, onSetStart, onSetEnd)
 }
 
 @Composable
@@ -1022,6 +1036,9 @@ private fun FormattedListItems(
     showPending: Boolean = false,
     dragSelection: FormattedDragSelection,
     onSourcePaste: () -> Unit,
+    textEndpoints: FormattedTextEndpoints?,
+    onSetStart: (MarkdownFormattedTextPosition) -> Unit,
+    onSetEnd: (MarkdownFormattedTextPosition) -> Unit,
 ) {
     val editorTheme = LocalMarkdownEditorTheme.current
     Column {
@@ -1064,8 +1081,10 @@ private fun FormattedListItems(
                 if (firstLine != null) {
                     val lineIndex = item.lines.indexOf(firstLine)
                     FormattedListTextField(controller, blockId, list, path, lineIndex,
-                        Modifier.weight(1f).padding(vertical = 4.dp).testTag("formatted-list-item-$blockId-$pathTag"),
-                        onSourcePaste)
+                        Modifier.weight(1f).padding(vertical = 4.dp), "formatted-list-item-$blockId-$pathTag",
+                        onSourcePaste, textEndpoints, onSetStart, onSetEnd,
+                        path.size == 1 && lineIndex == 0 && item.lines.size == 1 &&
+                            item.parts.all { it is MarkdownSourceList.Line })
                 }
             }
             var nestedBase = 0
@@ -1074,12 +1093,14 @@ private fun FormattedListItems(
                     is MarkdownSourceList.Line -> if (part != firstLine) {
                         val lineIndex = item.lines.indexOf(part)
                         FormattedListTextField(controller, blockId, list, path, lineIndex,
-                            Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp)
-                                .testTag("formatted-list-continuation-$blockId-$pathTag-$lineIndex"), onSourcePaste)
+                            Modifier.fillMaxWidth().padding(start = ((depth + 1).coerceAtMost(9) * 20).dp, top = 2.dp, bottom = 2.dp),
+                            "formatted-list-continuation-$blockId-$pathTag-$lineIndex", onSourcePaste,
+                            textEndpoints, onSetStart, onSetEnd, false)
                     }
                     is MarkdownSourceList.NestedList -> {
                         FormattedListItems(controller, blockId, list, part.items, path, depth + 1, nestedBase,
-                            dragSelection = dragSelection, onSourcePaste = onSourcePaste)
+                            dragSelection = dragSelection, onSourcePaste = onSourcePaste,
+                            textEndpoints = textEndpoints, onSetStart = onSetStart, onSetEnd = onSetEnd)
                         nestedBase += part.items.size
                     }
                     is MarkdownSourceList.Raw -> Text(
@@ -1104,8 +1125,14 @@ private fun FormattedListTextField(
     path: List<Int>,
     lineIndex: Int,
     modifier: Modifier,
+    fieldTag: String,
     onSourcePaste: () -> Unit,
+    textEndpoints: FormattedTextEndpoints?,
+    onSetStart: (MarkdownFormattedTextPosition) -> Unit,
+    onSetEnd: (MarkdownFormattedTextPosition) -> Unit,
+    endpointEligible: Boolean,
 ) {
+    val editorTheme = LocalMarkdownEditorTheme.current
     val inline = MarkdownInlineEditing.parse(list.lineContent(path, lineIndex).orEmpty(), controller.enableWikilinks)
     val active = controller.activeFormattedBlockId == blockId && controller.activeFormattedListPath == path &&
         controller.activeFormattedListLine == lineIndex
@@ -1123,8 +1150,16 @@ private fun FormattedListTextField(
             controller.clearFormattedListFocusTarget(path, lineIndex)
         }
     }
+    val blocks = controller.semanticDocument().blocks
+    val decorated = AnnotatedString.Builder(inline.annotated(MaterialTheme.colorScheme.primary)).apply {
+        textEndpoints?.listVisibleRange(blocks, blockId, path, lineIndex, inline.visible.length)?.let { range ->
+            addStyle(SpanStyle(background = editorTheme.selectionColor
+                ?: MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)), range.min, range.max)
+        }
+    }.toAnnotatedString()
+    Column(modifier) {
     BasicTextField(
-        value = TextFieldValue(inline.annotated(MaterialTheme.colorScheme.primary), safeSelection, safeComposition),
+        value = TextFieldValue(decorated, safeSelection, safeComposition),
         onValueChange = { next ->
             val newline = next.text.indexOf('\n')
             if (newline >= 0 && next.text.removeRange(newline, newline + 1) == inline.visible) {
@@ -1140,7 +1175,7 @@ private fun FormattedListTextField(
                 controller.setFormattedListSelection(blockId, path, lineIndex, next.selection, next.composition)
             }
         },
-        modifier = modifier.focusRequester(focusRequester).onFocusChanged {
+        modifier = Modifier.fillMaxWidth().testTag(fieldTag).focusRequester(focusRequester).onFocusChanged {
             if (it.isFocused) controller.setFormattedListSelection(blockId, path, lineIndex, safeSelection)
         }.onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown || event.isCtrlPressed || event.isAltPressed) false
@@ -1160,6 +1195,17 @@ private fun FormattedListTextField(
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
     )
+    if (endpointEligible && active) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { onSetStart(MarkdownFormattedTextPosition(blockId,
+                controller.formattedListSelection.start, path, lineIndex)) },
+                modifier = Modifier.testTag("formatted-list-text-start-$blockId-${path.joinToString("-" )}")) { Text("Set start") }
+            TextButton(onClick = { onSetEnd(MarkdownFormattedTextPosition(blockId,
+                controller.formattedListSelection.end, path, lineIndex)) }, enabled = textEndpoints != null,
+                modifier = Modifier.testTag("formatted-list-text-end-$blockId-${path.joinToString("-" )}")) { Text("Set end") }
+        }
+    }
+    }
 }
 
 @Composable

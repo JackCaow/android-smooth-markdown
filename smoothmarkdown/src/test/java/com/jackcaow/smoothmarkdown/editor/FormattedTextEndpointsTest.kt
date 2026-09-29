@@ -6,6 +6,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class FormattedTextEndpointsTest {
+    @Test fun listItemRangesPaintPartialEndpointsAndCompleteSiblingsInEitherDirection() {
+        val source = "- BeforeX\n- middle\n- YAfter\n\nend"
+        val blocks = MarkdownEditorController(source).semanticDocument().blocks
+        val start = MarkdownFormattedTextPosition("block-0", 6, listOf(0))
+        val end = MarkdownFormattedTextPosition("block-0", 1, listOf(2))
+        val forward = FormattedTextEndpoints(source, start).withFocus(end)
+        val reverse = FormattedTextEndpoints(source, end).withFocus(start)
+        for (selected in listOf(forward, reverse)) {
+            assertEquals(TextRange(6, 7), selected.listVisibleRange(blocks, "block-0", listOf(0), 0, 7))
+            assertEquals(TextRange(0, 6), selected.listVisibleRange(blocks, "block-0", listOf(1), 0, 6))
+            assertEquals(TextRange(0, 1), selected.listVisibleRange(blocks, "block-0", listOf(2), 0, 6))
+            assertNull(selected.listVisibleRange(blocks, "block-0", listOf(3), 0, 6))
+        }
+    }
+
     @Test fun paintsOnlySelectedUtf16CharactersAcrossParagraphAndHeadingInEitherDirection() {
         val source = "BeforeX\n\n# YAfter\n\nOutside"
         val blocks = MarkdownEditorController(source).semanticDocument().blocks
