@@ -3,6 +3,7 @@ package com.jackcaow.smoothmarkdown
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -75,6 +76,16 @@ data class MarkdownStyleSheet(
     val codeBlockDecoration: MarkdownCodeBlockDecoration? = null,
     /** Per-edge code insets; when absent [codePadding] remains the uniform inset. */
     val codeBlockPadding: PaddingValues? = null,
+    /** Inline Markdown strong emphasis, merged over the default bold weight. */
+    val boldStyle: SpanStyle? = null,
+    /** Inline Markdown emphasis, merged over the default italic slant. */
+    val italicStyle: SpanStyle? = null,
+    /** Inline Markdown strikethrough, merged over the default strike decoration. */
+    val strikethroughStyle: SpanStyle? = null,
+    /** Inline Markdown and safe HTML links, merged over [linkColor] and underline. */
+    val linkStyle: SpanStyle? = null,
+    /** Inline code and HTML code/kbd, merged over legacy inline-code colors. */
+    val inlineCodeStyle: SpanStyle? = null,
 ) {
     init {
         require(headingStyles == null || headingStyles.size == 6) { "headingStyles must contain H1 through H6" }

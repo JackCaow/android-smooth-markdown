@@ -759,6 +759,15 @@ internal fun inlineText(node: Node, enableHtml: Boolean, plugins: ParserPluginRe
 internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(), plugins: ParserPluginRegistry? = null): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
     val math = linkedMapOf<String, String>()
+    val boldSpan = SpanStyle(fontWeight = FontWeight.Bold).merge(styleSheet.boldStyle)
+    val italicSpan = SpanStyle(fontStyle = FontStyle.Italic).merge(styleSheet.italicStyle)
+    val strikeSpan = SpanStyle(textDecoration = TextDecoration.LineThrough).merge(styleSheet.strikethroughStyle)
+    val linkSpan = SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline).merge(styleSheet.linkStyle)
+    val codeSpan = SpanStyle(
+        fontFamily = FontFamily.Monospace,
+        background = styleSheet.inlineCodeBackground ?: Color.Unspecified,
+        color = styleSheet.inlineCodeTextColor ?: Color.Unspecified,
+    ).merge(styleSheet.inlineCodeStyle)
     val text = buildAnnotatedString {
     val htmlStack = mutableListOf<SafeHtml.Tag>()
 
@@ -775,20 +784,16 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
     fun applyHtmlStyle(tag: SafeHtml.Tag, start: Int, end: Int) {
         if (start == end) return
         when (tag.name) {
-            "b", "strong" -> addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
-            "i", "em" -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
-            "s", "del", "strike" -> addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
+            "b", "strong" -> addStyle(boldSpan, start, end)
+            "i", "em" -> addStyle(italicSpan, start, end)
+            "s", "del", "strike" -> addStyle(strikeSpan, start, end)
             "u", "ins" -> addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
             "mark" -> addStyle(SpanStyle(background = styleSheet.highlightColor), start, end)
             "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript), start, end)
             "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript), start, end)
-            "code", "kbd" -> addStyle(SpanStyle(
-                fontFamily = FontFamily.Monospace,
-                background = styleSheet.inlineCodeBackground ?: Color.Unspecified,
-                color = styleSheet.inlineCodeTextColor ?: Color.Unspecified,
-            ), start, end)
+            "code", "kbd" -> addStyle(codeSpan, start, end)
             "a" -> tag.attributes["href"]?.takeIf(SafeHtml::isSafeLink)?.let { url ->
-                addStyle(SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline), start, end)
+                addStyle(linkSpan, start, end)
                 addStringAnnotation("url", url, start, end)
             }
             "font", "span" -> {
@@ -866,16 +871,12 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
         val end = length
         if (enableHtml && leaf) htmlStack.forEach { applyHtmlStyle(it, start, end) }
         when (current) {
-            is StrongEmphasis -> addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
-            is Emphasis -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
-            is Code -> addStyle(SpanStyle(
-                fontFamily = FontFamily.Monospace,
-                background = styleSheet.inlineCodeBackground ?: Color.Unspecified,
-                color = styleSheet.inlineCodeTextColor ?: Color.Unspecified,
-            ), start, end)
-            is Strikethrough -> addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
+            is StrongEmphasis -> addStyle(boldSpan, start, end)
+            is Emphasis -> addStyle(italicSpan, start, end)
+            is Code -> addStyle(codeSpan, start, end)
+            is Strikethrough -> addStyle(strikeSpan, start, end)
             is Link -> if (isSafeLink(current.destination)) {
-                addStyle(SpanStyle(color = styleSheet.linkColor, textDecoration = TextDecoration.Underline), start, end)
+                addStyle(linkSpan, start, end)
                 addStringAnnotation("url", current.destination, start, end)
             }
         }

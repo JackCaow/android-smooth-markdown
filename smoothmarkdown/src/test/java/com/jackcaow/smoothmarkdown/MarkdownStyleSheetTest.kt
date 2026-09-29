@@ -1,9 +1,14 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertThrows
@@ -42,6 +47,40 @@ class MarkdownStyleSheetTest {
         val codeIndex = rendered.text.indexOf("code")
         assertEquals(Color.Magenta, rendered.spanStyles.first { linkIndex in it.start until it.end && it.item.color == Color.Magenta }.item.color)
         assertEquals(Color.Cyan, rendered.spanStyles.first { codeIndex in it.start until it.end && it.item.background == Color.Cyan }.item.background)
+    }
+
+    @Test fun configurableInlineStylesReachMarkdownAndHtmlRanges() {
+        val sheet = MarkdownStyleSheet(
+            boldStyle = SpanStyle(color = Color.Red, fontSize = 21.sp),
+            italicStyle = SpanStyle(color = Color.Green),
+            strikethroughStyle = SpanStyle(color = Color.Blue),
+            linkStyle = SpanStyle(color = Color.Magenta),
+            inlineCodeStyle = SpanStyle(color = Color.Cyan, fontSize = 19.sp),
+        )
+        val markdown = parseMarkdown("**bold** *italic* ~~strike~~ [link](https://example.com) `code`").firstChild
+        val rendered = inlineRender(markdown, enableHtml = false, styleSheet = sheet).text
+        fun matching(word: String, color: Color) = rendered.spanStyles.first {
+            val index = rendered.text.indexOf(word)
+            index in it.start until it.end && it.item.color == color
+        }.item
+        assertEquals(FontWeight.Bold, matching("bold", Color.Red).fontWeight)
+        assertEquals(21.sp, matching("bold", Color.Red).fontSize)
+        assertEquals(FontStyle.Italic, matching("italic", Color.Green).fontStyle)
+        assertEquals(TextDecoration.LineThrough, matching("strike", Color.Blue).textDecoration)
+        assertEquals(TextDecoration.Underline, matching("link", Color.Magenta).textDecoration)
+        assertEquals(19.sp, matching("code", Color.Cyan).fontSize)
+
+        val html = parseMarkdown("<b>heavy</b> <code>literal</code> <a href=\"https://example.com\">safe</a>").firstChild
+        val htmlRendered = inlineRender(html, enableHtml = true, styleSheet = sheet).text
+        assertEquals(Color.Red, htmlRendered.spanStyles.first {
+            htmlRendered.text.indexOf("heavy") in it.start until it.end && it.item.fontWeight == FontWeight.Bold
+        }.item.color)
+        assertEquals(Color.Cyan, htmlRendered.spanStyles.first {
+            htmlRendered.text.indexOf("literal") in it.start until it.end && it.item.fontSize == 19.sp
+        }.item.color)
+        assertEquals(Color.Magenta, htmlRendered.spanStyles.first {
+            htmlRendered.text.indexOf("safe") in it.start until it.end && it.item.textDecoration == TextDecoration.Underline
+        }.item.color)
     }
 
     @Test fun invalidSpacingAndHeadingCountAreRejected() {
