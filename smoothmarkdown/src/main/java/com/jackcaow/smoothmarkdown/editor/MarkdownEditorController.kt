@@ -557,11 +557,44 @@ class MarkdownEditorController(
             replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
             return true
         }
-        val resolved = resolveFormattedTextSelection(selected) ?: return false
+        val edit = prepareFormattedProseReplacement(selected, markdown) ?: return false
+        replaceRange(edit.start, edit.end, edit.replacement, selectedStart = edit.caret)
+        return true
+    }
+
+    /** Reports whether a parsed block paste can replace this contiguous prose range safely. */
+    fun canReplaceFormattedTextSelectionWithMarkdownBlocks(
+        selected: MarkdownFormattedTextSelection, markdown: String,
+    ): Boolean = prepareFormattedProseReplacement(selected, markdown, blocksOnly = true) != null
+
+    /** Replaces rendered prose between text endpoints with parsed blocks in one undo step. */
+    fun replaceFormattedTextSelectionWithMarkdownBlocks(
+        selected: MarkdownFormattedTextSelection, markdown: String,
+    ): Boolean {
+        val edit = prepareFormattedProseReplacement(selected, markdown, blocksOnly = true) ?: return false
+        replaceRange(edit.start, edit.end, edit.replacement, selectedStart = edit.caret)
+        return true
+    }
+
+    private data class FormattedProseReplacement(
+        val start: Int, val end: Int, val replacement: String, val caret: Int,
+    )
+
+    private fun prepareFormattedProseReplacement(
+        selected: MarkdownFormattedTextSelection, markdown: String, blocksOnly: Boolean = false,
+    ): FormattedProseReplacement? {
+        if (!hasWellFormedUtf16(markdown)) return null
+        if (blocksOnly && (selected.anchor.listPath != null || selected.focus.listPath != null ||
+                selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null ||
+                selected.anchor.tableCell != null || selected.focus.tableCell != null)) return null
+        val resolved = resolveFormattedTextSelection(selected) ?: return null
+        if (blocksOnly && (markdown.isEmpty() || (resolved.firstIndex..resolved.lastIndex).any { index ->
+                resolved.document.blocks[index].kind !in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING)
+            })) return null
         val first = resolved.first
         val last = resolved.last
-        val left = first.inline.splitVisibleRange(TextRange(first.start, first.inline.visible.length))?.before ?: return false
-        val right = last.inline.splitVisibleRange(TextRange(0, last.end))?.after ?: return false
+        val left = first.inline.splitVisibleRange(TextRange(first.start, first.inline.visible.length))?.before ?: return null
+        val right = last.inline.splitVisibleRange(TextRange(0, last.end))?.after ?: return null
         val leftVisible = first.inline.visible.substring(0, first.start)
         val rightVisible = last.inline.visible.substring(last.end)
         val expected = mutableListOf<Pair<MarkdownBlockKind, String>>()
@@ -570,17 +603,17 @@ class MarkdownEditorController(
         val replacement = if (markdown.isEmpty()) {
             val merged = left + right
             if (merged.isNotEmpty()) {
-                if (MarkdownInlineEditing.parse(merged, enableWikilinks).visible != leftVisible + rightVisible) return false
-                val block = MarkdownFormattedBlock.markdown(first.block, merged) ?: return false
+                if (MarkdownInlineEditing.parse(merged, enableWikilinks).visible != leftVisible + rightVisible) return null
+                val block = MarkdownFormattedBlock.markdown(first.block, merged) ?: return null
                 expected += first.block.kind to block
                 block
             } else ""
         } else {
             val inserted = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
-            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return false
+            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return null
             val pieces = mutableListOf<String>()
             if (left.isNotEmpty()) {
-                val block = MarkdownFormattedBlock.markdown(first.block, left) ?: return false
+                val block = MarkdownFormattedBlock.markdown(first.block, left) ?: return null
                 expected += first.block.kind to block
                 pieces += block
             }
@@ -588,22 +621,22 @@ class MarkdownEditorController(
             pieces += markdown
             if (right.isNotEmpty()) {
                 val block = if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING) right
-                    else MarkdownFormattedBlock.markdown(last.block, right) ?: return false
+                    else MarkdownFormattedBlock.markdown(last.block, right) ?: return null
                 expected += (if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING)
                     MarkdownBlockKind.PARAGRAPH else last.block.kind) to block
                 pieces += block
             }
             pieces.joinToString(separator)
         }
-        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return false
+        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return null
         val candidate = text.replaceRange(first.block.range.min, last.block.range.max, replacement)
         val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
         val before = resolved.document.blocks.take(resolved.firstIndex)
         val after = resolved.document.blocks.drop(resolved.lastIndex + 1)
-        if (parsed.size != before.size + expected.size + after.size) return false
-        if (before.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
-        if (expected.zip(parsed.drop(before.size)).any { (want, next) -> want.first != next.kind || want.second != next.source }) return false
-        if (after.zip(parsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        if (parsed.size != before.size + expected.size + after.size) return null
+        if (before.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return null
+        if (expected.zip(parsed.drop(before.size)).any { (want, next) -> want.first != next.kind || want.second != next.source }) return null
+        if (after.zip(parsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return null
         val caret = if (markdown.isEmpty()) {
             val bodyOffset = MarkdownInlineEditing.parse(left + right, enableWikilinks).sourceOffsetAtVisible(leftVisible.length) ?: left.length
             (expected.firstOrNull()?.second?.length ?: 0) - (left + right).length + bodyOffset
@@ -611,8 +644,8 @@ class MarkdownEditorController(
             (if (left.isNotEmpty()) expected.first().second.length + separator.length else 0) +
                 markdown.length + if (right.isNotEmpty()) separator.length else 0
         }
-        replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret.coerceIn(0, replacement.length))
-        return true
+        return FormattedProseReplacement(first.block.range.min, last.block.range.max, replacement,
+            caret.coerceIn(0, replacement.length))
     }
 
     private data class ResolvedFormattedTextSlice(

@@ -169,6 +169,32 @@ class FormattedTextEndpointsUiTest {
         }
     }
 
+    @Test fun caretEndpointsPasteMarkdownBlocksFromClipboard() {
+        val original = "BeforeX\n\nYAfter\n\nOutside"
+        val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString = AnnotatedString("# Inserted\n\n- one\n- two")
+            override fun setText(annotatedString: AnnotatedString) = Unit
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) }
+            }
+        }
+        compose.onNodeWithTag("formatted-block-drag-block-0").performClick()
+            .performTextInputSelection(TextRange(6))
+        compose.onNodeWithTag("formatted-text-start-block-0").performClick()
+        compose.onNodeWithTag("formatted-block-drag-block-1").performScrollTo().performClick()
+            .performTextInputSelection(TextRange(1))
+        compose.onNodeWithTag("formatted-text-end-block-1").performClick()
+        compose.onNodeWithTag("formatted-text-paste-blocks").performClick()
+        compose.runOnIdle {
+            assertEquals("Before\n\n# Inserted\n\n- one\n- two\n\nAfter\n\nOutside", controller.text)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+        }
+    }
+
     @Test fun caretEndpointsAcrossCodeFenceCopyAndDeleteItsCompleteMarkdown() {
         val original = "BeforeX\n\n```js\nconst n = 1\n```\n\n# YAfter\n\nOutside"
         val controller = MarkdownEditorController(original).also { it.mode = MarkdownEditorMode.FORMATTED }

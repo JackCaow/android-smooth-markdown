@@ -996,6 +996,14 @@ private fun FormattedBlockPane(
                     if (!textSelectionError) { textEndpoints = null; textReplacement = "" }
                 }, enabled = range != null && textReplacement.isNotBlank(),
                     modifier = Modifier.testTag("formatted-text-replace")) { Text("Replace text") }
+                TextButton(onClick = {
+                    val markdown = clipboard.getText()?.text.orEmpty()
+                    textSelectionError = range?.let {
+                        controller.replaceFormattedTextSelectionWithMarkdownBlocks(it, markdown)
+                    } != true
+                    if (!textSelectionError) textEndpoints = null
+                }, enabled = range != null,
+                    modifier = Modifier.testTag("formatted-text-paste-blocks")) { Text("Paste Markdown blocks") }
                 TextButton(onClick = { textEndpoints = null; textSelectionError = false },
                     modifier = Modifier.testTag("formatted-text-clear")) { Text("Clear") }
             }
