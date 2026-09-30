@@ -1,6 +1,6 @@
 # Native AST migration
 
-The current source replaces CommonMark, Coil and RaTeX with library-owned implementations. Published 0.1.0 continues to use the earlier dependency set until a new release is published.
+Version 0.2.0 replaces CommonMark, Coil and RaTeX with library-owned implementations. Version 0.1.0 uses the earlier dependency set.
 
 ## Host integration
 
