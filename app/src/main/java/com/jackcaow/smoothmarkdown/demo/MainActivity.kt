@@ -467,7 +467,7 @@ private fun DemoHome(
                     modifier = Modifier.weight(1f),
                 )
             } else {
-                SmoothMarkdown(currentMarkdown, Modifier.weight(1f), onLinkClick = openLink,
+                SmoothMarkdown(currentMarkdown, Modifier.weight(1f).testTag("reader-scroll"), onLinkClick = openLink,
                     enableHtml = pageId == "html" || pageId == "details-summary",
                     styleSheet = themeOptions[themeIndex].second, plugins = plugins)
             }
