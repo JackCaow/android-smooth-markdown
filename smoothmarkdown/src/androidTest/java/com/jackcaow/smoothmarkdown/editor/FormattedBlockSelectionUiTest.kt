@@ -15,7 +15,7 @@ import org.junit.Test
 class FormattedBlockSelectionUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun selectingTwoBlocksAndReplacingMarkdownUsesOneUndoStep() {
+    @Test fun selectButtonsStillReplaceWholeBlocksAfterCharacterDragTakesLongPress() {
         val original = "before\n\n# Old\n\n> quote\n\nafter"
         val controller = MarkdownEditorController(original)
         controller.mode = MarkdownEditorMode.FORMATTED

@@ -2,13 +2,18 @@ package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.text.AnnotatedString
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -17,10 +22,19 @@ import org.junit.Test
 class FormattedDragSelectionUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun longPressAndDragAcrossHeadingFieldsSelectsMarkdownWithoutButtons() {
+    @Test fun longPressAndDragAcrossHeadingFieldsSelectsCharactersWithoutButtons() {
         val source = "# First\n\n## Second"
         val controller = MarkdownEditorController(source).apply { mode = MarkdownEditorMode.FORMATTED }
-        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+        var copied: AnnotatedString? = null
+        val clipboard = object : ClipboardManager {
+            override fun getText(): AnnotatedString? = copied
+            override fun setText(annotatedString: AnnotatedString) { copied = annotatedString }
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) }
+            }
+        }
 
         val first = compose.onNodeWithTag("formatted-block-drag-block-0")
         val firstBounds = first.fetchSemanticsNode().boundsInRoot
@@ -35,8 +49,12 @@ class FormattedDragSelectionUiTest {
             }
             up()
         }
+        compose.onNodeWithTag("formatted-text-selection-status").performScrollTo()
+        compose.onNodeWithTag("formatted-text-copy").performClick()
         compose.runOnIdle {
-            assertEquals(source, controller.copyFormattedBlockSelectionAsMarkdown())
+            assertNull(controller.formattedBlockSelection)
+            check(!copied?.text.isNullOrBlank())
+            check(copied?.text != source)
         }
     }
 
