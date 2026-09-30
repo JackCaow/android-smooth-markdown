@@ -22,7 +22,7 @@ In your app module's `build.gradle.kts`:
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.runtime:runtime")
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.1.0")
+    implementation("com.github.JackCaow:android-smooth-markdown:0.1.0")
 }
 ```
 
