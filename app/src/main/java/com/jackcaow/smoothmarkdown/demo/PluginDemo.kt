@@ -62,7 +62,7 @@ fun PluginDemo(
                 Box(Modifier.weight(1f)) {
                     SmoothMarkdown(
                         markdown,
-                        Modifier.fillMaxSize(),
+                        Modifier.fillMaxSize().testTag("plugin-reader-scroll"),
                         styleSheet = styleSheet,
                         plugins = plugins,
                         onMentionClick = { username ->

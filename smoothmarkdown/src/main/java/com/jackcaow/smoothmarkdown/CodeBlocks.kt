@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -207,27 +208,29 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
         }
     Column(codeContainer) {
         if ((options.showLanguageTag && language != null) || options.showCopyButton) {
-            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp)) {
-                Spacer(Modifier.weight(1f))
-                if (options.showLanguageTag && language != null) {
-                    Text(
-                        language.uppercase(),
-                        modifier = Modifier.padding(top = 10.dp),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = sheet.codeTextColor ?: MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                if (options.showCopyButton) {
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(code))
-                        onCodeCopied?.invoke(code)
-                        copied = true
-                        copyCount++
-                    }) {
-                        Text(if (copied) "Copied!" else "Copy", color = if (copied) Color(0xFF2DA44E) else sheet.linkColor)
+            DisableSelection {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    if (options.showLanguageTag && language != null) {
+                        Text(
+                            language.uppercase(),
+                            modifier = Modifier.padding(top = 10.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = sheet.codeTextColor ?: MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    if (options.showCopyButton) {
+                        TextButton(onClick = {
+                            clipboard.setText(AnnotatedString(code))
+                            onCodeCopied?.invoke(code)
+                            copied = true
+                            copyCount++
+                        }) {
+                            Text(if (copied) "Copied!" else "Copy", color = if (copied) Color(0xFF2DA44E) else sheet.linkColor)
+                        }
                     }
                 }
             }

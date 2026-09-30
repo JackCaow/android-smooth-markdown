@@ -15,7 +15,7 @@ import org.junit.Test
 class FormattedBlockSelectionUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun selectingTwoBlocksAndReplacingMarkdownUsesOneUndoStep() {
+    @Test fun selectButtonsStillReplaceWholeBlocksAfterCharacterDragTakesLongPress() {
         val original = "before\n\n# Old\n\n> quote\n\nafter"
         val controller = MarkdownEditorController(original)
         controller.mode = MarkdownEditorMode.FORMATTED
@@ -28,6 +28,23 @@ class FormattedBlockSelectionUiTest {
         compose.onNodeWithTag("formatted-block-replace").performClick()
         compose.runOnIdle {
             assertEquals("before\n\n## New\n\nafter", controller.text)
+            check(controller.undo())
+            assertEquals(original, controller.text)
+            check(!controller.canUndo)
+        }
+    }
+
+    @Test fun selectedProseCanBecomeOneBulletListWithoutLeavingFormattedMode() {
+        val original = "Before\n\n# One\n\nTwo\n\nAfter"
+        val controller = MarkdownEditorController(original).apply { mode = MarkdownEditorMode.FORMATTED }
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithTag("formatted-block-select-block-1").performScrollTo().performClick()
+        compose.onNodeWithTag("formatted-block-select-block-2").performScrollTo().performClick()
+        compose.onNodeWithTag("formatted-block-transform-unordered_list").performScrollTo().performClick()
+        compose.runOnIdle {
+            assertEquals("Before\n\n- One\n- Two\n\nAfter", controller.text)
+            assertEquals(MarkdownEditorMode.FORMATTED, controller.mode)
             check(controller.undo())
             assertEquals(original, controller.text)
             check(!controller.canUndo)

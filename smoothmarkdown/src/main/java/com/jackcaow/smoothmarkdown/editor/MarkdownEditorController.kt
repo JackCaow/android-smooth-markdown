@@ -17,10 +17,18 @@ data class MarkdownDocumentBlockSelection(
     val lastIndex: Int get() = maxOf(anchorIndex, extentIndex)
 }
 
-/** UTF-16 offset in the visible text of a formatted paragraph or heading. */
-data class MarkdownFormattedTextPosition(val blockId: String, val offset: Int)
+/** UTF-16 offset in formatted prose, a fenced code body, a list line, or a displayed table cell. */
+data class MarkdownFormattedTextPosition(
+    val blockId: String,
+    val offset: Int,
+    val listPath: List<Int>? = null,
+    val listLineIndex: Int = 0,
+    val tableCell: MarkdownTableCellPosition? = null,
+    /** Physical line of an explicitly marked block quote, when this endpoint is inside one. */
+    val quoteLineIndex: Int? = null,
+)
 
-/** A source-revision-bound text selection across contiguous top-level prose blocks. */
+/** A source-revision-bound text selection across prose and source-backed list lines. */
 data class MarkdownFormattedTextSelection(
     val source: String,
     val anchor: MarkdownFormattedTextPosition,
@@ -176,6 +184,22 @@ class MarkdownEditorController(
         if (formattedBlockFocusTarget == blockId) formattedBlockFocusTarget = null
     }
 
+    /** Keeps Find in Formatted mode and activates an editable visible-text field when available. */
+    internal fun activateFormattedSearchMatch(match: FormattedSearchMatch) {
+        setSelection(match.sourceRange.min, match.sourceRange.max)
+        when (val target = match.target) {
+            is FormattedSearchTarget.Text -> {
+                setFormattedSelection(target.blockId, match.visibleRange)
+                formattedBlockFocusTarget = target.blockId
+            }
+            is FormattedSearchTarget.ListLine -> {
+                setFormattedListSelection(target.blockId, target.path, target.lineIndex, match.visibleRange)
+                formattedListFocusTarget = target.path to target.lineIndex
+            }
+            else -> Unit // Quote and table fields manage their local selection in the Compose pane.
+        }
+    }
+
     fun undo(): Boolean {
         if (!canUndo) return false
         redoStack.addLast(snapshot())
@@ -296,7 +320,7 @@ class MarkdownEditorController(
 
     fun copyFormattedListItemSelectionAsMarkdown(): String? {
         val (list, selected) = selectedFormattedListItems() ?: return null
-        return list.copySiblingItems(selected.parentPath, selected.firstIndex, selected.lastIndex)
+        return list.copySiblingItemsAsMarkdown(selected.parentPath, selected.firstIndex, selected.lastIndex)
     }
 
     /** Deletes complete sibling subtrees as one source edit and one undo step. */
@@ -473,6 +497,428 @@ class MarkdownEditorController(
         return text.substring(first.range.min, last.range.max)
     }
 
+    /** Serializes rendered characters and complete intervening list/code/table blocks. */
+    fun copyFormattedTextSelectionAsMarkdown(selected: MarkdownFormattedTextSelection): String? {
+        if (selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null)
+            return MarkdownQuoteTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.copy()
+        if (selected.anchor.tableCell != null || selected.focus.tableCell != null)
+            return MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.copy()
+        if (selected.anchor.listPath != null || selected.focus.listPath != null)
+            return copyListEndpointSelection(selected)
+        MarkdownCodeTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.let { return it.copy() }
+        val resolved = resolveFormattedTextSelection(selected) ?: return null
+        val fragments = (resolved.firstIndex..resolved.lastIndex).mapNotNull { index ->
+            val block = resolved.document.blocks[index]
+            if (index != resolved.firstIndex && index != resolved.lastIndex) {
+                block to block.source
+            } else {
+                val slice = if (index == resolved.firstIndex) resolved.first else resolved.last
+                if (slice.start == slice.end) null else {
+                    val fragment = slice.inline.sliceVisibleRange(TextRange(slice.start, slice.end)) ?: return null
+                    val markdown = MarkdownFormattedBlock.markdown(block, fragment) ?: return null
+                    block to markdown
+                }
+            }
+        }
+        if (fragments.isEmpty()) return null
+        return buildString {
+            fragments.forEachIndexed { index, (block, markdown) ->
+                if (index > 0) append(text.substring(fragments[index - 1].first.range.max, block.range.min))
+                append(markdown)
+            }
+        }
+    }
+
+    /** Deletes one rendered text range, including complete supported intervening blocks, in one undo step. */
+    fun deleteFormattedTextSelection(selected: MarkdownFormattedTextSelection): Boolean =
+        replaceFormattedTextSelectionWithMarkdown(selected, "")
+
+    /** Replaces one rendered range with complete parsed Markdown blocks. */
+    fun replaceFormattedTextSelectionWithMarkdown(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null) {
+            val quote = MarkdownQuoteTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)
+                ?: return false
+            val edit = quote.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
+        if (selected.anchor.tableCell != null || selected.focus.tableCell != null) {
+            val table = MarkdownTableTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)
+                ?: return false
+            val edit = table.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
+        if (selected.anchor.listPath != null || selected.focus.listPath != null)
+            return replaceListEndpointSelection(selected, markdown)
+        if (!hasWellFormedUtf16(markdown)) return false
+        MarkdownCodeTextSelection.resolve(text, semanticDocument(), selected, enableWikilinks, parserPlugins)?.let { code ->
+            val edit = code.edit(markdown) ?: return false
+            replaceRange(edit.range.min, edit.range.max, edit.replacement, selectedStart = edit.caret)
+            return true
+        }
+        val edit = prepareFormattedProseReplacement(selected, markdown) ?: return false
+        replaceRange(edit.start, edit.end, edit.replacement, selectedStart = edit.caret)
+        return true
+    }
+
+    /** Reports whether a parsed block paste can replace this contiguous prose range safely. */
+    fun canReplaceFormattedTextSelectionWithMarkdownBlocks(
+        selected: MarkdownFormattedTextSelection, markdown: String,
+    ): Boolean = prepareFormattedProseReplacement(selected, markdown, blocksOnly = true) != null
+
+    /** Replaces rendered prose between text endpoints with parsed blocks in one undo step. */
+    fun replaceFormattedTextSelectionWithMarkdownBlocks(
+        selected: MarkdownFormattedTextSelection, markdown: String,
+    ): Boolean {
+        val edit = prepareFormattedProseReplacement(selected, markdown, blocksOnly = true) ?: return false
+        replaceRange(edit.start, edit.end, edit.replacement, selectedStart = edit.caret)
+        return true
+    }
+
+    private data class FormattedProseReplacement(
+        val start: Int, val end: Int, val replacement: String, val caret: Int,
+    )
+
+    private fun prepareFormattedProseReplacement(
+        selected: MarkdownFormattedTextSelection, markdown: String, blocksOnly: Boolean = false,
+    ): FormattedProseReplacement? {
+        if (!hasWellFormedUtf16(markdown)) return null
+        if (blocksOnly && (selected.anchor.listPath != null || selected.focus.listPath != null ||
+                selected.anchor.quoteLineIndex != null || selected.focus.quoteLineIndex != null ||
+                selected.anchor.tableCell != null || selected.focus.tableCell != null)) return null
+        val resolved = resolveFormattedTextSelection(selected) ?: return null
+        if (blocksOnly && (markdown.isEmpty() || (resolved.firstIndex..resolved.lastIndex).any { index ->
+                resolved.document.blocks[index].kind !in setOf(MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING)
+            })) return null
+        val first = resolved.first
+        val last = resolved.last
+        val left = first.inline.splitVisibleRange(TextRange(first.start, first.inline.visible.length))?.before ?: return null
+        val right = last.inline.splitVisibleRange(TextRange(0, last.end))?.after ?: return null
+        val leftVisible = first.inline.visible.substring(0, first.start)
+        val rightVisible = last.inline.visible.substring(last.end)
+        val expected = mutableListOf<Pair<MarkdownBlockKind, String>>()
+        val between = if (first.block.id == last.block.id) "" else text.substring(first.block.range.max, last.block.range.min)
+        val separator = if (between.contains("\r\n")) "\r\n\r\n" else "\n\n"
+        val replacement = if (markdown.isEmpty()) {
+            val merged = left + right
+            if (merged.isNotEmpty()) {
+                if (MarkdownInlineEditing.parse(merged, enableWikilinks).visible != leftVisible + rightVisible) return null
+                val block = MarkdownFormattedBlock.markdown(first.block, merged) ?: return null
+                expected += first.block.kind to block
+                block
+            } else ""
+        } else {
+            val inserted = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+            if (inserted.isEmpty() || inserted.first().range.min != 0 || inserted.last().range.max != markdown.length) return null
+            val pieces = mutableListOf<String>()
+            if (left.isNotEmpty()) {
+                val block = MarkdownFormattedBlock.markdown(first.block, left) ?: return null
+                expected += first.block.kind to block
+                pieces += block
+            }
+            inserted.forEach { expected += it.kind to it.source }
+            pieces += markdown
+            if (right.isNotEmpty()) {
+                val block = if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING) right
+                    else MarkdownFormattedBlock.markdown(last.block, right) ?: return null
+                expected += (if (first.block.id == last.block.id && last.block.kind == MarkdownBlockKind.HEADING)
+                    MarkdownBlockKind.PARAGRAPH else last.block.kind) to block
+                pieces += block
+            }
+            pieces.joinToString(separator)
+        }
+        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return null
+        val candidate = text.replaceRange(first.block.range.min, last.block.range.max, replacement)
+        val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        val before = resolved.document.blocks.take(resolved.firstIndex)
+        val after = resolved.document.blocks.drop(resolved.lastIndex + 1)
+        if (parsed.size != before.size + expected.size + after.size) return null
+        if (before.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return null
+        if (expected.zip(parsed.drop(before.size)).any { (want, next) -> want.first != next.kind || want.second != next.source }) return null
+        if (after.zip(parsed.takeLast(after.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return null
+        val caret = if (markdown.isEmpty()) {
+            val bodyOffset = MarkdownInlineEditing.parse(left + right, enableWikilinks).sourceOffsetAtVisible(leftVisible.length) ?: left.length
+            (expected.firstOrNull()?.second?.length ?: 0) - (left + right).length + bodyOffset
+        } else {
+            (if (left.isNotEmpty()) expected.first().second.length + separator.length else 0) +
+                markdown.length + if (right.isNotEmpty()) separator.length else 0
+        }
+        return FormattedProseReplacement(first.block.range.min, last.block.range.max, replacement,
+            caret.coerceIn(0, replacement.length))
+    }
+
+    private data class ResolvedFormattedTextSlice(
+        val block: MarkdownDocumentBlock,
+        val inline: MarkdownInlineEditing,
+        val start: Int,
+        val end: Int,
+    )
+
+    private data class SourceTextEndpoint(
+        val blockIndex: Int,
+        val block: MarkdownDocumentBlock,
+        val inline: MarkdownInlineEditing,
+        val offset: Int,
+        val lineStart: Int,
+        val contentStart: Int,
+        val contentEnd: Int,
+        val isListLine: Boolean,
+        val listItemIndex: Int? = null,
+        val listPathDepth: Int = 0,
+        val listLineIndex: Int = 0,
+        val listPath: List<Int>? = null,
+    ) {
+        fun fragment(start: Int, end: Int): String? {
+            if (start == end) return ""
+            val body = inline.sliceVisibleRange(TextRange(start, end)) ?: return null
+            return if (isListLine) block.source.substring(lineStart - block.range.min, contentStart - block.range.min) + body
+                else MarkdownFormattedBlock.markdown(block, body)
+        }
+    }
+
+    private fun resolveListEndpoints(selected: MarkdownFormattedTextSelection): Triple<MarkdownDocument, SourceTextEndpoint, SourceTextEndpoint>? {
+        if (selected.source != text) return null
+        val document = semanticDocument()
+        fun endpoint(position: MarkdownFormattedTextPosition): SourceTextEndpoint? {
+            val index = document.blocks.indexOfFirst { it.id == position.blockId }
+            val block = document.blocks.getOrNull(index) ?: return null
+            val path = position.listPath
+            val lineStart: Int
+            val contentStart: Int
+            val contentEnd: Int
+            val inline: MarkdownInlineEditing
+            if (path != null) {
+                if (block.kind !in setOf(MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST) ||
+                    path.isEmpty() || position.listLineIndex < 0) return null
+                val list = MarkdownSourceList.parse(block) ?: return null
+                val item = list.item(path) ?: return null
+                val line = item.lines.getOrNull(position.listLineIndex) ?: return null
+                if (line.start < 0 || line.end < line.start || line.end > block.source.length ||
+                    (position.listLineIndex == 0 && line.start != item.contentStart)) return null
+                val raw = list.lineContent(path, position.listLineIndex) ?: return null
+                inline = MarkdownInlineEditing.parse(raw, enableWikilinks)
+                contentStart = block.range.min + line.start
+                contentEnd = block.range.min + line.end
+                lineStart = text.lastIndexOf('\n', contentStart - 1) + 1
+            } else {
+                if (position.listLineIndex != 0) return null
+                inline = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return null
+                val localStart = if (block.kind == MarkdownBlockKind.HEADING)
+                    Regex("^ {0,3}#{1,6}[ \\t]+").find(block.source)?.value?.length ?: return null
+                    else 0
+                contentStart = block.range.min + localStart
+                contentEnd = contentStart + inline.source.length
+                lineStart = block.range.min
+            }
+            if (position.offset !in 0..inline.visible.length ||
+                inline.splitVisibleRange(TextRange(0, position.offset)) == null ||
+                inline.splitVisibleRange(TextRange(position.offset, inline.visible.length)) == null) return null
+            return SourceTextEndpoint(index, block, inline, position.offset, lineStart, contentStart, contentEnd,
+                path != null, path?.takeIf { it.size == 1 }?.firstOrNull(), path?.size ?: 0,
+                position.listLineIndex, path)
+        }
+        val anchor = endpoint(selected.anchor) ?: return null
+        val focus = endpoint(selected.focus) ?: return null
+        val ordered = listOf(anchor, focus).sortedWith(compareBy({ it.blockIndex }, { it.contentStart }, { it.offset }))
+        val first = ordered[0]
+        val last = ordered[1]
+        if (first.blockIndex == last.blockIndex && first.contentStart == last.contentStart && first.offset == last.offset) return null
+        if ((first.blockIndex + 1 until last.blockIndex).any { document.blocks[it].kind !in setOf(
+                MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST, MarkdownBlockKind.CODE,
+                MarkdownBlockKind.TABLE, MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING,
+            ) }) return null
+        return Triple(document, first, last)
+    }
+
+    private fun copyListEndpointSelection(selected: MarkdownFormattedTextSelection): String? {
+        val (_, first, last) = resolveListEndpoints(selected) ?: return null
+        if (first.contentStart == last.contentStart && first.blockIndex == last.blockIndex)
+            return first.fragment(first.offset, last.offset)?.takeIf { it.isNotEmpty() }
+        val start = first.fragment(first.offset, first.inline.visible.length) ?: return null
+        val end = last.fragment(0, last.offset) ?: return null
+        val middleStart = if (first.isListLine) first.contentEnd else first.block.range.max
+        val middleEnd = if (last.isListLine) last.lineStart else last.block.range.min
+        if (middleStart > middleEnd) return null
+        val middle = text.substring(middleStart, middleEnd)
+        // Match prose copy's omission of separators when an endpoint selects no characters.
+        // Leave every newline inside a nonempty fragment or between selected blocks untouched.
+        val selectedMiddle = middle.let { if (start.isEmpty()) it.dropWhile { char -> char == '\r' || char == '\n' } else it }
+            .let { if (end.isEmpty()) it.dropLastWhile { char -> char == '\r' || char == '\n' } else it }
+        return (start + selectedMiddle + end).takeIf { it.isNotEmpty() }
+    }
+
+    private fun replaceListEndpointSelection(selected: MarkdownFormattedTextSelection, markdown: String): Boolean {
+        if (!hasWellFormedUtf16(markdown)) return false
+        val (document, first, last) = resolveListEndpoints(selected) ?: return false
+        // Raw child blocks (for example a fenced code block inside a list item) cannot be
+        // safely joined to partial paragraph endpoints. Complete middle blocks remain atomic.
+        fun rawOverlaps(block: MarkdownDocumentBlock, start: Int, end: Int): Boolean =
+            MarkdownSourceList.parse(block)?.rawSpans()?.any { raw ->
+                block.range.min + raw.min < end && block.range.min + raw.max > start
+            } == true
+        if (first.isListLine && rawOverlaps(first.block, first.contentStart,
+                if (first.blockIndex == last.blockIndex) last.contentEnd else first.block.range.max)) return false
+        if (last.isListLine && first.blockIndex != last.blockIndex &&
+            rawOverlaps(last.block, last.block.range.min, last.contentEnd)) return false
+        val inserted = if (markdown.isEmpty()) emptyList() else MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks
+        if (markdown.isNotEmpty() && (inserted.isEmpty() || inserted.first().range.min != 0 ||
+                inserted.last().range.max != markdown.length)) return false
+        val left = first.inline.splitVisibleRange(TextRange(first.offset, first.inline.visible.length))?.before ?: return false
+        val right = last.inline.splitVisibleRange(TextRange(0, last.offset))?.after ?: return false
+        if (markdown.isNotEmpty() && first.isListLine && first.listPath == last.listPath &&
+            first.contentStart == last.contentStart && (first.listPathDepth > 1 || first.listLineIndex > 0)) {
+            if ('\n' in markdown || '\r' in markdown) return false
+            val inlineBlock = MarkdownDocumentCodec.parse(markdown, parserPlugins).blocks.singleOrNull() ?: return false
+            if (inlineBlock.kind != MarkdownBlockKind.PARAGRAPH || inlineBlock.source != markdown) return false
+            val replacementVisible = MarkdownInlineEditing.parse(markdown, enableWikilinks).visible
+            val newContent = left + markdown + right
+            if (newContent == first.inline.source) return false
+            if (MarkdownInlineEditing.parse(newContent, enableWikilinks).visible !=
+                first.inline.visible.substring(0, first.offset) + replacementVisible +
+                    last.inline.visible.substring(last.offset)) return false
+            val candidate = text.replaceRange(first.contentStart, first.contentEnd, newContent)
+            val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+            if (parsed.size != document.blocks.size || parsed.indices.any { index ->
+                    index != first.blockIndex && (parsed[index].kind != document.blocks[index].kind ||
+                        parsed[index].source != document.blocks[index].source)
+                }) return false
+            val updatedBlock = parsed.getOrNull(first.blockIndex) ?: return false
+            if (updatedBlock.kind != first.block.kind ||
+                MarkdownSourceList.parse(updatedBlock)?.lineContent(first.listPath ?: return false,
+                    first.listLineIndex) != newContent ||
+                !preservesRetainedListLines(first, last, updatedBlock.source, parsed)) return false
+            replaceRange(first.contentStart, first.contentEnd, newContent,
+                selectedStart = left.length + markdown.length)
+            return true
+        }
+        if (markdown.isEmpty() && MarkdownInlineEditing.parse(left + right, enableWikilinks).visible !=
+            first.inline.visible.substring(0, first.offset) + last.inline.visible.substring(last.offset)) return false
+        val before = text.substring(first.block.range.min, first.contentStart) + left
+        val after = right + text.substring(last.contentEnd, last.block.range.max)
+        val separator = if (text.substring(first.block.range.min, last.block.range.max).contains("\r\n")) "\r\n\r\n" else "\n\n"
+        val replacement = if (markdown.isEmpty()) before + after else buildString {
+            append(before)
+            if (before.isNotEmpty()) append(separator)
+            append(markdown)
+            if (after.isNotEmpty()) append(separator)
+            append(after)
+        }
+        if (replacement == text.substring(first.block.range.min, last.block.range.max)) return false
+        val candidate = text.replaceRange(first.block.range.min, last.block.range.max, replacement)
+        val parsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+        val untouchedBefore = document.blocks.take(first.blockIndex)
+        val untouchedAfter = document.blocks.drop(last.blockIndex + 1)
+        if (parsed.size < untouchedBefore.size + untouchedAfter.size ||
+            untouchedBefore.zip(parsed).any { (old, next) -> old.kind != next.kind || old.source != next.source } ||
+            untouchedAfter.zip(parsed.takeLast(untouchedAfter.size)).any { (old, next) -> old.kind != next.kind || old.source != next.source }) return false
+        val affected = parsed.drop(untouchedBefore.size).dropLast(untouchedAfter.size)
+        if (before.isNotEmpty() && (affected.firstOrNull()?.kind != first.block.kind ||
+                markdown.isNotEmpty() && affected.firstOrNull()?.source != before)) return false
+        if (inserted.isNotEmpty() && affected.windowed(inserted.size).none { window ->
+                inserted.zip(window).all { (want, actual) -> want.kind == actual.kind && want.source == actual.source }
+            }) return false
+        if (!preservesRetainedListLines(first, last, replacement, parsed)) return false
+        // A retained sibling marker must still parse as that list item. In particular, an
+        // ordered marker other than "1." can otherwise become a paragraph continuation.
+        if (last.listItemIndex != null) {
+            val list = MarkdownSourceList.parse(last.block) ?: return false
+            for (itemIndex in last.listItemIndex + 1 until list.items.size) {
+                val item = list.items[itemIndex]
+                val oldLineStart = last.block.range.min + last.block.source.lastIndexOf('\n', item.contentStart - 1) + 1
+                val newLineStart = first.block.range.min + replacement.length - after.length + right.length +
+                    oldLineStart - last.contentEnd
+                val containing = parsed.firstOrNull { newLineStart in it.range.min until it.range.max } ?: return false
+                val newList = MarkdownSourceList.parse(containing) ?: return false
+                val preserved = newList.items.indices.any { index ->
+                    val next = newList.items[index]
+                    val lineStart = containing.range.min + containing.source.lastIndexOf('\n', next.contentStart - 1) + 1
+                    lineStart == newLineStart && next.marker == item.marker &&
+                        newList.lineContent(listOf(index), 0) == list.lineContent(listOf(itemIndex), 0)
+                }
+                if (!preserved) return false
+            }
+        }
+        val caret = before.length + if (markdown.isEmpty()) 0 else (if (before.isNotEmpty()) separator.length else 0) + markdown.length
+        replaceRange(first.block.range.min, last.block.range.max, replacement, selectedStart = caret)
+        return true
+    }
+
+    private fun preservesRetainedListLines(first: SourceTextEndpoint, last: SourceTextEndpoint,
+                                           replacement: String, parsed: List<MarkdownDocumentBlock>): Boolean {
+        val lines = parsed.flatMap { block ->
+            MarkdownSourceList.parse(block)?.sourceLines()?.map { block.range.min + it.start to it }.orEmpty()
+        }.toMap()
+        val suffixLength = last.block.range.max - last.contentEnd
+        val newSuffixStart = first.block.range.min + replacement.length - suffixLength
+        val boundaryBlocks = listOf(first.block, last.block).distinctBy { it.id }
+        for (block in boundaryBlocks) {
+            val old = MarkdownSourceList.parse(block) ?: continue
+            for (line in old.sourceLines()) {
+                val absolute = block.range.min + line.start
+                val mapped = when {
+                    block.id == first.block.id && absolute < first.lineStart -> absolute
+                    block.id == last.block.id && absolute > last.lineStart ->
+                        newSuffixStart + absolute - last.contentEnd
+                    else -> continue
+                }
+                val retained = lines[mapped] ?: return false
+                if (retained.prefix != line.prefix || retained.content != line.content ||
+                    retained.depth != line.depth || retained.firstInItem != line.firstInItem) return false
+            }
+        }
+        if (first.isListLine && (first.listPathDepth > 1 || first.listLineIndex > 0)) {
+            val oldLine = MarkdownSourceList.parse(first.block)?.sourceLines()?.firstOrNull {
+                first.block.range.min + it.start == first.lineStart
+            } ?: return false
+            val newLine = lines[first.lineStart] ?: return false
+            if (newLine.prefix != oldLine.prefix || newLine.depth != oldLine.depth ||
+                newLine.firstInItem != oldLine.firstInItem) return false
+        }
+        return true
+    }
+
+    private data class ResolvedFormattedTextSelection(
+        val document: MarkdownDocument,
+        val firstIndex: Int,
+        val lastIndex: Int,
+        val first: ResolvedFormattedTextSlice,
+        val last: ResolvedFormattedTextSlice,
+    )
+
+    private fun resolveFormattedTextSelection(selected: MarkdownFormattedTextSelection): ResolvedFormattedTextSelection? {
+        if (selected.source != text) return null
+        val document = semanticDocument()
+        val anchorIndex = document.blocks.indexOfFirst { it.id == selected.anchor.blockId }
+        val focusIndex = document.blocks.indexOfFirst { it.id == selected.focus.blockId }
+        if (anchorIndex < 0 || focusIndex < 0) return null
+        val bounds = listOf(anchorIndex to selected.anchor.offset, focusIndex to selected.focus.offset)
+            .sortedWith(compareBy({ it.first }, { it.second }))
+        if (bounds[0] == bounds[1]) return null
+        val firstIndex = bounds[0].first
+        val lastIndex = bounds[1].first
+        // Non-prose blocks are selected atomically only when wholly between two prose endpoints.
+        // Their exact source is copied; delete/replace removes the entire block in one transaction.
+        if ((firstIndex + 1 until lastIndex).any { index -> document.blocks[index].kind !in setOf(
+                MarkdownBlockKind.BULLET_LIST, MarkdownBlockKind.ORDERED_LIST,
+                MarkdownBlockKind.CODE, MarkdownBlockKind.TABLE,
+                MarkdownBlockKind.PARAGRAPH, MarkdownBlockKind.HEADING,
+            ) }) return null
+        fun endpoint(index: Int, start: Int, end: Int?): ResolvedFormattedTextSlice? {
+            val block = document.blocks[index]
+            val inline = MarkdownFormattedBlock.inline(block, enableWikilinks) ?: return null
+            val resolvedEnd = end ?: inline.visible.length
+            if (start !in 0..inline.visible.length || resolvedEnd !in start..inline.visible.length ||
+                inline.splitVisibleRange(TextRange(start, resolvedEnd)) == null) return null
+            return ResolvedFormattedTextSlice(block, inline, start, resolvedEnd)
+        }
+        val first = endpoint(firstIndex, bounds[0].second,
+            if (firstIndex == lastIndex) bounds[1].second else null) ?: return null
+        val last = if (firstIndex == lastIndex) first else
+            endpoint(lastIndex, 0, bounds[1].second) ?: return null
+        return ResolvedFormattedTextSelection(document, firstIndex, lastIndex, first, last)
+    }
+
     /** Applies an inline mark to complete visible text in selected prose blocks. */
     fun applyInlineCommandToFormattedBlockSelection(
         command: MarkdownEditorCommand,
@@ -489,6 +935,15 @@ class MarkdownEditorController(
         return applyInlineToFormattedTextRanges(document, ranges, command, destination)
     }
 
+    /** Groups selected prose into one list/quote or changes each block to a paragraph/ATX heading. */
+    fun applyBlockCommandToFormattedBlockSelection(command: MarkdownEditorCommand): Boolean {
+        val document = selectedFormattedDocument() ?: return false
+        val selection = formattedBlockSelection ?: return false
+        val blocks = document.blocks.subList(selection.firstIndex, selection.lastIndex + 1)
+        val replacement = FormattedBlockTransforms.replacement(text, blocks, command) ?: return false
+        return replaceFormattedBlockSelectionWithMarkdown(replacement)
+    }
+
     /** Applies one inline command to visible text across paragraph/heading blocks in one undo step. */
     fun applyInlineCommandToFormattedTextSelection(
         selected: MarkdownFormattedTextSelection,
@@ -496,6 +951,36 @@ class MarkdownEditorController(
         destination: String? = null,
     ): Boolean {
         if (selected.source != text) return false
+        val kind = inlineMarkKind(command) ?: return false
+        val anchor = selected.anchor
+        val focus = selected.focus
+        if (anchor.listPath != null || focus.listPath != null ||
+            anchor.tableCell != null || focus.tableCell != null ||
+            anchor.quoteLineIndex != null || focus.quoteLineIndex != null) {
+            if (anchor.blockId != focus.blockId) return false
+            val current = semanticDocument()
+            val blockIndex = current.blocks.indexOfFirst { it.id == anchor.blockId }
+            val block = current.blocks.getOrNull(blockIndex) ?: return false
+            val replacement = when {
+                anchor.listPath != null && focus.listPath != null ->
+                    FormattedStructuredInlineMarks.list(block, anchor, focus, kind, destination, enableWikilinks)
+                anchor.tableCell != null && focus.tableCell != null && command in setOf(
+                    MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                    MarkdownEditorCommand.STRIKETHROUGH, MarkdownEditorCommand.INLINE_CODE,
+                ) -> FormattedStructuredInlineMarks.table(block, anchor, focus, kind, destination, enableWikilinks)
+                anchor.quoteLineIndex != null && focus.quoteLineIndex != null ->
+                    FormattedStructuredInlineMarks.quote(block, anchor, focus, kind, destination, enableWikilinks)
+                else -> null
+            } ?: return false
+            val candidate = text.replaceRange(block.range.min, block.range.max, replacement)
+            val reparsed = MarkdownDocumentCodec.parse(candidate, parserPlugins).blocks
+            if (reparsed.size != current.blocks.size || current.blocks.indices.any { index ->
+                    val old = current.blocks[index]
+                    val next = reparsed[index]
+                    old.kind != next.kind || next.source != (if (index == blockIndex) replacement else old.source)
+                }) return false
+            return replaceSemanticBlock(block.id, replacement)
+        }
         val document = semanticDocument()
         val anchorIndex = document.blocks.indexOfFirst { it.id == selected.anchor.blockId }
         val focusIndex = document.blocks.indexOfFirst { it.id == selected.focus.blockId }
@@ -723,6 +1208,8 @@ class MarkdownEditorController(
     }
 
     internal fun applyFormattedInlineMark(command: MarkdownEditorCommand, destination: String? = null): Boolean {
+        // A toolbar or hardware shortcut must not replace text still owned by the IME.
+        if (formattedComposition != null) return false
         val blockId = activeFormattedBlockId ?: return false
         val block = semanticDocument().blockById(blockId) ?: return false
         if (command == MarkdownEditorCommand.WIKILINK && !enableWikilinks) return false
@@ -789,6 +1276,23 @@ class MarkdownEditorController(
             return true
         }
         return replaceSemanticBlock(blockId, updated.toMarkdown())
+    }
+
+    /** Edits one explicit quote line's rendered text, retaining markers and neighboring lines. */
+    fun replaceFormattedQuoteLineText(blockId: String, lineIndex: Int, visibleText: String,
+                                      visibleSelection: TextRange = TextRange(visibleText.length)): Boolean {
+        val block = semanticDocument().blockById(blockId) ?: return false
+        val quote = MarkdownSourceQuote.parse(block) ?: return false
+        val markdown = quote.replaceVisibleLine(lineIndex, visibleText, enableWikilinks) ?: return false
+        val next = MarkdownSourceQuote.parse(MarkdownDocumentBlock(block.id, block.kind, markdown,
+            TextRange(0, markdown.length))) ?: return false
+        val line = next.lines.getOrNull(lineIndex) ?: return false
+        val inline = line.inline(enableWikilinks)
+        val sourceOffset = inline.sourceOffsetAtVisible(visibleSelection.end.coerceIn(0, inline.visible.length))
+            ?: line.content.length
+        if (!replaceSemanticBlock(blockId, markdown)) return false
+        setSelection(block.range.min + line.contentStart + sourceOffset)
+        return true
     }
 
     /** Edits one list item's visible primary text while retaining its marker and neighboring source. */
@@ -888,6 +1392,8 @@ class MarkdownEditorController(
     }
 
     internal fun clearSourceFocusRequest() { sourceFocusRequested = false }
+
+    internal fun requestSourceFocus() { sourceFocusRequested = true }
 
     /** The old field selection resolves repeated-prefix paste that a text-only diff cannot locate. */
     private fun listLineInputChange(before: String, after: String, previousSelection: TextRange?): Pair<TextRange, String> {
@@ -1168,7 +1674,7 @@ class MarkdownEditorController(
 
     fun applyCommand(command: MarkdownEditorCommand, argument: String? = null) {
         if (mode == MarkdownEditorMode.FORMATTED && command in setOf(
-                MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC,
+                MarkdownEditorCommand.BOLD, MarkdownEditorCommand.ITALIC, MarkdownEditorCommand.STRIKETHROUGH,
                 MarkdownEditorCommand.LINK, MarkdownEditorCommand.INLINE_CODE, MarkdownEditorCommand.WIKILINK,
             )) {
             applyFormattedInlineMark(command, argument)

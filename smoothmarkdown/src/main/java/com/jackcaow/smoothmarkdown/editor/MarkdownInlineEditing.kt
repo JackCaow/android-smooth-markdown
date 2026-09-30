@@ -50,6 +50,15 @@ internal class MarkdownInlineEditing private constructor(
         return if (offset == 0) starts.firstOrNull() ?: 0 else ends[offset - 1]
     }
 
+    /** Exact source characters underlying a non-empty visible range, excluding its opening delimiters. */
+    fun sourceRangeForVisible(range: TextRange): TextRange? {
+        if (range.min < 0 || range.max > visible.length || range.min >= range.max ||
+            !validUtf16Boundary(range.min) || !validUtf16Boundary(range.max)) return null
+        val start = starts.getOrNull(range.min) ?: return null
+        val end = ends.getOrNull(range.max - 1) ?: return null
+        return TextRange(start, end).takeIf { it.min < it.max }
+    }
+
     /**
      * Split a visible selection into standalone Markdown fragments. Delimiters active at either
      * edge are closed or reopened so bold, italic, and link text outside a block paste survives.
@@ -66,6 +75,19 @@ internal class MarkdownInlineEditing private constructor(
         if (before.isNotEmpty() && parse(before, enableWikilinks).visible != visible.substring(0, lower)) return null
         if (after.isNotEmpty() && parse(after, enableWikilinks).visible != visible.substring(upper)) return null
         return SplitRange(before, after)
+    }
+
+    /** A standalone Markdown fragment for exactly this rendered range. */
+    fun sliceVisibleRange(range: TextRange): String? {
+        val lower = range.min
+        val upper = range.max
+        if (lower < 0 || upper > visible.length || lower == upper ||
+            !validUtf16Boundary(lower) || !validUtf16Boundary(upper)) return null
+        val start = boundary(lower) ?: return null
+        val end = boundary(upper) ?: return null
+        if (start.offset > end.offset) return null
+        val fragment = start.openTokens + source.substring(start.offset, end.offset) + end.closeTokens
+        return fragment.takeIf { parse(it, enableWikilinks).visible == visible.substring(lower, upper) }
     }
 
     fun annotated(linkColor: Color): AnnotatedString = buildAnnotatedString {

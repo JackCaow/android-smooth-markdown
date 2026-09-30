@@ -208,19 +208,8 @@ private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill
         }
         return
     }
-    val polygon: Path? = when (actualShape) {
-        MermaidShape.Diamond -> polygon(left + width / 2 to top, left + width to top + height / 2,
-            left + width / 2 to top + height, left to top + height / 2)
-        MermaidShape.Hexagon -> polygon(left + width * 0.2f to top, left + width * 0.8f to top,
-            left + width to top + height / 2, left + width * 0.8f to top + height,
-            left + width * 0.2f to top + height, left to top + height / 2)
-        MermaidShape.Parallelogram -> polygon(left + width * 0.15f to top, left + width to top,
-            left + width * 0.85f to top + height, left to top + height)
-        MermaidShape.Trapezoid -> polygon(left + width * 0.18f to top, left + width * 0.82f to top,
-            left + width to top + height, left to top + height)
-        MermaidShape.Asymmetric -> polygon(left + width * 0.14f to top, left + width to top,
-            left + width to top + height, left to top + height, left + width * 0.14f to top + height / 2)
-        else -> null
+    val polygon: Path? = flowchartPolygon(actualShape, rect)?.let { points ->
+        polygon(*points.map { it.x * density to it.y * density }.toTypedArray())
     }
     if (polygon != null) {
         drawPath(polygon, fill)
@@ -228,6 +217,22 @@ private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill
     } else if (actualShape == MermaidShape.Circle) {
         drawOval(fill, Offset(left, top), Size(width, height))
         drawOval(stroke, Offset(left, top), Size(width, height), style = Stroke(strokeWidth))
+    } else if (actualShape == MermaidShape.Cylinder) {
+        val ellipse = height * .15f
+        drawRect(fill, Offset(left, top + ellipse / 2), Size(width, height - ellipse))
+        drawOval(fill, Offset(left, top + height - ellipse), Size(width, ellipse))
+        drawOval(stroke, Offset(left, top + height - ellipse), Size(width, ellipse), style = Stroke(strokeWidth))
+        drawOval(fill, Offset(left, top), Size(width, ellipse))
+        drawOval(stroke, Offset(left, top), Size(width, ellipse), style = Stroke(strokeWidth))
+        drawLine(stroke, Offset(left, top + ellipse / 2), Offset(left, top + height - ellipse / 2), strokeWidth)
+        drawLine(stroke, Offset(left + width, top + ellipse / 2),
+            Offset(left + width, top + height - ellipse / 2), strokeWidth)
+    } else if (actualShape == MermaidShape.Subroutine) {
+        drawRect(fill, Offset(left, top), Size(width, height))
+        drawRect(stroke, Offset(left, top), Size(width, height), style = Stroke(strokeWidth))
+        drawLine(stroke, Offset(left + 8.dp.toPx(), top), Offset(left + 8.dp.toPx(), top + height), strokeWidth)
+        drawLine(stroke, Offset(left + width - 8.dp.toPx(), top),
+            Offset(left + width - 8.dp.toPx(), top + height), strokeWidth)
     } else {
         val radius = when (actualShape) {
             MermaidShape.Stadium -> height / 2
@@ -236,13 +241,6 @@ private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill
         }
         drawRoundRect(fill, Offset(left, top), Size(width, height), CornerRadius(radius))
         drawRoundRect(stroke, Offset(left, top), Size(width, height), CornerRadius(radius), style = Stroke(strokeWidth))
-        if (actualShape == MermaidShape.Subroutine) {
-            drawLine(stroke, Offset(left + 8.dp.toPx(), top), Offset(left + 8.dp.toPx(), top + height), strokeWidth)
-            drawLine(stroke, Offset(left + width - 8.dp.toPx(), top), Offset(left + width - 8.dp.toPx(), top + height), strokeWidth)
-        }
-        if (actualShape == MermaidShape.Cylinder) {
-            drawOval(stroke, Offset(left, top - 4.dp.toPx()), Size(width, 12.dp.toPx()), style = Stroke(strokeWidth))
-        }
     }
 }
 

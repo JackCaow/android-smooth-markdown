@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -22,6 +23,47 @@ import org.junit.Test
 @OptIn(ExperimentalTestApi::class)
 class EditorFormatShortcutsUiTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun flutterFormattingChordsApplyThroughEditorAndRemainUndoable() {
+        val controller = MarkdownEditorController("alpha")
+        val commands = mutableListOf<MarkdownEditorCommand>()
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(), onCommand = { commands += it })
+            }
+        }
+        val input = compose.onNodeWithTag("editor-source-input")
+        input.performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.E); keyUp(Key.E); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("`alpha`", controller.text)
+            check(controller.undo())
+            assertEquals("alpha", controller.text)
+            controller.setSelection(0, 5)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.AltLeft); keyDown(Key.Two)
+            keyUp(Key.Two); keyUp(Key.AltLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("## alpha", controller.text)
+            check(controller.undo())
+            assertEquals("alpha", controller.text)
+            controller.setSelection(0, 5)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.ShiftLeft); keyDown(Key.B)
+            keyUp(Key.B); keyUp(Key.ShiftLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("> alpha", controller.text)
+            assertEquals(listOf(MarkdownEditorCommand.INLINE_CODE,
+                MarkdownEditorCommand.HEADING2, MarkdownEditorCommand.BLOCKQUOTE), commands)
+        }
+    }
 
     @Test fun ctrlBUsesSourceSelectionAndOneUndoStep() {
         val controller = MarkdownEditorController("alpha beta")
@@ -58,6 +100,41 @@ class EditorFormatShortcutsUiTest {
         }
     }
 
+    @Test fun newFormattingChordsRespectHostHookAndCapabilities() {
+        val controller = MarkdownEditorController("alpha")
+        val commands = mutableListOf<MarkdownEditorCommand>()
+        var hostSawInlineCode = false
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(),
+                    capabilities = MarkdownEditorCapabilities(setOf(
+                        MarkdownEditorCommand.INLINE_CODE, MarkdownEditorCommand.HEADING2,
+                    )),
+                    onShortcut = { event, _ ->
+                        (event.key == Key.E && event.isCtrlPressed).also {
+                            if (it) hostSawInlineCode = true
+                        }
+                    },
+                    onCommand = { commands += it })
+            }
+        }
+        val input = compose.onNodeWithTag("editor-source-input")
+        input.performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.E); keyUp(Key.E); keyUp(Key.CtrlLeft)
+        }
+        input.performKeyInput {
+            keyDown(Key.CtrlLeft); keyDown(Key.AltLeft); keyDown(Key.Two)
+            keyUp(Key.Two); keyUp(Key.AltLeft); keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            check(hostSawInlineCode)
+            assertEquals("alpha", controller.text)
+            assertEquals(emptyList<MarkdownEditorCommand>(), commands)
+        }
+    }
+
     @Test fun ctrlIAndCtrlKUseFormattedSelectionWithoutExtraHistory() {
         val controller = MarkdownEditorController("alpha beta")
         controller.mode = MarkdownEditorMode.FORMATTED
@@ -85,6 +162,88 @@ class EditorFormatShortcutsUiTest {
             assertEquals("*alpha* beta", controller.text)
             check(controller.undo())
             assertEquals("alpha beta", controller.text)
+            assertFalse(controller.canUndo)
+        }
+    }
+
+    @Test fun strikeToolbarAndCtrlShiftXUseFormattedSelectionAndOneUndoEach() {
+        val controller = MarkdownEditorController("alpha beta")
+        controller.mode = MarkdownEditorMode.FORMATTED
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithText("alpha beta").performTextInputSelection(TextRange(0, 5))
+        compose.onNodeWithText("Strike").performClick()
+        compose.runOnIdle { assertEquals("~~alpha~~ beta", controller.text) }
+
+        compose.onNodeWithText("alpha beta").performTextInputSelection(TextRange(6, 10))
+        compose.onNodeWithText("alpha beta").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            keyDown(Key.X)
+            keyUp(Key.X)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("~~alpha~~ ~~beta~~", controller.text)
+            check(controller.undo())
+            assertEquals("~~alpha~~ beta", controller.text)
+            check(controller.undo())
+            assertEquals("alpha beta", controller.text)
+            assertFalse(controller.canUndo)
+        }
+    }
+
+    @Test fun ctrlShiftSUsesSourceSelectionAndKeepsOneUndoStep() {
+        val controller = MarkdownEditorController("alpha beta")
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+        compose.onNodeWithTag("editor-source-input").performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        compose.onNodeWithTag("editor-source-input").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            keyDown(Key.S)
+            keyUp(Key.S)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("~~alpha~~ beta", controller.text)
+            check(controller.undo())
+            assertEquals("alpha beta", controller.text)
+            assertFalse(controller.canUndo)
+        }
+    }
+
+    @Test fun ctrlShiftSRespectsHostShortcutAndCommandCapabilities() {
+        val controller = MarkdownEditorController("alpha")
+        var hostSawStrike = false
+        compose.setContent {
+            MaterialTheme {
+                SmoothMarkdownEditor(controller, Modifier.fillMaxSize(),
+                    capabilities = MarkdownEditorCapabilities(setOf(MarkdownEditorCommand.STRIKETHROUGH)),
+                    onShortcut = { event, _ ->
+                        (event.key == Key.S && event.isCtrlPressed && event.isShiftPressed).also {
+                            if (it) hostSawStrike = true
+                        }
+                    })
+            }
+        }
+        compose.onNodeWithTag("editor-source-input").performClick()
+        compose.runOnIdle { controller.setSelection(0, 5) }
+        compose.onNodeWithTag("editor-source-input").performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.ShiftLeft)
+            keyDown(Key.S)
+            keyUp(Key.S)
+            keyDown(Key.X)
+            keyUp(Key.X)
+            keyUp(Key.ShiftLeft)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.runOnIdle {
+            assertEquals("alpha", controller.text)
+            check(hostSawStrike)
             assertFalse(controller.canUndo)
         }
     }

@@ -573,6 +573,8 @@ object MermaidLayout {
         val base = (node.label.length * 8f + 28f).coerceIn(88f, 280f)
         return when (node.shape) {
             MermaidShape.Diamond, MermaidShape.Hexagon -> base + 30f
+            MermaidShape.Parallelogram, MermaidShape.ParallelogramAlt -> base + 22f
+            MermaidShape.Trapezoid, MermaidShape.TrapezoidAlt, MermaidShape.Subroutine -> base + 12f
             MermaidShape.Circle -> max(base, 80f)
             else -> base
         }
@@ -581,6 +583,7 @@ object MermaidLayout {
     private fun nodeHeight(node: MermaidNode): Float = when (node.shape) {
         MermaidShape.StateStart, MermaidShape.StateEnd -> 24f
         MermaidShape.Diamond, MermaidShape.Hexagon, MermaidShape.Circle -> 76f
+        MermaidShape.Cylinder -> 64f
         else -> if (node.compartments.isNotEmpty()) 46f + node.compartments.sumOf { it.size }.toFloat() * 22f + 12f else 48f
     }
 }

@@ -20,12 +20,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.text.contextmenu.builder.item
@@ -40,10 +44,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -144,6 +152,7 @@ import org.commonmark.parser.Parser
 import org.commonmark.parser.IncludeSourceSpans
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 private val baseParser = Parser.builder().extensions(
     listOf(
@@ -190,11 +199,25 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
 }
 
 private val LocalParserPlugins = compositionLocalOf<ParserPluginRegistry?> { null }
+private val LocalMarkdownBuilders = compositionLocalOf<MarkdownBuilderRegistry?> { null }
+private val LocalReaderSelectionController = compositionLocalOf<SmoothSelectionController?> { null }
+private val LocalMarkdownEnableHtml = compositionLocalOf { false }
+private val LocalEnhancedComponents = compositionLocalOf { false }
 private val LocalOnImageClickWithMetadata = compositionLocalOf<((String, String?, String?) -> Unit)?> { null }
 private val LocalImageBuilder = compositionLocalOf<(@Composable (String, String?, String?) -> Unit)?> { null }
 private val LocalOnMentionClick = compositionLocalOf<((String) -> Unit)?> { null }
 private val LocalOnHashtagClick = compositionLocalOf<((String) -> Unit)?> { null }
 private val LocalOnWikilinkClick = compositionLocalOf<((String) -> Unit)?> { null }
+
+@Composable
+private fun enhancedLinkDecoration(
+    text: AnnotatedString,
+    layout: androidx.compose.runtime.State<TextLayoutResult?>,
+): Modifier {
+    val sheet = LocalMarkdownStyleSheet.current
+    val color = sheet.linkStyle?.color?.takeIf { it != Color.Unspecified } ?: sheet.linkColor
+    return enhancedLinkDecoration(text, layout, LocalEnhancedComponents.current, color)
+}
 
 /** Sends the original image source and metadata to both registered callbacks. */
 internal fun dispatchImageClick(
@@ -249,14 +272,37 @@ fun SmoothMarkdown(
     selectionMenuActions: List<SmoothSelectionMenuAction> = emptyList(),
     /** Hide the native Copy item when the host supplies its own copy action. */
     showDefaultCopyAction: Boolean = true,
+    /** Custom renderers for parsed CommonMark nodes; these override built-in rendering. */
+    builderRegistry: MarkdownBuilderRegistry? = null,
+    /** Match Flutter's opt-in decorative headers, quotes, links and code controls. */
+    useEnhancedComponents: Boolean = false,
 ) {
     val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
-    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion) {
-        groupSelectableBlocks(blocks, bridgeVisibleNonText = selectable || selectableAsSingleRegion)
+    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, plugins) {
+        groupSelectableBlocks(
+            blocks,
+            bridgeVisibleNonText = selectable || selectableAsSingleRegion,
+            bridgeBuiltInCode = (selectable || selectableAsSingleRegion) && codeBlockBuilder == null,
+            bridgeDetails = selectable || selectableAsSingleRegion,
+            selectionMode = { node -> if (selectable || selectableAsSingleRegion)
+                readerBlockSelectionMode(node, builderRegistry, plugins) else null },
+        )
     }
     val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
+    SideEffect {
+        activeController?.bindDocument(
+            document, enableHtml, plugins, builderRegistry,
+            customCodeBuilder = codeBlockBuilder != null,
+            customImageBuilder = imageBuilder != null,
+        )
+    }
+    DisposableEffect(activeController, document) {
+        onDispose { activeController?.unbindDocument(document) }
+    }
+    val fullDocumentSelectionMode = activeController?.fullDocumentSelectionMode == true
+    val lazyListState = rememberLazyListState()
     val targetCallback = remember(activeController, onTextPositioned) {
         if (activeController == null) onTextPositioned
         else { target: MarkdownSelectionTarget ->
@@ -269,11 +315,16 @@ fun SmoothMarkdown(
         activeController?.let { controller -> { key: Any -> controller.removeTarget(key) } }
     }
     CompositionLocalProvider(
-        LocalCodeBlockOptions provides codeBlockOptions,
+        LocalCodeBlockOptions provides if (useEnhancedComponents) codeBlockOptions else CodeBlockOptions(
+            showCopyButton = false, showLanguageTag = false, enableSyntaxHighlighting = false),
         LocalCodeBlockBuilder provides codeBlockBuilder,
         LocalOnCodeCopied provides onCodeCopied,
         LocalMarkdownStyleSheet provides styleSheet,
         LocalParserPlugins provides plugins,
+        LocalMarkdownBuilders provides builderRegistry,
+        LocalReaderSelectionController provides activeController,
+        LocalMarkdownEnableHtml provides enableHtml,
+        LocalEnhancedComponents provides useEnhancedComponents,
         LocalOnImageClickWithMetadata provides onImageClickWithMetadata,
         LocalImageBuilder provides imageBuilder,
         LocalOnMentionClick provides onMentionClick,
@@ -289,9 +340,10 @@ fun SmoothMarkdown(
     ) {
         val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
         val content: @Composable () -> Unit = {
-            if (scrollable) {
+            if (scrollable && !fullDocumentSelectionMode) {
                 LazyColumn(
                     modifier = backgroundModifier,
+                    state = lazyListState,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
                 ) {
                     itemsIndexed(selectionGroups) { _, group ->
@@ -299,7 +351,11 @@ fun SmoothMarkdown(
                     }
                 }
             } else {
-                Column(backgroundModifier.padding(styleSheet.contentPadding)) {
+                val fullModifier = if (scrollable) backgroundModifier.verticalScroll(rememberScrollState())
+                    else backgroundModifier
+                Column(fullModifier.padding(styleSheet.contentPadding).onGloballyPositioned {
+                    if (fullDocumentSelectionMode) activeController?.onFullDocumentLaidOut()
+                }) {
                     selectionGroups.forEach { group ->
                         MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
                     }
@@ -324,12 +380,14 @@ private fun MarkdownSelectionRegion(
     // SelectionState captures LocalClipboard when it is created. Keep a stable
     // reference so the clipboard can inspect annotated ranges at Copy time.
     val stateHolder = remember { ReaderSelectionStateHolder() }
-    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry) {
+    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry, controller) {
         object : Clipboard {
             override suspend fun getClipEntry(): ClipEntry? = clipboard.getClipEntry()
             override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
                 clipboard.setClipEntry(readerCopyClipEntry(
-                    clipEntry, stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()))
+                    clipEntry, selectedTexts, anchorRegistry.snapshot(),
+                    controller?.fullDocumentSemanticText(selectedTexts)))
             }
         }
     }
@@ -339,26 +397,31 @@ private fun MarkdownSelectionRegion(
             clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("selection", text)))
         }
         stateHolder.state?.clear()
+        controller?.exitFullDocumentSelection()
+    }
+    val selectionForCopy: () -> VisibleSelection = remember(controller, stateHolder, anchorRegistry) {
+        {
+            val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
+            val semantic = controller?.fullDocumentSemanticText(selectedTexts)
+            if (semantic != null) VisibleSelection(semantic, hadAnchor = true)
+            else visibleSelectedText(selectedTexts, anchorRegistry.snapshot())
+        }
     }
     val toolbarProvider = LocalTextContextMenuToolbarProvider.current
     val dropdownProvider = LocalTextContextMenuDropdownProvider.current
     val legacyToolbar = LocalTextToolbar.current
-    val wrappedToolbar = remember(toolbarProvider, stateHolder, anchorRegistry, clipboard) {
+    val wrappedToolbar = remember(toolbarProvider, selectionForCopy, clipboard) {
         toolbarProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
+            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
         }
     }
-    val wrappedDropdown = remember(dropdownProvider, stateHolder, anchorRegistry, clipboard) {
+    val wrappedDropdown = remember(dropdownProvider, selectionForCopy, clipboard) {
         dropdownProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider,
-                { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) }, copyVisible)
+            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
         }
     }
-    val wrappedLegacyToolbar = remember(legacyToolbar, stateHolder, anchorRegistry, clipboard, showDefaultCopyAction) {
-        ReaderCopyTextToolbar(legacyToolbar,
-            { visibleSelectedText(stateHolder.state?.selectedTexts.orEmpty(), anchorRegistry.snapshot()) },
-            copyVisible, showDefaultCopyAction)
+    val wrappedLegacyToolbar = remember(legacyToolbar, selectionForCopy, clipboard, showDefaultCopyAction) {
+        ReaderCopyTextToolbar(legacyToolbar, selectionForCopy, copyVisible, showDefaultCopyAction)
     }
     CompositionLocalProvider(
         LocalNonTextAnchorRegistry provides anchorRegistry,
@@ -369,11 +432,34 @@ private fun MarkdownSelectionRegion(
     ) {
         val state = rememberSelectionState()
         stateHolder.state = state
-        DisposableEffect(controller, state) {
-            controller?.attach(state)
+        DisposableEffect(controller, state, anchorRegistry, clipboard) {
+            controller?.attach(state, anchorRegistry, copyVisible)
             onDispose {
                 controller?.detach(state)
                 if (stateHolder.state === state) stateHolder.state = null
+            }
+        }
+        val fullRequest = controller?.fullDocumentSelectRequest ?: 0
+        val fullReady = controller?.fullDocumentLayoutReady ?: 0
+        LaunchedEffect(controller, state, fullRequest, fullReady) {
+            if (controller != null && fullRequest > 0 && fullReady == fullRequest &&
+                controller.fullDocumentSelectionMode) {
+                // The complete Column has been positioned. Let selectable text publish its
+                // coordinates before asking Compose for native handles over the whole region.
+                withFrameNanos { }
+                if (controller.fullDocumentSelectRequest == fullRequest &&
+                    controller.fullDocumentSelectionMode) {
+                    state.selectAll()
+                    if (state.selectedTexts.isEmpty()) controller.exitFullDocumentSelection()
+                    else controller.markFullDocumentSelected(fullRequest, state.selectedTexts)
+                }
+            }
+        }
+        LaunchedEffect(controller, state) {
+            snapshotFlow { state.selectedTexts.isNotEmpty() }.collect { hasSelection ->
+                if (!hasSelection && controller?.fullDocumentSelectionEstablished == true) {
+                    controller.exitFullDocumentSelection()
+                }
             }
         }
         val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
@@ -384,7 +470,7 @@ private fun MarkdownSelectionRegion(
                 separator()
                 for (action in menuActions) {
                     item(key = action.key, label = action.label) {
-                        action.onClick(visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot()).text)
+                        action.onClick(selectionForCopy().text)
                         close()
                     }
                 }
@@ -393,7 +479,7 @@ private fun MarkdownSelectionRegion(
         val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
                 (event.isCtrlPressed || event.isMetaPressed)) {
-                val selected = visibleSelectedText(state.selectedTexts, anchorRegistry.snapshot())
+                val selected = selectionForCopy()
                 if (selected.hadAnchor) {
                     copyVisible(selected.text)
                     true
@@ -415,9 +501,14 @@ internal fun readerCopyClipEntry(
     entry: ClipEntry?,
     selectedTexts: List<AnnotatedString>,
     anchors: Set<String>,
+    fullDocumentSemanticText: String? = null,
 ): ClipEntry? {
     if (entry == null || entry.clipData.itemCount != 1) return entry
     val incoming = entry.clipData.getItemAt(0).text?.toString() ?: return entry
+    if (fullDocumentSemanticText != null && incoming == selectedTexts.joinToString("\n") { it.text }) {
+        return ClipEntry(ClipData.newPlainText(
+            entry.clipData.description.label ?: "selection", fullDocumentSemanticText))
+    }
     val selected = visibleSelectedText(selectedTexts, anchors)
     if (!selected.hadAnchor || incoming != selectedTexts.joinToString("\n") { it.text }) return entry
     return ClipEntry(ClipData.newPlainText(entry.clipData.description.label ?: "selection", selected.text))
@@ -471,15 +562,63 @@ private fun MarkdownSelectionGroup(
     }
 }
 
-/** Keep text around visible nontext blocks mounted in one lazy item for a shared selection range. */
-internal fun groupSelectableBlocks(blocks: List<Node>, bridgeVisibleNonText: Boolean = false): List<List<Node>> {
+/** A renderer must opt in before its Compose content can join neighboring native selection. */
+internal fun readerBlockSelectionMode(
+    node: Node,
+    builders: MarkdownBuilderRegistry?,
+    plugins: ParserPluginRegistry?,
+): MarkdownBlockSelectionMode? {
+    builders?.findBuilder(node)?.let { return it.selectionMode(node) }
+    if (node is Paragraph) {
+        val sole = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.singleOrNull()
+        if (sole is Image) builders?.findBuilder(sole)?.let { return it.selectionMode(sole) }
+    }
+    if (node is PluginBlockNode) return plugins?.blockRenderer(node)?.selectionMode(node)
+        ?: MarkdownBlockSelectionMode.NONE
+    return null
+}
+
+/** Keep selectable prose, visual anchors, built-in code, and opted-in blocks mounted together. */
+internal fun groupSelectableBlocks(
+    blocks: List<Node>,
+    bridgeVisibleNonText: Boolean = false,
+    bridgeBuiltInCode: Boolean = false,
+    bridgeDetails: Boolean = false,
+    selectionMode: (Node) -> MarkdownBlockSelectionMode? = { null },
+): List<List<Node>> {
     val groups = mutableListOf<List<Node>>()
     val pending = mutableListOf<Node>()
     fun flush() { if (pending.isNotEmpty()) { groups += pending.toList(); pending.clear() } }
+    var needsFollowingProse = false
     for (block in blocks) {
-        val prose = block is Heading || block is Paragraph || block is BlockQuote ||
+        val mode = selectionMode(block)
+        val builtIn = block is Heading || block is Paragraph || block is BlockQuote ||
             block is BulletList || block is OrderedList ||
-            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak))
+            (bridgeVisibleNonText && (block is TableBlock || block is ThematicBreak || block is BlockMathNode)) ||
+            (bridgeBuiltInCode && (block is FencedCodeBlock || block is IndentedCodeBlock))
+        val prose = when (mode) {
+            MarkdownBlockSelectionMode.NONE -> false
+            MarkdownBlockSelectionMode.NATIVE_TEXT, MarkdownBlockSelectionMode.NON_TEXT -> true
+            null -> builtIn
+        }
+        if (needsFollowingProse) {
+            if (prose) {
+                pending += block
+                flush()
+                needsFollowingProse = false
+                continue
+            }
+            flush()
+            needsFollowingProse = false
+        }
+        if (bridgeDetails && block is DetailsNode && mode != MarkdownBlockSelectionMode.NONE) {
+            val preceding = pending.removeLastOrNull()
+            flush()
+            if (preceding != null) pending += preceding
+            pending += block
+            needsFollowingProse = true
+            continue
+        }
         if (prose) pending += block else { flush(); groups += listOf(block) }
     }
     flush()
@@ -487,9 +626,33 @@ internal fun groupSelectableBlocks(blocks: List<Node>, bridgeVisibleNonText: Boo
 }
 
 @Composable
+private fun ReaderCustomBlockSelection(mode: MarkdownBlockSelectionMode, content: @Composable () -> Unit) {
+    if (mode == MarkdownBlockSelectionMode.NON_TEXT) {
+        SelectableNonTextBlock { DisableSelection { content() } }
+    } else content()
+}
+
+@Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val plugins = LocalParserPlugins.current
+    val builder = LocalMarkdownBuilders.current?.findBuilder(node)
+    if (builder != null) {
+        ReaderCustomBlockSelection(builder.selectionMode(node)) {
+            builder.Render(node, MarkdownBuilderContext(
+                sheet, enableHtml, onLinkClick, onImageClick,
+                childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
+                inlineChildRenderer = { parent, style ->
+                    MarkdownInlineText(
+                        inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                        style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                        onLinkClick, onImageClick, textAlign,
+                    )
+                },
+            ))
+        }
+        return
+    }
     when (node) {
         is Heading -> {
             val baseStyle = sheet.headingStyles?.get(node.level - 1) ?: MaterialTheme.typography.headlineMedium.copy(
@@ -498,12 +661,19 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             )
             val resolvedStyle = baseStyle.copy(color = baseStyle.color.takeUnless { it == Color.Unspecified }
                 ?: sheet.headingColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurface)
-            val primary = MaterialTheme.colorScheme.primary
-            val decorated = node.level <= 2
-            val barHeight = with(LocalDensity.current) {
-                if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
-            }
-            Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
+            if (!LocalEnhancedComponents.current) {
+                MarkdownInlineText(
+                    inlineRender(node, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                    resolvedStyle, onLinkClick, onImageClick, textAlign,
+                    modifier = Modifier.semantics { heading() },
+                )
+            } else {
+                val primary = MaterialTheme.colorScheme.primary
+                val decorated = node.level <= 2
+                val barHeight = with(LocalDensity.current) {
+                    if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
+                }
+                Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
                 Row(
                     Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -519,7 +689,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     }
                     Box(Modifier.weight(1f)) {
                         MarkdownInlineText(
-                            inlineRender(node, enableHtml, sheet, plugins),
+                            inlineRender(node, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
                             resolvedStyle,
                             onLinkClick,
                             onImageClick,
@@ -536,23 +706,40 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                         ),
                     )
                 }
+                }
             }
         }
         is Paragraph -> {
             val meaningful = node.children().filterNot { it is MarkdownTextNode && it.literal.isBlank() }.toList()
             val sole = meaningful.singleOrNull()
+            val soleBuilder = sole?.let { LocalMarkdownBuilders.current?.findBuilder(it) }
             val htmlImage = if (enableHtml && sole is HtmlInline) SafeHtml.imageTag(sole.literal) else null
             when {
+                sole is Image && soleBuilder != null -> {
+                    ReaderCustomBlockSelection(soleBuilder.selectionMode(sole)) {
+                        soleBuilder.Render(sole, MarkdownBuilderContext(
+                            sheet, enableHtml, onLinkClick, onImageClick,
+                            childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml, textAlign) },
+                            inlineChildRenderer = { parent, style ->
+                                MarkdownInlineText(
+                                    inlineRender(parent, enableHtml, sheet, plugins, LocalMarkdownBuilders.current),
+                                    style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                                    onLinkClick, onImageClick, textAlign,
+                                )
+                            },
+                        ))
+                    }
+                }
                 sole is Image -> MarkdownImage(
                     SafeHtml.ImageSpec(sole.destination, sole.plainText(), sole.title, null, null), onImageClick,
                 )
                 htmlImage != null -> MarkdownImage(htmlImage, onImageClick)
-                else -> MarkdownInlineText(inlineRender(node, enableHtml, sheet, plugins), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
+                else -> MarkdownInlineText(inlineRender(node, enableHtml, sheet, plugins, LocalMarkdownBuilders.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge, onLinkClick, onImageClick, textAlign)
             }
         }
         is FencedCodeBlock -> EnhancedCodeBlock(node.literal, node.info)
         is IndentedCodeBlock -> EnhancedCodeBlock(node.literal, null)
-        is BlockQuote -> MarkdownBlockquote(sheet) {
+        is BlockQuote -> MarkdownBlockquote(sheet, LocalEnhancedComponents.current) {
             Column {
                 node.children().forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml, textAlign) }
             }
@@ -563,7 +750,11 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
         is BlockMathNode -> BlockMath(node)
         is PluginBlockNode -> {
             val renderer = plugins?.blockRenderer(node)
-            if (renderer != null) renderer.RenderBlock(node) { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) }
+            if (renderer != null) {
+                ReaderCustomBlockSelection(renderer.selectionMode(node)) {
+                    renderer.RenderBlock(node) { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) }
+                }
+            }
         }
         is FootnoteDefinitionNode -> Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
@@ -574,7 +765,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             )
             Box(Modifier.weight(1f)) {
                 MarkdownInlineText(
-                    inlineRender(node, enableHtml, sheet, plugins), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                    inlineRender(node, enableHtml, sheet, plugins, LocalMarkdownBuilders.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                     onLinkClick, onImageClick, textAlign, bottomPadding = 0.dp,
                 )
             }
@@ -641,9 +832,13 @@ internal fun resolveBlockquoteDecoration(sheet: MarkdownStyleSheet, defaultBorde
 }
 
 @Composable
-private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, content: @Composable () -> Unit) {
+private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, enhanced: Boolean = false, content: @Composable () -> Unit) {
     val decoration = resolveBlockquoteDecoration(sheet, MaterialTheme.colorScheme.primary)
-    val background = decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
+    val primary = MaterialTheme.colorScheme.primary
+    val background = if (enhanced) Modifier.background(Brush.linearGradient(
+        listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))))
+    else decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
     Column(
         Modifier.fillMaxWidth()
             .padding(bottom = sheet.blockSpacing)
@@ -652,14 +847,22 @@ private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, content: @Composable (
             .drawBehind {
                 if (decoration.borderWidth.value > 0) {
                     drawRect(
-                        color = decoration.borderColor,
+                        color = if (enhanced) primary.copy(alpha = 0.6f) else decoration.borderColor,
                         size = Size(decoration.borderWidth.toPx().coerceAtMost(size.width), size.height),
                     )
                 }
             }
             .padding(sheet.blockquotePadding),
     ) {
-        content()
+        if (enhanced) {
+            Row(verticalAlignment = Alignment.Top) {
+                DisableSelection {
+                    Text("❝", color = primary.copy(alpha = 0.4f), fontSize = 24.sp)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) { content() }
+            }
+        } else content()
     }
 }
 
@@ -671,7 +874,11 @@ private fun MarkdownDetails(
     enableHtml: Boolean,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
-    val expanded = rememberSaveable(node) { mutableStateOf(node.isOpen) }
+    val selectionController = LocalReaderSelectionController.current
+    val expanded = rememberSaveable(node) {
+        mutableStateOf(selectionController?.detailsExpanded(node) ?: node.isOpen)
+    }
+    SideEffect { selectionController?.setDetailsExpanded(node, expanded.value) }
     val shape = RoundedCornerShape(6.dp)
     Column(
         Modifier.fillMaxWidth().padding(vertical = 8.dp)
@@ -684,19 +891,27 @@ private fun MarkdownDetails(
                 .clickable(
                     role = Role.Button,
                     onClickLabel = if (expanded.value) "Collapse details" else "Expand details",
-                ) { expanded.value = !expanded.value }
+                ) {
+                    expanded.value = !expanded.value
+                    selectionController?.setDetailsExpanded(node, expanded.value)
+                }
                 .padding(12.dp),
         ) {
-            Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
-                color = sheet.textColor ?: Color.Unspecified)
+            DisableSelection {
+                Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
+                    color = sheet.textColor ?: Color.Unspecified)
+            }
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 val summary = node.summary.singleOrNull()
                 if (summary is Paragraph) {
                     MarkdownInlineText(
-                        inlineRender(summary, enableHtml, sheet, LocalParserPlugins.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                        inlineRender(summary, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current), sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
                         onLinkClick, onImageClick, bottomPadding = 0.dp,
-                        onPlainTextTap = { expanded.value = !expanded.value },
+                        onPlainTextTap = {
+                            expanded.value = !expanded.value
+                            selectionController?.setDetailsExpanded(node, expanded.value)
+                        },
                     )
                 } else {
                     Column {
@@ -754,7 +969,8 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
             })
         }
     } ?: Modifier
-    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
+    val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+        .then(enhancedLinkDecoration(text, layout)).then(tracking)
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -815,12 +1031,13 @@ private fun MarkdownInlineText(
             })
         }
     } ?: Modifier
-    if (render.images.isEmpty() && render.math.isEmpty() && render.kbds.isEmpty()) {
+    if (render.images.isEmpty() && render.math.isEmpty() && render.kbds.isEmpty() && render.customWidgets.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
+            modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
         )
         return
     }
@@ -883,12 +1100,37 @@ private fun MarkdownInlineText(
                 }
             }
         }
+        render.customWidgets.forEach { (id, custom) ->
+            val presentation = custom.presentation
+            inline[id] = InlineTextContent(
+                placeholder = Placeholder(
+                    width = with(density) { presentation.width.toSp() },
+                    height = with(density) { presentation.height.toSp() },
+                    placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
+                ),
+            ) {
+                val enableHtml = LocalMarkdownEnableHtml.current
+                val context = MarkdownBuilderContext(
+                    sheet, enableHtml, onLinkClick, onImageClick,
+                    childRenderer = { child -> MarkdownBlock(child, onLinkClick, onImageClick, enableHtml) },
+                    inlineChildRenderer = { parent, style ->
+                        MarkdownInlineText(
+                            inlineRender(parent, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current),
+                            style ?: sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge,
+                            onLinkClick, onImageClick,
+                        )
+                    },
+                )
+                custom.builder.Render(custom.node, context)
+            }
+        }
         if (!interactive) {
             Text(
                 text = render.text,
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking),
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
             )
         } else {
             val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
@@ -907,7 +1149,8 @@ private fun MarkdownInlineText(
                 text = render.text,
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
-                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier).then(tracking)
+                modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking)
                     .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
                     detectTapGestures { position ->
                         layout.value?.getOffsetForPosition(position)?.let { offset ->
@@ -1072,40 +1315,61 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
     val rows = table.children().flatMap { it.children() }.filterIsInstance<TableRow>().toList()
     val columns = (rows.maxOfOrNull { it.children().filterIsInstance<TableCell>().count() } ?: 0).coerceAtLeast(1)
     val border = resolveTableBorder(sheet, MaterialTheme.colorScheme.outline)
-    Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
-        .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
-        rows.forEachIndexed { rowIndex, row ->
-            val cells = row.children().filterIsInstance<TableCell>().toList()
-            val rowIsHeader = cells.firstOrNull()?.isHeader == true
-            Row(Modifier.height(IntrinsicSize.Min)) {
-                repeat(columns) { columnIndex ->
-                    val cell = cells.getOrNull(columnIndex)
-                    val style = if (cell?.isHeader == true) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                    else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
-                    val edges = tableCellBorderEdges(border, rowIndex, rows.size, columnIndex, columns)
-                    Box(Modifier.width(150.dp).fillMaxHeight()
-                        .then(if (rowIsHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
-                        .drawBehind {
-                            fun drawEdge(side: MarkdownTableBorderSide?, x: Float, y: Float, width: Float, height: Float) {
-                                if (side == null || side.width.value == 0f) return
-                                drawRect(side.color, topLeft = Offset(x, y), size = Size(width, height))
-                            }
-                            edges.top?.let { drawEdge(it, 0f, 0f, size.width, it.width.toPx().coerceAtMost(size.height)) }
-                            edges.right?.let {
-                                val stroke = it.width.toPx().coerceAtMost(size.width)
-                                drawEdge(it, size.width - stroke, 0f, stroke, size.height)
-                            }
-                            edges.bottom?.let {
-                                val stroke = it.width.toPx().coerceAtMost(size.height)
-                                drawEdge(it, 0f, size.height - stroke, size.width, stroke)
-                            }
-                            edges.left?.let { drawEdge(it, 0f, 0f, it.width.toPx().coerceAtMost(size.width), size.height) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val minimumWidth = (sheet.tableCellPadding * 2 + 1.dp) * columns
+        val viewportWidth = maxWidth.takeIf { it.value.isFinite() && it.value > 0f }
+            ?: LocalConfiguration.current.screenWidthDp.dp
+        val tableWidth = maxOf(viewportWidth, minimumWidth)
+        Column(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = sheet.blockSpacing)
+            .semantics { collectionInfo = CollectionInfo(rows.size, columns) }) {
+            rows.forEachIndexed { rowIndex, row ->
+                val cells = row.children().filterIsInstance<TableCell>().toList()
+                val rowIsHeader = cells.firstOrNull()?.isHeader == true
+                Row(Modifier.width(tableWidth).height(IntrinsicSize.Min)) {
+                    repeat(columns) { columnIndex ->
+                        val cell = cells.getOrNull(columnIndex)
+                        val cellAlignment = when (cell?.alignment) {
+                            TableCell.Alignment.CENTER -> Alignment.Center
+                            TableCell.Alignment.RIGHT -> Alignment.CenterEnd
+                            else -> Alignment.CenterStart
                         }
-                        .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
-                            collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
-                            if (cell?.isHeader == true) heading()
-                        }) {
-                        if (cell != null) MarkdownInlineText(inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current), style, onLinkClick, onImageClick)
+                        val cellTextAlign = when (cell?.alignment) {
+                            TableCell.Alignment.CENTER -> TextAlign.Center
+                            TableCell.Alignment.RIGHT -> TextAlign.Right
+                            else -> TextAlign.Left
+                        }
+                        val style = if (cell?.isHeader == true) sheet.tableHeaderStyle ?: MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        else sheet.tableCellStyle ?: MaterialTheme.typography.bodyMedium
+                        val edges = tableCellBorderEdges(border, rowIndex, rows.size, columnIndex, columns)
+                        Box(Modifier.weight(1f).fillMaxHeight()
+                            .then(if (rowIsHeader) sheet.tableHeaderBackgroundColor?.let { Modifier.background(it) } ?: Modifier else Modifier)
+                            .drawBehind {
+                                fun drawEdge(side: MarkdownTableBorderSide?, x: Float, y: Float, width: Float, height: Float) {
+                                    if (side == null || side.width.value == 0f) return
+                                    drawRect(side.color, topLeft = Offset(x, y), size = Size(width, height))
+                                }
+                                edges.top?.let { drawEdge(it, 0f, 0f, size.width, it.width.toPx().coerceAtMost(size.height)) }
+                                edges.right?.let {
+                                    val stroke = it.width.toPx().coerceAtMost(size.width)
+                                    drawEdge(it, size.width - stroke, 0f, stroke, size.height)
+                                }
+                                edges.bottom?.let {
+                                    val stroke = it.width.toPx().coerceAtMost(size.height)
+                                    drawEdge(it, 0f, size.height - stroke, size.width, stroke)
+                                }
+                                edges.left?.let { drawEdge(it, 0f, 0f, it.width.toPx().coerceAtMost(size.width), size.height) }
+                            }
+                            .padding(sheet.tableCellPadding).semantics(mergeDescendants = true) {
+                                collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
+                                if (cell?.isHeader == true) heading()
+                            }, contentAlignment = cellAlignment) {
+                            if (cell != null) MarkdownInlineText(
+                                inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current),
+                                style, onLinkClick, onImageClick,
+                                textAlign = cellTextAlign,
+                                bottomPadding = 0.dp,
+                            )
+                        }
                     }
                 }
             }
@@ -1118,14 +1382,22 @@ internal data class InlineRender(
     val images: Map<String, SafeHtml.ImageSpec>,
     val math: Map<String, String>,
     val kbds: Map<String, String>,
+    val customWidgets: Map<String, CustomInlineWidget> = emptyMap(),
+)
+
+internal data class CustomInlineWidget(
+    val node: Node,
+    val builder: MarkdownNodeBuilder,
+    val presentation: MarkdownInlinePresentation.Widget,
 )
 
 internal fun inlineText(node: Node, enableHtml: Boolean, plugins: ParserPluginRegistry? = null): AnnotatedString = inlineRender(node, enableHtml, plugins = plugins).text
 
-internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(), plugins: ParserPluginRegistry? = null): InlineRender {
+internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(), plugins: ParserPluginRegistry? = null, builders: MarkdownBuilderRegistry? = null): InlineRender {
     val images = linkedMapOf<String, SafeHtml.ImageSpec>()
     val math = linkedMapOf<String, String>()
     val kbds = linkedMapOf<String, String>()
+    val customWidgets = linkedMapOf<String, CustomInlineWidget>()
     val boldSpan = SpanStyle(fontWeight = FontWeight.Bold).merge(styleSheet.boldStyle)
     val italicSpan = SpanStyle(fontStyle = FontStyle.Italic).merge(styleSheet.italicStyle)
     val strikeSpan = SpanStyle(textDecoration = TextDecoration.LineThrough).merge(styleSheet.strikethroughStyle)
@@ -1184,6 +1456,27 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
 
     fun appendNode(current: Node) {
         val start = length
+        val customBuilder = builders?.findBuilder(current)
+        val customPresentation = customBuilder?.renderInline(current)
+        if (customPresentation != null) {
+            when (customPresentation) {
+                is MarkdownInlinePresentation.Text -> {
+                    append(customPresentation.text)
+                    addStyle(customPresentation.style, start, length)
+                }
+                is MarkdownInlinePresentation.Widget -> {
+                    require(customPresentation.width.value.isFinite() && customPresentation.width.value > 0f &&
+                        customPresentation.height.value.isFinite() && customPresentation.height.value > 0f) {
+                        "Inline widget width and height must be finite and positive"
+                    }
+                    val id = "custom-${customWidgets.size}"
+                    customWidgets[id] = CustomInlineWidget(current, customBuilder, customPresentation)
+                    appendInlineContent(id, customPresentation.fallbackText)
+                }
+            }
+            if (enableHtml) htmlStack.forEach { applyHtmlStyle(it, start, length) }
+            return
+        }
         var leaf = true
         when (current) {
             is org.commonmark.node.Text -> append(current.literal)
@@ -1256,12 +1549,13 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
             is Link -> if (isSafeLink(current.destination)) {
                 addStyle(linkSpan, start, end)
                 addStringAnnotation("url", current.destination, start, end)
+                addStringAnnotation("enhanced-link", current.destination, start, end)
             }
         }
     }
     node.children().forEach(::appendNode)
     }
-    return InlineRender(text, images, math, kbds)
+    return InlineRender(text, images, math, kbds, customWidgets)
 }
 
 internal fun isSafeLink(value: String): Boolean {
@@ -1329,7 +1623,7 @@ internal fun dispatchTextTap(
 internal fun isSafeImage(value: String): Boolean =
     runCatching { URI(value).scheme?.lowercase() }.getOrNull() in setOf("http", "https")
 
-private fun Node.children(): Sequence<Node> = sequence {
+internal fun Node.children(): Sequence<Node> = sequence {
     var child = firstChild
     while (child != null) {
         yield(child)

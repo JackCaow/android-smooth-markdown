@@ -65,6 +65,34 @@ class MermaidGanttKanbanTest {
         assertNull(placement.todayMarkerX(firstDay, off.todayMarker))
     }
 
+    @Test fun ganttHeaderUsesUtcDayWeekAndMonthTicksAtFlutterScaleThresholds() {
+        fun ticks(start: String, duration: String): List<MermaidGanttCalendarTick> {
+            val diagram = MermaidParser.parse("gantt\nTask :a, $start, $duration")!!
+            return MermaidLayout.compute(diagram).gantt!!.calendarTicks()
+        }
+
+        val days = ticks("2024-01-30", "4d")
+        assertEquals(listOf("30", "31", "1", "2"),
+            days.filter { it.tier == MermaidGanttTickTier.DAY }.map { it.label })
+        assertEquals(listOf("Jan", "Feb"),
+            days.filter { it.tier == MermaidGanttTickTier.MONTH }.map { it.label })
+
+        val weeks = ticks("2024-01-03", "90d")
+        assertEquals("1/8", weeks.first { it.tier == MermaidGanttTickTier.WEEK }.label)
+        assertEquals(listOf("Jan 2024", "Feb 2024", "Mar 2024", "Apr 2024"),
+            weeks.filter { it.tier == MermaidGanttTickTier.MONTH }.map { it.label })
+        assertTrue(weeks.zipWithNext().all { (a, b) -> a.x <= b.x })
+
+        val months = ticks("2024-01-15", "400d")
+        assertTrue(months.all { it.tier == MermaidGanttTickTier.MONTH })
+        assertEquals("Jan 2024", months.first().label)
+        assertEquals("Feb 2024", months[1].label)
+        assertTrue(months.last().x <= MermaidLayout.compute(
+            MermaidParser.parse("gantt\nTask :a, 2024-01-15, 400d")!!).gantt!!.let {
+            it.chartX + it.chartWidth
+        })
+    }
+
     @Test fun kanbanMatchesFlutterMetadataWipAndFrontmatterFixtures() {
         val diagram = MermaidParser.parse("""
             ---
