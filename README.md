@@ -57,7 +57,7 @@ fun Reply(chunks: Flow<String>, onFinished: (String) -> Unit) {
 }
 ```
 
-`chunks` is a finite flow of **new text fragments**. `onComplete` runs after that flow ends and the final text is shown. For cumulative snapshots, use the separate `prefixes: StateFlow<String>` overload; a normal hot `StateFlow` does not complete, so its completion callback does not run.
+`chunks` is a finite flow of **new text fragments**. `onComplete` runs after that flow ends and the final source is published to the renderer. For cumulative snapshots, use the separate `prefixes: StateFlow<String>` overload; a normal hot `StateFlow` does not complete, so its completion callback does not run.
 
 ### Edit Markdown
 
