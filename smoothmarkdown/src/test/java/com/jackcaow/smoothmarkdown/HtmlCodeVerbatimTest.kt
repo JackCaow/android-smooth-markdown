@@ -2,9 +2,9 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import org.commonmark.node.Code
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -17,7 +17,7 @@ class HtmlCodeVerbatimTest {
         val rendered = inlineText(paragraph, enableHtml = true)
 
         assertEquals("before a<b **c** after", rendered.text)
-        val code = paragraph.firstChild.next as Code
+        val code = paragraph.firstChild!!.next as Code
         assertEquals("a<b **c**", code.literal)
         assertTrue(rendered.spanStyles.any {
             it.start == 7 && it.end == 16 && it.item.fontFamily == FontFamily.Monospace

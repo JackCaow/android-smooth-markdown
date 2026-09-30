@@ -25,7 +25,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Node
 
 class ThinkingNode(val isCollapsed: Boolean = true) : PluginBlockNode() {
     var content: String = ""

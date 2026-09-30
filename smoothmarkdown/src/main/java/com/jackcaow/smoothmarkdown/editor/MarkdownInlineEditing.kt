@@ -10,15 +10,15 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import com.jackcaow.smoothmarkdown.SafeHtml
-import org.commonmark.node.Emphasis
-import org.commonmark.node.Link
-import org.commonmark.node.Node
-import org.commonmark.node.Paragraph
-import org.commonmark.node.SoftLineBreak
-import org.commonmark.node.HardLineBreak
-import org.commonmark.node.StrongEmphasis
-import org.commonmark.node.Text
-import org.commonmark.parser.Parser
+import com.jackcaow.smoothmarkdown.ast.Emphasis
+import com.jackcaow.smoothmarkdown.ast.Link
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.SoftLineBreak
+import com.jackcaow.smoothmarkdown.ast.HardLineBreak
+import com.jackcaow.smoothmarkdown.ast.StrongEmphasis
+import com.jackcaow.smoothmarkdown.ast.Text
+import com.jackcaow.smoothmarkdown.NativeMarkdownParser as Parser
 
 internal enum class InlineMarkKind { BOLD, ITALIC, STRIKETHROUGH, LINK, CODE, WIKILINK }
 internal data class InlineMark(

@@ -4,11 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.Heading
-import org.commonmark.node.Node
-import org.commonmark.node.Paragraph
-import org.commonmark.node.Text
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Text
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -34,8 +34,8 @@ class MarkdownBuilderRegistryTest {
             .register(Node::class, broad)
             .register(Heading::class, heading)
         val parsed = parseMarkdown("# Title\n\nBody")
-        assertSame(heading, registry.findBuilder(parsed.firstChild))
-        assertSame(broad, registry.findBuilder(parsed.firstChild.next))
+        assertSame(heading, registry.findBuilder(parsed.firstChild!!))
+        assertSame(broad, registry.findBuilder(parsed.firstChild!!.next!!))
     }
 
     @Test fun rejectedExactBuilderFallsBackInRegistrationOrderAndReplacementKeepsPosition() {
@@ -45,7 +45,7 @@ class MarkdownBuilderRegistryTest {
         val registry = MarkdownBuilderRegistry()
             .register(Paragraph::class, fallback)
             .register(Heading::class, first)
-        val node = parseMarkdown("# Title").firstChild
+        val node = requireNotNull(parseMarkdown("# Title").firstChild)
         assertSame(fallback, registry.findBuilder(node))
         registry.register(Heading::class, replacement)
         assertSame(replacement, registry.findBuilder(node))
@@ -92,7 +92,7 @@ class MarkdownBuilderRegistryTest {
             inline = { MarkdownInlinePresentation.Widget(0.dp, 16.dp, "ALT") },
         ))
         assertThrows(IllegalArgumentException::class.java) {
-            inlineRender(parseMarkdown("text").firstChild, false, builders = registry)
+            inlineRender(requireNotNull(parseMarkdown("text").firstChild), false, builders = registry)
         }
     }
 }

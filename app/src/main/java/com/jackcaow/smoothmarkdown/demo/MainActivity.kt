@@ -87,7 +87,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schema
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material.icons.filled.Title
-import coil.compose.AsyncImage
+import com.jackcaow.smoothmarkdown.SmoothMarkdownImage
 import com.jackcaow.smoothmarkdown.AdmonitionPlugin
 import com.jackcaow.smoothmarkdown.ArtifactPlugin
 import com.jackcaow.smoothmarkdown.EmojiPlugin
@@ -481,9 +481,9 @@ private fun DemoHome(
                         hostActionError = "${action.name.lowercase().replace('_', ' ')}: ${error.message ?: "failed"}"
                     }) else null,
                     imageBuilder = if (useDeviceFiles) ({ source, alt, title ->
-                        val model = resolveEditorImage(source)
+                        val model = resolveEditorImage(source)?.toURI()?.toString()
                             ?: if (source.contains(':')) source else "file:///android_asset/${source.trimStart('/')}"
-                        AsyncImage(model = model, contentDescription = alt?.ifBlank { title ?: "Image" } ?: title,
+                        SmoothMarkdownImage(source = model, contentDescription = alt?.ifBlank { title ?: "Image" } ?: title,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 240.dp),
                             contentScale = ContentScale.Fit)
                     }) else null,

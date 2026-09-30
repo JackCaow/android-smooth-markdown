@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,7 +8,7 @@ import org.junit.Test
 class MathTest {
     @Test fun inlineMathCoexistsWithTextAndMultipleFormulas() {
         val paragraph = parseMarkdown("Einstein: \$E=mc^2\$ and \$x + y\$ done").firstChild as Paragraph
-        val children = paragraph.children()
+        val children = paragraph.children().toList()
         assertEquals(listOf("E=mc^2", "x + y"), children.filterIsInstance<InlineMathNode>().map { it.latex })
         assertEquals(2, inlineRender(paragraph, false).math.size)
     }
@@ -22,7 +22,7 @@ class MathTest {
 
     @Test fun singleLineAndMultilineBlocksIncludeUnclosedInput() {
         val document = parseMarkdown("Before\n\$\$E=mc^2\$\$\nAfter\n\$\$\n\\frac{a}{b}\n\$\$\n\$\$unclosed")
-        val nodes = document.children()
+        val nodes = document.children().toList()
         assertTrue(nodes[0] is Paragraph)
         assertEquals("E=mc^2", (nodes[1] as BlockMathNode).latex)
         assertTrue(nodes[2] is Paragraph)
@@ -36,11 +36,4 @@ class MathTest {
         assertTrue(paragraph.children().none { it is InlineMathNode })
     }
 
-    private fun org.commonmark.node.Node.children(): List<org.commonmark.node.Node> = buildList {
-        var child = firstChild
-        while (child != null) {
-            add(child)
-            child = child.next
-        }
-    }
 }

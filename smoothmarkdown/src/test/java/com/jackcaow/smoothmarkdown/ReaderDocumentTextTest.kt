@@ -2,9 +2,9 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.AnnotatedString
-import org.commonmark.node.Node
-import org.commonmark.node.Paragraph
-import org.commonmark.node.Image
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Image
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

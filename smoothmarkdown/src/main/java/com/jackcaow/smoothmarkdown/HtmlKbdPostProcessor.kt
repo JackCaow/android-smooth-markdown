@@ -1,12 +1,12 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Code
-import org.commonmark.node.CustomNode
-import org.commonmark.node.HardLineBreak
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Node
-import org.commonmark.node.SoftLineBreak
-import org.commonmark.node.Text
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.CustomNode
+import com.jackcaow.smoothmarkdown.ast.HardLineBreak
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.SoftLineBreak
+import com.jackcaow.smoothmarkdown.ast.Text
 
 /** A single inline key cap, including the plain text that should remain selectable. */
 internal class HtmlKbdNode(val label: String) : CustomNode()

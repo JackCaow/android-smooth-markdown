@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Document
+import com.jackcaow.smoothmarkdown.ast.Document
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame

@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

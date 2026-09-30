@@ -1,11 +1,11 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import com.jackcaow.smoothmarkdown.parseMarkdown
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.BulletList
-import org.commonmark.node.ListItem
-import org.commonmark.node.OrderedList
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.ListItem
+import com.jackcaow.smoothmarkdown.ast.OrderedList
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 
 /** Builds a replacement for complete, contiguous top-level prose blocks only. */
 internal object FormattedBlockTransforms {

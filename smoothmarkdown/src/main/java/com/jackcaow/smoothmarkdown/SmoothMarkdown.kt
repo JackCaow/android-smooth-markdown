@@ -3,10 +3,13 @@ package com.jackcaow.smoothmarkdown
 import android.content.ClipData
 import java.net.URI
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,7 +49,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -73,7 +75,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.Placeholder
@@ -111,79 +112,42 @@ import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import coil.compose.SubcomposeAsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
-import coil.size.Size as CoilSize
-import coil.decode.SvgDecoder
-import org.commonmark.ext.autolink.AutolinkExtension
-import org.commonmark.ext.gfm.strikethrough.Strikethrough
-import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
-import org.commonmark.ext.gfm.tables.TableBlock
-import org.commonmark.ext.gfm.tables.TableCell
-import org.commonmark.ext.gfm.tables.TableRow
-import org.commonmark.ext.gfm.tables.TablesExtension
-import org.commonmark.ext.task.list.items.TaskListItemMarker
-import org.commonmark.ext.task.list.items.TaskListItemsExtension
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.BulletList
-import org.commonmark.node.Code
-import org.commonmark.node.Emphasis
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.HardLineBreak
-import org.commonmark.node.Heading
-import org.commonmark.node.HtmlBlock
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Image
-import org.commonmark.node.IndentedCodeBlock
-import org.commonmark.node.Link
-import org.commonmark.node.ListItem
-import org.commonmark.node.Node
-import org.commonmark.node.OrderedList
-import org.commonmark.node.Paragraph
-import org.commonmark.node.SoftLineBreak
-import org.commonmark.node.StrongEmphasis
-import org.commonmark.node.ThematicBreak
-import org.commonmark.node.Text as MarkdownTextNode
-import org.commonmark.parser.Parser
-import org.commonmark.parser.IncludeSourceSpans
+import com.jackcaow.smoothmarkdown.ast.Strikethrough
+import com.jackcaow.smoothmarkdown.ast.TableBlock
+import com.jackcaow.smoothmarkdown.ast.TableCell
+import com.jackcaow.smoothmarkdown.ast.TableRow
+import com.jackcaow.smoothmarkdown.ast.TaskListItemMarker
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.Emphasis
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.HardLineBreak
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.HtmlBlock
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Link
+import com.jackcaow.smoothmarkdown.ast.ListItem
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.OrderedList
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.SoftLineBreak
+import com.jackcaow.smoothmarkdown.ast.StrongEmphasis
+import com.jackcaow.smoothmarkdown.ast.ThematicBreak
+import com.jackcaow.smoothmarkdown.ast.Text as MarkdownTextNode
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 
-private val baseParser = Parser.builder().extensions(
-    listOf(
-        StrikethroughExtension.create(),
-        TablesExtension.create(),
-        TaskListItemsExtension.create(),
-        AutolinkExtension.create(),
-    ),
-).customBlockParserFactory(FootnoteDefinitionParserFactory())
-    .customBlockParserFactory(DetailsParserFactory())
-    .customBlockParserFactory(MathBlockParserFactory())
-    .customInlineContentParserFactory(MathInlineParserFactory())
-    .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
-    .build()
+private val baseParser = NativeMarkdownParser(enableGFM = true, enableExtensions = true)
 
 internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = null, enableCache: Boolean = true, enableHtml: Boolean = false): Node {
     // The HTML pass changes the AST, so the two parser modes need separate cache keys.
     if (enableCache && plugins == null) SmoothMarkdownCache.get(markdown, enableHtml)?.let { return it }
-    val parser = if (plugins == null || (plugins.blockPlugins.isEmpty() && plugins.inlinePlugins.isEmpty())) baseParser else {
-        val builder = Parser.builder().extensions(listOf(
-            StrikethroughExtension.create(), TablesExtension.create(), TaskListItemsExtension.create(), AutolinkExtension.create(),
-        ))
-        plugins.blockPlugins.forEach { builder.customBlockParserFactory(PluginBlockParserFactory(it)) }
-        builder.customBlockParserFactory(FootnoteDefinitionParserFactory())
-            .customBlockParserFactory(DetailsParserFactory())
-            .customBlockParserFactory(MathBlockParserFactory())
-            .customInlineContentParserFactory(MathInlineParserFactory())
-            .includeSourceSpans(IncludeSourceSpans.BLOCKS_AND_INLINES)
-        if (plugins.inlinePlugins.isNotEmpty()) builder.customInlineContentParserFactory(PluginInlineParserFactory(plugins))
-        builder.build()
-    }
+    val parser = if (plugins == null) baseParser else NativeMarkdownParser(enableGFM = true, enableExtensions = true, plugins = plugins)
     val document = parser.parse(markdown)
     plugins?.transformFencedBlocks(document)
     if (enableHtml) {
@@ -977,9 +941,25 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
         modifier = if (actions.isEmpty() && onPlainTextTap == null) base else base
             .then(if (actions.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
             .pointerInput(text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
-                detectTapGestures { position ->
-                    layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        dispatchTextTap(text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
+                if (onPlainTextTap != null) {
+                    // A native selectable Text can consume a short press while clearing its prior
+                    // selection. Observe that tap before the selection pass, without stealing a
+                    // long press or drag used to select the summary itself.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                        if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
+                            up.consume()
+                            layout.value?.getOffsetForPosition(up.position)?.let { offset ->
+                                dispatchTextTap(text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
+                            }
+                        }
+                    }
+                } else {
+                    detectTapGestures { position ->
+                        layout.value?.getOffsetForPosition(position)?.let { offset ->
+                            dispatchTextTap(text, offset, onLinkClick, null, onMentionClick, onHashtagClick, onWikilinkClick)
+                        }
                     }
                 }
             },
@@ -1063,8 +1043,8 @@ private fun MarkdownInlineText(
         }.toMutableMap()
         render.math.forEach { (id, latex) ->
             val renderer = rememberMathRenderer(latex, displayMode = false)
-            val widthDp = with(density) { (renderer?.widthPx ?: (latex.length * 10f)).coerceAtLeast(1f).toDp() }
-            val heightDp = with(density) { (renderer?.totalHeightPx ?: 24f).coerceAtLeast(1f).toDp() }
+            val widthDp = with(density) { renderer.width.coerceAtLeast(1f).toDp() }
+            val heightDp = with(density) { renderer.height.coerceAtLeast(1f).toDp() }
             inline[id] = InlineTextContent(
                 placeholder = Placeholder(
                     width = with(density) { widthDp.toSp() },
@@ -1072,10 +1052,7 @@ private fun MarkdownInlineText(
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
                 ),
             ) {
-                if (renderer == null) Text("$$latex$")
-                else Canvas(Modifier.width(widthDp).height(heightDp)) {
-                    renderer.draw(drawContext.canvas.nativeCanvas)
-                }
+                NativeMath(latex, displayMode = false, Modifier.width(widthDp).height(heightDp))
             }
         }
         render.kbds.forEach { (id, label) ->
@@ -1094,9 +1071,13 @@ private fun MarkdownInlineText(
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
                 ),
             ) {
-                Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
-                    .padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                // The parent annotated text already contains the key label for selection.
+                // Its visual inline child must not register that label a second time.
+                DisableSelection {
+                    Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
+                        .padding(horizontal = 5.dp, vertical = 1.dp)) {
+                        Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                    }
                 }
             }
         }
@@ -1167,20 +1148,8 @@ private fun MarkdownInlineText(
 @Composable
 private fun rememberImageIntrinsicSize(source: String): ImageSize? {
     val model = imageModel(source) ?: return null
-    val context = LocalContext.current
-    val imageLoader = context.imageLoader
-    val request = remember(context, model) {
-        ImageRequest.Builder(context).data(model).size(CoilSize.ORIGINAL).apply {
-            if (isSvgImageSource(source)) decoderFactory(SvgDecoder.Factory())
-        }.build()
-    }
-    return produceState<ImageSize?>(null, imageLoader, request) {
-        val result = imageLoader.execute(request) as? SuccessResult ?: return@produceState
-        val drawable = result.drawable
-        if (drawable.intrinsicWidth > 0 && drawable.intrinsicHeight > 0) {
-            value = ImageSize(drawable.intrinsicWidth.toFloat(), drawable.intrinsicHeight.toFloat())
-        }
-    }.value
+    val image = rememberNativeImage(model).data ?: return null
+    return ImageSize(image.width, image.height)
 }
 
 @Composable
@@ -1195,8 +1164,8 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
             role = Role.Button, onClickLabel = "Open image",
         ) { dispatchImageClick(image, onImageClick, onImageClickWithMetadata) } else modifier) {
         if (imageBuilder != null) imageBuilder(image.source, image.alt, image.title)
-        else SubcomposeAsyncImage(
-            model = imageRequest(image.source, model),
+        else NativeMarkdownImage(
+            source = model,
             contentDescription = null,
             modifier = Modifier.width(width.dp).height(height.dp),
             contentScale = ContentScale.Fit,
@@ -1236,8 +1205,8 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
                     dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
                 }) {
                 if (imageBuilder != null) Box(customModifier) { imageBuilder(url, image.alt, image.title) }
-                else SubcomposeAsyncImage(
-                    model = imageRequest(url, model),
+                else NativeMarkdownImage(
+                    source = model,
                     contentDescription = null,
                     modifier = imageModifier,
                     loading = { androidx.compose.material3.CircularProgressIndicator() },
@@ -1245,18 +1214,6 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun imageRequest(source: String, model: String): Any {
-    if (!isSvgImageSource(source)) return model
-    val context = LocalContext.current
-    return remember(context, model) {
-        ImageRequest.Builder(context)
-            .data(model)
-            .decoderFactory(SvgDecoder.Factory())
-            .build()
     }
 }
 
@@ -1479,7 +1436,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
         }
         var leaf = true
         when (current) {
-            is org.commonmark.node.Text -> append(current.literal)
+            is com.jackcaow.smoothmarkdown.ast.Text -> append(current.literal)
             is Code -> append(current.literal)
             is SoftLineBreak, is HardLineBreak -> append("\n")
             is FootnoteReferenceNode -> {
@@ -1634,7 +1591,7 @@ internal fun Node.children(): Sequence<Node> = sequence {
 private fun Node.plainText(): String = buildString {
     fun visit(node: Node) {
         when (node) {
-            is org.commonmark.node.Text -> append(node.literal)
+            is com.jackcaow.smoothmarkdown.ast.Text -> append(node.literal)
             is Code -> append(node.literal)
             is FencedCodeBlock -> append(node.literal)
             is IndentedCodeBlock -> append(node.literal)

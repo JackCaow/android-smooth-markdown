@@ -8,8 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.mermaid.MermaidDiagramView
 import com.jackcaow.smoothmarkdown.mermaid.MermaidParser
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Node
 
 /** Opt-in native renderer for supported Mermaid diagrams; unsupported fences stay code blocks. */
 class MermaidPlugin(val onNodeTap: ((String) -> Unit)? = null) : BlockParserPlugin {

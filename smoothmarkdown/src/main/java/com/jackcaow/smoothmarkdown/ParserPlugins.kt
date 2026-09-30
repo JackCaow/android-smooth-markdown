@@ -2,21 +2,10 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.SpanStyle
-import org.commonmark.node.CustomBlock
-import org.commonmark.node.CustomNode
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Node
-import org.commonmark.parser.SourceLine
-import org.commonmark.parser.beta.InlineContentParser
-import org.commonmark.parser.beta.InlineContentParserFactory
-import org.commonmark.parser.beta.InlineParserState
-import org.commonmark.parser.beta.ParsedInline
-import org.commonmark.parser.block.AbstractBlockParser
-import org.commonmark.parser.block.BlockContinue
-import org.commonmark.parser.block.BlockParserFactory
-import org.commonmark.parser.block.BlockStart
-import org.commonmark.parser.block.MatchedBlockParser
-import org.commonmark.parser.block.ParserState
+import com.jackcaow.smoothmarkdown.ast.CustomBlock
+import com.jackcaow.smoothmarkdown.ast.CustomNode
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Node
 
 /** Opt-in extension point. Higher priority plugins are tried first; equal priorities keep registration order. */
 interface ParserPlugin {
@@ -35,7 +24,7 @@ interface InlineParserPlugin : ParserPlugin {
     /** One character that starts this syntax. */
     val triggerCharacter: Char
     fun canParse(text: String, index: Int): Boolean
-    /** Return null to let the next plugin or CommonMark handle the input. */
+    /** Return null to let the next plugin or the native parser handle the input. */
     fun parse(text: String, startIndex: Int): InlineParseResult?
     fun render(node: PluginInlineNode): InlinePluginPresentation?
 }
@@ -47,14 +36,14 @@ open class PluginBlockNode : CustomBlock() {
 
 interface BlockParserPlugin : ParserPlugin {
     fun canStart(line: String): Boolean = false
-    /** Return null to let the next plugin or CommonMark handle the line. */
+    /** Return null to let the next plugin or the native parser handle the line. */
     fun createNode(openingLine: String): PluginBlockNode? = null
     fun isClosingLine(line: String): Boolean = false
     /** Node-aware closing hook for plugins with multiple delimiter styles. */
     fun isClosingLine(node: PluginBlockNode, line: String): Boolean = isClosingLine(line)
     /** Receives content lines, excluding delimiters, after the block is complete. */
     fun complete(node: PluginBlockNode, contentLines: List<String>) = Unit
-    /** Converts a CommonMark fenced code block after parsing; return null for ordinary code. */
+    /** Converts a fenced code block after parsing; return null for ordinary code. */
     fun parseFencedCodeBlock(block: FencedCodeBlock): PluginBlockNode? = null
     /** Text for whole-document copy when [RenderBlock] replaces a block; null means it is unknown. */
     fun documentText(node: PluginBlockNode): String? = null
@@ -150,50 +139,3 @@ class ParserPluginRegistry {
 
 /** Rendering dispatch is by the plugin that created the node. */
 fun BlockParserPlugin.canRender(node: PluginBlockNode): Boolean = node.pluginId == id
-
-internal class PluginBlockParserFactory(private val plugin: BlockParserPlugin) : BlockParserFactory {
-    override fun tryStart(state: ParserState, matchedBlockParser: MatchedBlockParser): BlockStart? {
-        val line = state.line.content.toString()
-        if (!plugin.canStart(line)) return null
-        val node = plugin.createNode(line) ?: return null
-        node.pluginId = plugin.id
-        return BlockStart.of(PluginBlockParser(plugin, node)).atIndex(line.length)
-    }
-}
-
-private class PluginBlockParser(private val plugin: BlockParserPlugin, private val node: PluginBlockNode) : AbstractBlockParser() {
-    private val content = mutableListOf<String>()
-    private var first = true
-    private var closed = false
-    override fun getBlock(): PluginBlockNode = node
-    override fun tryContinue(state: ParserState): BlockContinue? {
-        if (closed) return null
-        val line = state.line.content.toString()
-        if (plugin.isClosingLine(node, line)) closed = true
-        return BlockContinue.atIndex(if (closed) line.length else 0)
-    }
-    override fun addLine(line: SourceLine) {
-        if (first) { first = false; return }
-        if (!closed) content += line.content.toString()
-    }
-    override fun closeBlock() = plugin.complete(node, content)
-}
-
-internal class PluginInlineParserFactory(private val registry: ParserPluginRegistry) : InlineContentParserFactory {
-    override fun getTriggerCharacters(): Set<Char> = registry.inlineTriggerCharacters
-    override fun create(): InlineContentParser = InlineContentParser { state: InlineParserState ->
-        val scanner = state.scanner()
-        val start = scanner.position()
-        val remaining = buildString {
-            while (scanner.hasNext()) { append(scanner.peek()); scanner.next() }
-        }
-        scanner.setPosition(start)
-        for (plugin in registry.findInlinePlugins(remaining, 0)) {
-            val result = plugin.parse(remaining, 0) ?: continue
-            if (result.consumed !in 1..remaining.length) continue
-            repeat(result.consumed) { scanner.next() }
-            return@InlineContentParser ParsedInline.of(result.node, scanner.position())
-        }
-        ParsedInline.none()
-    }
-}

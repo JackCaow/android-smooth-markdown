@@ -1,26 +1,26 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.ext.gfm.tables.TableBlock
-import org.commonmark.ext.gfm.tables.TableCell
-import org.commonmark.ext.gfm.tables.TableRow
-import org.commonmark.ext.task.list.items.TaskListItemMarker
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.BulletList
-import org.commonmark.node.Code
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.HardLineBreak
-import org.commonmark.node.Heading
-import org.commonmark.node.HtmlBlock
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Image
-import org.commonmark.node.IndentedCodeBlock
-import org.commonmark.node.ListItem
-import org.commonmark.node.Node
-import org.commonmark.node.OrderedList
-import org.commonmark.node.Paragraph
-import org.commonmark.node.SoftLineBreak
-import org.commonmark.node.ThematicBreak
-import org.commonmark.node.Text
+import com.jackcaow.smoothmarkdown.ast.TableBlock
+import com.jackcaow.smoothmarkdown.ast.TableCell
+import com.jackcaow.smoothmarkdown.ast.TableRow
+import com.jackcaow.smoothmarkdown.ast.TaskListItemMarker
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.HardLineBreak
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.HtmlBlock
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.ListItem
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.OrderedList
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.SoftLineBreak
+import com.jackcaow.smoothmarkdown.ast.ThematicBreak
+import com.jackcaow.smoothmarkdown.ast.Text
 
 /** UTF-16 offsets into [ReaderDocumentText.text], stable while the parsed document is unchanged. */
 internal data class ReaderTextBlock(val id: String, val start: Int, val end: Int)

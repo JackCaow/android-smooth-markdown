@@ -4,18 +4,18 @@ import androidx.compose.ui.text.TextRange
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SourceBlockParserPlugin
 import com.jackcaow.smoothmarkdown.parseMarkdown
-import org.commonmark.ext.gfm.tables.TableBlock
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.BulletList
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Heading
-import org.commonmark.node.HtmlBlock
-import org.commonmark.node.Image
-import org.commonmark.node.IndentedCodeBlock
-import org.commonmark.node.Node
-import org.commonmark.node.OrderedList
-import org.commonmark.node.Paragraph
-import org.commonmark.node.ThematicBreak
+import com.jackcaow.smoothmarkdown.ast.TableBlock
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.HtmlBlock
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.OrderedList
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.ThematicBreak
 
 /** Top-level syntax recognized by the first semantic editing pass. Nested content remains source-backed. */
 enum class MarkdownBlockKind { PARAGRAPH, HEADING, QUOTE, BULLET_LIST, ORDERED_LIST, CODE, TABLE, IMAGE, RULE, RAW }
@@ -128,7 +128,7 @@ object MarkdownDocumentCodec {
         is IndentedCodeBlock -> Triple(MarkdownBlockKind.CODE, null, null)
         is TableBlock -> Triple(MarkdownBlockKind.TABLE, null, null)
         is ThematicBreak -> Triple(MarkdownBlockKind.RULE, null, null)
-        is Paragraph -> Triple(if (node.firstChild is Image && node.firstChild.next == null) MarkdownBlockKind.IMAGE else MarkdownBlockKind.PARAGRAPH, null, null)
+        is Paragraph -> Triple(if (node.firstChild is Image && node.firstChild?.next == null) MarkdownBlockKind.IMAGE else MarkdownBlockKind.PARAGRAPH, null, null)
         is HtmlBlock -> Triple(MarkdownBlockKind.RAW, null, null)
         else -> Triple(MarkdownBlockKind.RAW, null, null)
     }

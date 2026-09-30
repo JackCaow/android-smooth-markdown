@@ -2,12 +2,12 @@ package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.ui.text.TextRange
 import com.jackcaow.smoothmarkdown.parseMarkdown
-import org.commonmark.node.BulletList
-import org.commonmark.node.Heading
-import org.commonmark.node.ListItem
-import org.commonmark.node.Node
-import org.commonmark.node.OrderedList
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.ListItem
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.OrderedList
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 
 /** Source-backed list tree. Every editable line points at its own original source slice. */
 internal class MarkdownSourceList private constructor(

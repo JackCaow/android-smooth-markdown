@@ -6,7 +6,7 @@ For a concise installation guide, see the [README](../README.md).
 
 ## Use in a Compose app
 
-The library is currently available as source code; **there is no published Maven artifact or dependency coordinate yet**. Place this repository under your app project, for example at `third_party/android-smooth-markdown`, then add its library module to your app's `settings.gradle.kts`:
+For the published JitPack artifact and version, see the README installation section. To consume the current source branch instead, place this repository under your app project, for example at `third_party/android-smooth-markdown`, then add its library module to your app's `settings.gradle.kts`:
 
 ```kotlin
 include(":smoothmarkdown")
@@ -134,7 +134,7 @@ The demo's Theme button cycles through all presets. This first native style API 
 
 Code blocks accept `codeBlockDecoration = MarkdownCodeBlockDecoration(backgroundColor, borderColor, borderWidth, cornerRadius)` and `codeBlockPadding = PaddingValues(...)`. These match Flutter's actively rendered code block decoration and per-edge padding. Existing `codeBackground` and uniform `codePadding` remain supported; a decoration fill takes precedence over `codeBackground`.
 
-Math uses the native [RaTeX Android renderer](https://github.com/erweixin/RaTeX) for formulas including fractions, roots, and scripts. Unsupported TeX shows its source text. In enhanced mode, `CodeBlockOptions` controls copying, language labels, and preliminary highlighting for Kotlin, Swift, Dart, Java, JavaScript/TypeScript, Python, JSON, Bash, and SQL. The public `codeBlockBuilder` and `onCodeCopied` parameters allow custom code rendering and copy handling.
+Math uses the library-owned TeX parser and Android system WebView MathML rendering. Fractions, roots, scripts, operators and matrix environments render offline without JavaScript or downloaded renderer code. In enhanced mode, `CodeBlockOptions` controls copying, language labels, and preliminary highlighting for Kotlin, Swift, Dart, Java, JavaScript/TypeScript, Python, JSON, Bash, and SQL. The public `codeBlockBuilder` and `onCodeCopied` parameters allow custom code rendering and copy handling.
 
 ## Parser and renderer plugins
 
@@ -149,7 +149,7 @@ val plugins = remember {
 SmoothMarkdown(markdown = content, plugins = plugins)
 ```
 
-`InlineParserPlugin` provides a one-character trigger, `canParse`, `parse`, and `render` hooks. `BlockParserPlugin` provides `canStart`, `createNode`, `isClosingLine`, `complete`, and a Compose `RenderBlock` hook; the node-aware `isClosingLine(node, line)` variant supports multiple delimiter styles. Its `parseFencedCodeBlock` hook converts CommonMark fenced blocks while preserving ordinary code on a `null` result. Custom nodes extend `PluginInlineNode` or `PluginBlockNode`. A `null` parse result lets the next plugin or CommonMark handle the source. Higher priorities run first; equal priorities keep registration order. Registry IDs must be unique within the block or inline group. `copy`, `clear`, lookup, and unregister operations are available. Configure the registry before passing it to Compose; provide a new registry instance after changing its contents so the Markdown AST is rebuilt.
+`InlineParserPlugin` provides a one-character trigger, `canParse`, `parse`, and `render` hooks. `BlockParserPlugin` provides `canStart`, `createNode`, `isClosingLine`, `complete`, and a Compose `RenderBlock` hook; the node-aware `isClosingLine(node, line)` variant supports multiple delimiter styles. Its `parseFencedCodeBlock` hook converts CommonMark fenced blocks while preserving ordinary code on a `null` result. Custom nodes extend `PluginInlineNode` or `PluginBlockNode`. A `null` parse result lets the next plugin or the native parser handle the source. Higher priorities run first; equal priorities keep registration order. Registry IDs must be unique within the block or inline group. `copy`, `clear`, lookup, and unregister operations are available. Configure the registry before passing it to Compose; provide a new registry instance after changing its contents so the Markdown AST is rebuilt.
 
 `MarkdownBuilderRegistry` overrides the rendering of parsed nodes, including built-in nodes. It is separate from `ParserPluginRegistry`, which controls syntax. Android registers CommonMark node classes instead of Flutter's string node types. An exact class match with `canBuild == true` wins; otherwise registered builders are tried in insertion order, then the built-in renderer handles the node. The registry is forwarded by both `StreamMarkdown` overloads and by `SmoothMarkdownEditor` in Preview and Split. Configure it before composing and supply a new instance when changing registrations.
 

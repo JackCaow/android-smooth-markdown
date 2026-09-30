@@ -1,21 +1,11 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.CustomBlock
-import org.commonmark.node.CustomNode
-import org.commonmark.node.Image
-import org.commonmark.node.Link
-import org.commonmark.node.Node
-import org.commonmark.node.Text
-import org.commonmark.parser.InlineParser
-import org.commonmark.parser.PostProcessor
-import org.commonmark.parser.SourceLine
-import org.commonmark.parser.SourceLines
-import org.commonmark.parser.block.AbstractBlockParser
-import org.commonmark.parser.block.BlockContinue
-import org.commonmark.parser.block.BlockParserFactory
-import org.commonmark.parser.block.BlockStart
-import org.commonmark.parser.block.MatchedBlockParser
-import org.commonmark.parser.block.ParserState
+import com.jackcaow.smoothmarkdown.ast.CustomBlock
+import com.jackcaow.smoothmarkdown.ast.CustomNode
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.Link
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Text
 
 internal class FootnoteReferenceNode(val label: String) : CustomNode()
 
@@ -24,11 +14,11 @@ internal class FootnoteDefinitionNode(val label: String) : CustomBlock() {
 }
 
 /** CommonMark consumes unknown square brackets before custom inline parsers run. */
-internal class FootnoteReferencePostProcessor(private val source: String) : PostProcessor {
+internal class FootnoteReferencePostProcessor(private val source: String) {
     private val reference = Regex("\\[\\^([^]]+)]")
     private val definitionMatchCursors = java.util.IdentityHashMap<FootnoteDefinitionNode, Int>()
 
-    override fun process(node: Node): Node {
+    fun process(node: Node): Node {
         visit(node)
         return node
     }
@@ -73,46 +63,5 @@ internal class FootnoteReferencePostProcessor(private val source: String) : Post
         }
         if (cursor < literal.length) text.insertBefore(Text(literal.substring(cursor)))
         text.unlink()
-    }
-}
-
-/** Parses [^label]: content with indented continuation lines into one block. */
-internal class FootnoteDefinitionParserFactory : BlockParserFactory {
-    private val definition = Regex("^\\[\\^([^]]+)]\\:\\s+(.+)$")
-
-    override fun tryStart(state: ParserState, matchedBlockParser: MatchedBlockParser): BlockStart? {
-        if (state.indent >= 4) return null
-        val line = state.line.content.toString()
-        val match = definition.matchEntire(line.substring(state.nextNonSpaceIndex)) ?: return null
-        return BlockStart.of(FootnoteDefinitionParser(match.groupValues[1], match.groupValues[2]))
-            .atIndex(line.length)
-    }
-}
-
-private class FootnoteDefinitionParser(label: String, firstLine: String) : AbstractBlockParser() {
-    private val footnote = FootnoteDefinitionNode(label)
-    private val lines = mutableListOf(firstLine)
-
-    override fun getBlock(): FootnoteDefinitionNode = footnote
-
-    override fun tryContinue(state: ParserState): BlockContinue? {
-        val line = state.line.content.toString()
-        return when {
-            line.isBlank() -> BlockContinue.atIndex(line.length)
-            line.startsWith("    ") -> BlockContinue.atIndex(4)
-            line.startsWith('\t') -> BlockContinue.atIndex(1)
-            else -> null
-        }
-    }
-
-    override fun addLine(line: SourceLine) {
-        val content = line.content.toString().trim()
-        if (content.isNotEmpty()) lines += content
-    }
-
-    override fun parseInlines(inlineParser: InlineParser) {
-        footnote.rawInlineSource = lines.joinToString("\n")
-        val source = SourceLines.of(lines.map { SourceLine.of(it, null) })
-        inlineParser.parse(source, footnote)
     }
 }
