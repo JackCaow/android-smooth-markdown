@@ -6,6 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -937,9 +941,25 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
         modifier = if (actions.isEmpty() && onPlainTextTap == null) base else base
             .then(if (actions.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
             .pointerInput(text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
-                detectTapGestures { position ->
-                    layout.value?.getOffsetForPosition(position)?.let { offset ->
-                        dispatchTextTap(text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
+                if (onPlainTextTap != null) {
+                    // A native selectable Text can consume a short press while clearing its prior
+                    // selection. Observe that tap before the selection pass, without stealing a
+                    // long press or drag used to select the summary itself.
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                        if (up != null && up.uptimeMillis - down.uptimeMillis < viewConfiguration.longPressTimeoutMillis) {
+                            up.consume()
+                            layout.value?.getOffsetForPosition(up.position)?.let { offset ->
+                                dispatchTextTap(text, offset, onLinkClick, onPlainTextTap, onMentionClick, onHashtagClick, onWikilinkClick)
+                            }
+                        }
+                    }
+                } else {
+                    detectTapGestures { position ->
+                        layout.value?.getOffsetForPosition(position)?.let { offset ->
+                            dispatchTextTap(text, offset, onLinkClick, null, onMentionClick, onHashtagClick, onWikilinkClick)
+                        }
                     }
                 }
             },
@@ -1051,9 +1071,13 @@ private fun MarkdownInlineText(
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
                 ),
             ) {
-                Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
-                    .padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                // The parent annotated text already contains the key label for selection.
+                // Its visual inline child must not register that label a second time.
+                DisableSelection {
+                    Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
+                        .padding(horizontal = 5.dp, vertical = 1.dp)) {
+                        Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
+                    }
                 }
             }
         }

@@ -37,5 +37,7 @@ This is a source migration for code that directly used CommonMark types. Previou
 - SVG natural size/scaling and offline MathML: two light/dark screenshot tests passed; the resulting images were visually reviewed.
 - Library Release AAR and Demo Debug APK build successfully.
 - All eight Demo fixture groups match the Flutter example content.
+- An independent Android module consumes only `io.github.jackcaow:smooth-markdown:0.2.0` from Maven Local and builds successfully.
+- Details expand/collapse, rendered selection/clipboard and list paste instrumentation regressions passed.
 
 Public registry publication remains a separate delivery gate; local Maven publication does not confirm that a public registry has accepted the artifacts.

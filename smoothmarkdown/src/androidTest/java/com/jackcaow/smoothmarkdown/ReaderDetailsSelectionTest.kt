@@ -56,6 +56,7 @@ class ReaderDetailsSelectionTest {
             controller.clear()
         }
         compose.onNodeWithText("Details summary", useUnmergedTree = true).performTouchInput { click() }
+        compose.onNodeWithText("Details body.").assertDoesNotExist()
         compose.runOnIdle {
             controller.selectAll()
             val selected = controller.selectedText
