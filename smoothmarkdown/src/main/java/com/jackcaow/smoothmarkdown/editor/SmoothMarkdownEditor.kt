@@ -66,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
+import com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.WikilinkPlugin
 import kotlinx.coroutines.launch
@@ -127,6 +128,8 @@ fun SmoothMarkdownEditor(
     onFocusModeChanged: ((Boolean) -> Unit)? = null,
     /** Editor-specific colors, text and spacing; overrides [LocalMarkdownEditorTheme]. */
     editorTheme: MarkdownEditorTheme? = null,
+    /** Custom node renderers for Preview and Split, overriding built-in reader rendering. */
+    builderRegistry: MarkdownBuilderRegistry? = null,
 ) {
     val effectiveTheme = LocalMarkdownEditorTheme.current.merge(editorTheme)
     val colors = MaterialTheme.colorScheme
@@ -411,7 +414,8 @@ fun SmoothMarkdownEditor(
             MarkdownEditorMode.PREVIEW -> SmoothMarkdown(controller.text, Modifier.weight(1f)
                 .background(effectiveTheme.previewColor ?: colors.surface)
                 .padding(effectiveTheme.previewPadding ?: 16.dp),
-                plugins = previewPlugins, onWikilinkClick = onTapWikilink)
+                plugins = previewPlugins, onWikilinkClick = onTapWikilink,
+                builderRegistry = builderRegistry)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f)) { focused ->
                     sourceFocus.setFocused(focused, latestOnFocusChanged.value)
@@ -420,7 +424,8 @@ fun SmoothMarkdownEditor(
                 SmoothMarkdown(controller.text, Modifier.weight(1f)
                     .background(effectiveTheme.previewColor ?: colors.surface)
                     .padding(effectiveTheme.previewPadding ?: 16.dp),
-                    plugins = previewPlugins, onWikilinkClick = onTapWikilink)
+                    plugins = previewPlugins, onWikilinkClick = onTapWikilink,
+                    builderRegistry = builderRegistry)
             }
             MarkdownEditorMode.FORMATTED -> FormattedBlockPane(
                 controller, Modifier.weight(1f), wikilinkSuggestions,
