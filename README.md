@@ -2,27 +2,31 @@
 
 A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor. Use it inside your own Compose screen; the included `app` module is a Demo, not an app dependency.
 
-> **Distribution:** This repository currently supplies a source module. There is no published Maven artifact or versioned dependency coordinate.
-
 ## Install
 
-Requires Android API 24+, Jetpack Compose, and Java 17. Add this repository to your app project, for example at `third_party/android-smooth-markdown`, then include only its library module in `settings.gradle.kts`:
+Requires Android API 24+, Jetpack Compose, and Java 17. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
 
 ```kotlin
-include(":smoothmarkdown")
-project(":smoothmarkdown").projectDir =
-    file("third_party/android-smooth-markdown/smoothmarkdown")
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
 ```
 
 In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation(project(":smoothmarkdown"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation("androidx.compose.runtime:runtime")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.1.0")
 }
 ```
 
-Your project must resolve the Android Gradle and Kotlin Compose plugins used by the library. See this repository's [Gradle configuration](build.gradle.kts) for the current plugin versions and repositories. Pin the source repository to a reviewed commit for shipped apps.
+The library is also available as a source module. To use source instead, pin this repository to a reviewed commit, include `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. The `app` module is only the Demo.
 
 ## Quick start
 

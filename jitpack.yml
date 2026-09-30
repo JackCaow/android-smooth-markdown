@@ -1,0 +1,6 @@
+jdk:
+  - openjdk17
+before_install:
+  - sdkmanager 'platforms;android-37.0'
+install:
+  - ./gradlew :smoothmarkdown:publishReleasePublicationToMavenLocal --no-daemon
