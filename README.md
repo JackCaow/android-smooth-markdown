@@ -1,6 +1,6 @@
 # Smooth Markdown for Android
 
-A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor, based on [Flutter Smooth Markdown](https://github.com/JackCaow/flutter-smooth-markdown). Use it inside your own Compose screen; the included `app` module is a Demo, not an app dependency.
+A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor. Use it inside your own Compose screen; the included `app` module is a Demo, not an app dependency.
 
 > **Distribution:** This repository currently supplies a source module. There is no published Maven artifact or versioned dependency coordinate.
 
@@ -92,7 +92,7 @@ The controller defaults to **Source** mode; the example selects **Formatted** ex
 | Style rendered content | `styleSheet`, `useEnhancedComponents` |
 | Replace built-in rendering | `imageBuilder`, `codeBlockBuilder`, `builderRegistry`, `plugins` |
 
-The reader covers common Markdown, GFM tables and task lists, images, footnotes, code, math, and opt-in safe HTML. Parser and renderer plugins add mentions, hashtags, Mermaid diagrams, and AI-specific blocks. See the [implementation reference](docs/reference.md) for exact supported constructs, selection behavior, customization, and current limits. A [cross-platform API map](https://github.com/JackCaow/flutter-smooth-markdown/blob/main/docs/native-api-map.md) compares Android, iOS, and Flutter.
+The reader covers common Markdown, GFM tables and task lists, images, footnotes, code, math, and opt-in safe HTML. Parser and renderer plugins add mentions, hashtags, Mermaid diagrams, and AI-specific blocks. See the [implementation reference](docs/reference.md) for exact supported constructs, selection behavior, customization, and current limits.
 
 ## Demo
 
@@ -102,13 +102,13 @@ Open this repository in Android Studio and run the `app` configuration, or build
 ./gradlew :app:assembleDebug
 ```
 
-The Demo contains the Flutter example fixtures plus reader, streaming, editor, conversation, AI chat, and Mermaid screens. It is useful for checking rendering and interaction before embedding the library.
+The Demo contains reader, streaming, editor, conversation, AI chat, and Mermaid screens. It is useful for checking rendering and interaction before embedding the library.
 
 ## Compatibility and limits
 
 - Android API 24+; Compose and the plugin versions in this repository's Gradle files are the tested setup.
-- HTML rendering is off by default. Math is parsed by default, unlike Flutter's default configuration.
-- Full Flutter feature and visual parity, complete Mermaid/HTML coverage, and fully rich formatted editing are still in progress. Review [known limits](docs/reference.md#status) before depending on advanced behavior.
+- HTML rendering is off by default; supported math is parsed by default.
+- Complete Mermaid and HTML syntax coverage and fully rich formatted editing are still in progress. Review [known limits](docs/reference.md#status) before depending on advanced behavior.
 - A local Demo API key is a debug-only convenience. Never ship or commit a key; the library does not require one.
 
 ## Development
@@ -118,4 +118,4 @@ The Demo contains the Flutter example fixtures plus reader, streaming, editor, c
 ./gradlew :app:assembleDebug
 ```
 
-Source: [`smoothmarkdown`](smoothmarkdown/) · Demo: [`app`](app/) · [Implementation reference](docs/reference.md) · [Flutter origin](https://github.com/JackCaow/flutter-smooth-markdown) · [iOS library](https://github.com/JackCaow/ios-smooth-markdown)
+Source: [`smoothmarkdown`](smoothmarkdown/) · Demo: [`app`](app/) · [Implementation reference](docs/reference.md)
