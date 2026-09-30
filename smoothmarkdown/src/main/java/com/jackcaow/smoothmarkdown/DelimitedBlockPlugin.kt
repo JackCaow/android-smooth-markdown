@@ -2,7 +2,7 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Node
 
 /** An opt-in, source-backed `:::type info` block. Subclass to supply a richer reader view. */
 open class DelimitedBlockPlugin(val type: String, override val priority: Int = 0) : BlockParserPlugin, SourceBlockParserPlugin {

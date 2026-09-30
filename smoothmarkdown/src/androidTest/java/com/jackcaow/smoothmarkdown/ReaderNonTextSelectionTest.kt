@@ -25,8 +25,8 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import org.commonmark.node.Image
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.Node
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Rule

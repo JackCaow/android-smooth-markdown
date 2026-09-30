@@ -1,8 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Paragraph
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Node
 import androidx.compose.runtime.Composable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -122,7 +122,7 @@ class ParserPluginsTest {
         assertEquals("winner", (parseMarkdown("::: choice\nbody\n:::", registry).firstChild as PluginBlockNode).pluginId)
     }
 
-    private fun org.commonmark.node.Node.children(): List<org.commonmark.node.Node> = buildList {
+    private fun com.jackcaow.smoothmarkdown.ast.Node.children(): List<com.jackcaow.smoothmarkdown.ast.Node> = buildList {
         var child = firstChild
         while (child != null) { add(child); child = child.next }
     }

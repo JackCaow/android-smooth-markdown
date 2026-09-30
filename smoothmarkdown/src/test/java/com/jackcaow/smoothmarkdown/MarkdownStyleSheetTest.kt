@@ -41,7 +41,7 @@ class MarkdownStyleSheetTest {
             inlineCodeBackground = Color.Cyan,
             inlineCodeTextColor = Color.Black,
         )
-        val paragraph = parseMarkdown("[link](https://example.com) and `code`").firstChild
+        val paragraph = parseMarkdown("[link](https://example.com) and `code`").firstChild!!
         val rendered = inlineRender(paragraph, enableHtml = false, styleSheet = sheet).text
         val linkIndex = rendered.text.indexOf("link")
         val codeIndex = rendered.text.indexOf("code")
@@ -57,7 +57,7 @@ class MarkdownStyleSheetTest {
             linkStyle = SpanStyle(color = Color.Magenta),
             inlineCodeStyle = SpanStyle(color = Color.Cyan, fontSize = 19.sp),
         )
-        val markdown = parseMarkdown("**bold** *italic* ~~strike~~ [link](https://example.com) `code`").firstChild
+        val markdown = parseMarkdown("**bold** *italic* ~~strike~~ [link](https://example.com) `code`").firstChild!!
         val rendered = inlineRender(markdown, enableHtml = false, styleSheet = sheet).text
         fun matching(word: String, color: Color) = rendered.spanStyles.first {
             val index = rendered.text.indexOf(word)
@@ -70,7 +70,7 @@ class MarkdownStyleSheetTest {
         assertEquals(TextDecoration.Underline, matching("link", Color.Magenta).textDecoration)
         assertEquals(19.sp, matching("code", Color.Cyan).fontSize)
 
-        val html = parseMarkdown("<b>heavy</b> <code>literal</code> <a href=\"https://example.com\">safe</a>").firstChild
+        val html = parseMarkdown("<b>heavy</b> <code>literal</code> <a href=\"https://example.com\">safe</a>").firstChild!!
         val htmlRendered = inlineRender(html, enableHtml = true, styleSheet = sheet).text
         assertEquals(Color.Red, htmlRendered.spanStyles.first {
             htmlRendered.text.indexOf("heavy") in it.start until it.end && it.item.fontWeight == FontWeight.Bold

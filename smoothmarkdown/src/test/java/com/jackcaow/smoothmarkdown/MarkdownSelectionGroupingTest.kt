@@ -1,15 +1,15 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.BlockQuote
-import org.commonmark.node.BulletList
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.IndentedCodeBlock
-import org.commonmark.node.Heading
-import org.commonmark.node.Paragraph
-import org.commonmark.node.Node
-import org.commonmark.node.ThematicBreak
-import org.commonmark.node.Image
-import org.commonmark.ext.gfm.tables.TableBlock
+import com.jackcaow.smoothmarkdown.ast.BlockQuote
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.ThematicBreak
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.TableBlock
 import androidx.compose.runtime.Composable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

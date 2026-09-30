@@ -13,9 +13,9 @@ import com.jackcaow.smoothmarkdown.MarkdownBuilderContext
 import com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry
 import com.jackcaow.smoothmarkdown.MarkdownInlinePresentation
 import com.jackcaow.smoothmarkdown.MarkdownNodeBuilder
-import org.commonmark.node.Heading
-import org.commonmark.node.Node
-import org.commonmark.node.Text as MarkdownText
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Text as MarkdownText
 import org.junit.Rule
 import org.junit.Test
 

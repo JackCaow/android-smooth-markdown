@@ -1,8 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.BulletList
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,7 +40,7 @@ class DetailsTest {
                 "```kotlin\nprintln(1)\n```\n\n> *quoted*\n</details>",
         ).firstChild as DetailsNode
         assertTrue(details.body.any { it is FencedCodeBlock })
-        assertTrue(details.body.any { it is org.commonmark.node.BlockQuote })
+        assertTrue(details.body.any { it is com.jackcaow.smoothmarkdown.ast.BlockQuote })
     }
 
     @Test fun detailsSyntaxInsideFenceStaysCode() {

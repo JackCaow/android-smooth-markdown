@@ -1,8 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Code
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Node
 
 /** Preserve the source inside HTML code tags before Markdown inline rendering can interpret it. */
 internal class HtmlCodePostProcessor(private val source: String) {

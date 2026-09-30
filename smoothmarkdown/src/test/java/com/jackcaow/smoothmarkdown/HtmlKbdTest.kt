@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -10,7 +10,7 @@ class HtmlKbdTest {
     @Test fun inlineKeyCapsKeepTheCompleteVisibleTextAndSelectionOffsets() {
         val paragraph = parseMarkdown("Press <kbd>Ctrl</kbd>+<kbd>C</kbd> now.", enableHtml = true).firstChild as Paragraph
         val keys = paragraph.children().filterIsInstance<HtmlKbdNode>()
-        assertEquals(listOf("Ctrl", "C"), keys.map { it.label })
+        assertEquals(listOf("Ctrl", "C"), keys.map { it.label }.toList())
         val rendered = inlineRender(paragraph, enableHtml = true)
         assertEquals(listOf("Ctrl", "C"), rendered.kbds.values.toList())
         assertEquals("Press Ctrl+C now.", rendered.text.text)
@@ -38,7 +38,7 @@ class HtmlKbdTest {
         assertSame(html, parseMarkdown(source, enableHtml = true).firstChild)
     }
 
-    private fun org.commonmark.node.Node.children(): List<org.commonmark.node.Node> = buildList {
+    private fun com.jackcaow.smoothmarkdown.ast.Node.children(): List<com.jackcaow.smoothmarkdown.ast.Node> = buildList {
         var child = firstChild
         while (child != null) {
             add(child)

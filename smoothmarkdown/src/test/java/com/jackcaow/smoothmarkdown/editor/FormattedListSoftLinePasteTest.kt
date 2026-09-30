@@ -2,11 +2,11 @@ package com.jackcaow.smoothmarkdown.editor
 
 import androidx.compose.ui.text.TextRange
 import com.jackcaow.smoothmarkdown.parseMarkdown
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Image
-import org.commonmark.node.Link
-import org.commonmark.node.Node
-import org.commonmark.node.Text
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.Link
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Text
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

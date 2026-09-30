@@ -1,10 +1,10 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.ext.gfm.tables.TableBlock
-import org.commonmark.ext.task.list.items.TaskListItemMarker
-import org.commonmark.node.BulletList
-import org.commonmark.node.ListItem
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.TableBlock
+import com.jackcaow.smoothmarkdown.ast.TaskListItemMarker
+import com.jackcaow.smoothmarkdown.ast.BulletList
+import com.jackcaow.smoothmarkdown.ast.ListItem
+import com.jackcaow.smoothmarkdown.ast.Node
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,7 +22,7 @@ class MarkdownSyntaxTest {
         """.trimIndent())
 
         assertTrue(document.firstChild is TableBlock)
-        val list = document.firstChild.next as BulletList
+        val list = document.firstChild!!.next as BulletList
         assertTrue((list.firstChild as ListItem).firstChild is TaskListItemMarker)
         val markers = descendants(document).filterIsInstance<TaskListItemMarker>().toList()
         assertEquals(2, markers.size)

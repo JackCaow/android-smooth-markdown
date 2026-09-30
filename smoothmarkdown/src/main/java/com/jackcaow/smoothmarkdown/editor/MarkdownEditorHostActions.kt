@@ -1,13 +1,9 @@
 package com.jackcaow.smoothmarkdown.editor
 
 import com.jackcaow.smoothmarkdown.SafeHtml
+import com.jackcaow.smoothmarkdown.NativeMarkdownParser
+import com.jackcaow.smoothmarkdown.NativeMarkdownHTMLSerializer
 import kotlinx.coroutines.CancellationException
-import org.commonmark.ext.autolink.AutolinkExtension
-import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
-import org.commonmark.ext.gfm.tables.TablesExtension
-import org.commonmark.ext.task.list.items.TaskListItemsExtension
-import org.commonmark.parser.Parser
-import org.commonmark.renderer.html.HtmlRenderer
 
 /** Image data supplied by an app picker or uploader. */
 data class MarkdownEditorImageSelection(val url: String, val alt: String = "", val title: String? = null)
@@ -25,11 +21,6 @@ enum class MarkdownEditorHostResult { SUCCESS, CANCELLED, STALE, FAILED }
 
 /** Source-backed host operations shared by the Compose editor and focused JVM tests. */
 object MarkdownEditorHostActions {
-    private val htmlExtensions = listOf(
-        TablesExtension.create(), StrikethroughExtension.create(),
-        TaskListItemsExtension.create(), AutolinkExtension.create(),
-    )
-
     /** Flutter's PDF action asks the host to create a PDF from Markdown and rendered HTML. */
     suspend fun exportPdf(
         controller: MarkdownEditorController,
@@ -37,8 +28,8 @@ object MarkdownEditorHostActions {
         onError: ((MarkdownEditorHostAction, Throwable) -> Unit)? = null,
     ): MarkdownEditorHostResult = try {
         val markdown = controller.text
-        val document = Parser.builder().extensions(htmlExtensions).build().parse(markdown)
-        val html = HtmlRenderer.builder().extensions(htmlExtensions).escapeHtml(true).build().render(document)
+        val document = NativeMarkdownParser(enableGFM = true).parse(markdown)
+        val html = NativeMarkdownHTMLSerializer(escapeHtml = true).render(document)
         exporter(markdown, html)
         MarkdownEditorHostResult.SUCCESS
     } catch (cancelled: CancellationException) {

@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Node
 import kotlin.reflect.KClass
 
 /** Presentation of a node embedded in a paragraph, heading, list, or table cell. */

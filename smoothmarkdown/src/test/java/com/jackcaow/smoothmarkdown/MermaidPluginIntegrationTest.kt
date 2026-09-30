@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -80,7 +80,7 @@ class MermaidPluginIntegrationTest {
 
     @Test fun nestedFenceInQuoteIsTransformed() {
         val document = parseMarkdown("> ```mermaid\n> graph TB\n> A --> B\n> ```", plugins)
-        assertTrue(document.firstChild.firstChild is MermaidDiagramNode)
+        assertTrue(document.firstChild!!.firstChild is MermaidDiagramNode)
     }
 
     @Test fun unclosedSubgraphFenceStaysSourceCode() {

@@ -1,9 +1,9 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.ui.text.style.BaselineShift
-import org.commonmark.node.Code
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.Code
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -61,7 +61,7 @@ class FootnotesTest {
         assertTrue(code.firstChild == null)
     }
 
-    private fun org.commonmark.node.Node.children(): Sequence<org.commonmark.node.Node> = sequence {
+    private fun com.jackcaow.smoothmarkdown.ast.Node.children(): Sequence<com.jackcaow.smoothmarkdown.ast.Node> = sequence {
         var child = firstChild
         while (child != null) {
             yield(child)

@@ -8,12 +8,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
-import org.commonmark.node.Node
-import org.commonmark.node.HtmlBlock
-import org.commonmark.node.HtmlInline
-import org.commonmark.node.Image
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.IndentedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.HtmlBlock
+import com.jackcaow.smoothmarkdown.ast.HtmlInline
+import com.jackcaow.smoothmarkdown.ast.Image
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {

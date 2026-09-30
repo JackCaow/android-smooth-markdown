@@ -2,9 +2,9 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.TextDecoration
-import org.commonmark.node.Node
-import org.commonmark.node.Text
-import org.commonmark.node.Link
+import com.jackcaow.smoothmarkdown.ast.Node
+import com.jackcaow.smoothmarkdown.ast.Text
+import com.jackcaow.smoothmarkdown.ast.Link
 
 /** Scratch-style note link. The entire contents of `[[...]]` are the target. */
 class WikilinkNode(val target: String) : PluginInlineNode()

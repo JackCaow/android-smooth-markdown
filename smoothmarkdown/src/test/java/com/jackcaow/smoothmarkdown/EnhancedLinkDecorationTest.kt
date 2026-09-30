@@ -1,8 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.Composable
-import org.commonmark.node.Link
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Link
+import com.jackcaow.smoothmarkdown.ast.Node
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -10,7 +10,7 @@ import org.junit.Test
 
 class EnhancedLinkDecorationTest {
     @Test fun externalAndLocalLinksKeepExactSelectableTextAndTapAnnotations() {
-        val paragraph = parseMarkdown("See [site](https://example.com) and [note](/note).").firstChild
+        val paragraph = parseMarkdown("See [site](https://example.com) and [note](/note).").firstChild!!
         val text = inlineRender(paragraph, false).text
 
         assertEquals("See site and note.", text.text)
@@ -31,7 +31,7 @@ class EnhancedLinkDecorationTest {
             @Composable override fun Render(node: Node, context: MarkdownBuilderContext) = Unit
             override fun renderInline(node: Node) = MarkdownInlinePresentation.Text("custom")
         })
-        val paragraph = parseMarkdown("[site](https://example.com)").firstChild
+        val paragraph = parseMarkdown("[site](https://example.com)").firstChild!!
         val custom = inlineRender(paragraph, false, builders = registry).text
         assertEquals("custom", custom.text)
         assertTrue(enhancedLinkRanges(custom).isEmpty())
@@ -39,7 +39,7 @@ class EnhancedLinkDecorationTest {
     }
 
     @Test fun htmlAnchorDoesNotBecomeMarkdownEnhancedLink() {
-        val paragraph = parseMarkdown("<a href=\"https://example.com\">site</a>", enableHtml = true).firstChild
+        val paragraph = parseMarkdown("<a href=\"https://example.com\">site</a>", enableHtml = true).firstChild!!
         val text = inlineRender(paragraph, true).text
         assertEquals("site", text.text)
         assertTrue(enhancedLinkRanges(text).isEmpty())

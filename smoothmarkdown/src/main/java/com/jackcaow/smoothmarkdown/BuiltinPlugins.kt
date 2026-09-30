@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Node
 
 class MentionNode(val username: String) : PluginInlineNode()
 class HashtagNode(val tag: String) : PluginInlineNode()

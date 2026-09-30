@@ -1,8 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.FencedCodeBlock
-import org.commonmark.node.HtmlBlock
-import org.commonmark.node.Paragraph
+import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
+import com.jackcaow.smoothmarkdown.ast.HtmlBlock
+import com.jackcaow.smoothmarkdown.ast.Paragraph
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -77,8 +77,8 @@ class AiChatPluginsTest {
         val markdown = "<thinking>\nA\n</thinking>\n\n<artifact id='a' type='code'>\nx\n</artifact>\n\n<tool_use>\n<tool_name>run</tool_name>\n</tool_use>"
         val document = parseMarkdown(markdown, plugins)
         assertTrue(document.firstChild is ThinkingNode)
-        assertTrue(document.firstChild.next is ArtifactNode)
-        assertTrue(document.firstChild.next.next is ToolCallNode)
+        assertTrue(document.firstChild!!.next is ArtifactNode)
+        assertTrue(document.firstChild!!.next!!.next is ToolCallNode)
         assertFalse(parseMarkdown(markdown).firstChild is PluginBlockNode)
         assertTrue(parseMarkdown("```xml\n<thinking>\nA\n</thinking>\n```", plugins).firstChild is FencedCodeBlock)
         assertTrue(parseMarkdown("<div>ordinary</div>", plugins).firstChild is HtmlBlock)

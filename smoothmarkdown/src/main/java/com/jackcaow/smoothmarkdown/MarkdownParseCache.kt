@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
-import org.commonmark.node.Node
+import com.jackcaow.smoothmarkdown.ast.Node
 
 /** Snapshot of the shared Markdown parse cache used by native readers. */
 data class MarkdownCacheStatistics(val size: Int, val maxSize: Int) {

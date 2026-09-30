@@ -2,6 +2,16 @@
 
 A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor. Use it inside your own Compose screen; the included `app` module is a Demo, not an app dependency.
 
+## Runtime dependencies
+
+These changes apply to the current source branch. Published `0.1.0` still uses the previous parser and rendering dependencies.
+
+The reader uses a library-owned Markdown AST/parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
+
+Jetpack Compose and Kotlin coroutines remain framework dependencies. The library currently requires Compose; it is not a standalone Android View library.
+
+Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other library-owned AST types. Applications upgrading from 0.1.0 must update their former `org.commonmark` imports.
+
 ## Install
 
 Requires Android API 24+, Jetpack Compose, and Java 17. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:

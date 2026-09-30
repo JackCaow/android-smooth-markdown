@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.commonmark.node.BulletList
+import com.jackcaow.smoothmarkdown.ast.BulletList
 
 class FormattedStructuredPasteTest {
     @Test fun pastesNestedListInsideFormattedItemAsOneUndoStep() {
