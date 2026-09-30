@@ -39,6 +39,27 @@ fun MarkdownScreen(content: String) {
 
 Your app must enable Jetpack Compose and resolve the Android/Kotlin plugins and repositories required by this module. This repository's [Gradle files](build.gradle.kts) show a working toolchain; the included `app` module is a runnable example. The library requires Android API 24 or newer.
 
+### Cross-platform API mapping
+
+| Intent | Flutter | Android Compose | iOS SwiftUI |
+| --- | --- | --- | --- |
+| Render source | `SmoothMarkdown(data: text)` | `SmoothMarkdown(markdown = text)` | `SmoothMarkdownView(markdown: text)` |
+| Link action | `onTapLink` | `onLinkClick` | `onLinkTap` |
+| Image action with source, alt, title | `onTapImage` | `onImageClickWithMetadata` | `onImageTapWithMetadata` |
+| Custom image or code view | `imageBuilder`, `codeBuilder` | `imageBuilder`, `codeBlockBuilder` | `imageBuilder`, `codeBuilder` |
+| Stream chunks | `StreamMarkdown(stream: chunks)` | `StreamMarkdown(chunks = chunks)` | `StreamMarkdownView(chunks: chunks)` |
+| Stream completion | Stream subscription completion | `onComplete = { fullSource -> ... }` | `onComplete: { fullSource in ... }` |
+| Editor | `SmoothMarkdownEditor(controller: controller)` | `SmoothMarkdownEditor(controller = controller)` | `SmoothMarkdownEditor(controller: controller)` |
+
+All three readers default to standard components and opt into enhanced components with `useEnhancedComponents = true`. Android's `Flow<String>` stream calls `onComplete` after publishing the final source; a normal hot `StateFlow<String>` does not complete, so its callback does not fire. The Android reader currently parses math by default, while Flutter's `MarkdownConfig` defaults `enableLatex` to false. Android and iOS editor controllers currently start in Source mode; Flutter's editor defaults to Formatted mode. Set the desired editor mode on the controller when coordinating screens across platforms:
+
+```kotlin
+val controller = remember { MarkdownEditorController(initialText).apply {
+    mode = MarkdownEditorMode.FORMATTED
+} }
+SmoothMarkdownEditor(controller = controller)
+```
+
 ## Status
 
 Reader and editor work in progress. The library renders headings, paragraphs, inline emphasis, links, enhanced code blocks with language labels, copy and initial syntax colors, blockquotes, ordered/bullet/task lists, GFM tables, standalone or mixed inline network/bundled-asset bitmap and SVG images, footnotes, collapsible `details` blocks, inline `$...$` and display `$$...$$` math, and horizontal rules. Opt-in parser/renderer plugins provide mentions, hashtags, emoji shortcodes, admonitions, AI thinking/artifact/tool-call blocks, and an initial Mermaid flowchart/sequence/pie/timeline/Gantt/Kanban/Radar/XYChart/ER renderer. Inline and block images use their decoded intrinsic size once loaded, preserve aspect ratio for one-sided HTML dimensions, and fit within the available Markdown width. Inline images use a 32 dp placeholder while loading. It supports selection across mounted prose, tables, images, rules, built-in code blocks, and expanded `details` blocks, `Flow<String>` chunk accumulation with a 50 ms update throttle and completion flush, and blocks unsafe link/image schemes. Opt-in HTML handles common inline formatting, safe link styling, bounded font/color styles, `br`, `hr`, standalone or mixed `img` with pixel dimensions and alt fallback, and `div`/`p`/`center`/`blockquote` containers; streaming withholds incomplete tags outside code. The source editor supports UTF-16 selections, undo/redo, grouped transactions, search, formatting commands, and source/preview/split layouts. Source-backed GFM tables support insertion, cell replacement, row/column edits, alignment, and deletion at the current selection. Formatted mode edits paragraphs, ATX headings, fenced code, ordered/bullet/task items including nested items and continuation lines, explicit blockquote lines, and GFM table cells with add/remove row and column controls. Untouched list and quote source is preserved; Enter splits supported list items and Tab/Shift+Tab changes their nesting with undo/redo. Empty top-level list exit, bounded top-level outdent, block/list/table range selection, and source-backed formatting for supported inline marks are implemented. Quote line endpoints support Markdown copy and same-quote-line or same-depth multiline edit; lazy continuation quote lines still use raw source fallback. Formatted block selection can turn contiguous top-level paragraphs and ATX headings into one bullet, ordered, or task list or one quote, or convert each block to a paragraph or H1–H6. These source-backed changes reparse before committing and use one undo step; unsupported blocks, setext headings, and transforms that merge with untouched neighbors are rejected. Richer list and table cell editing, unsupported inline constructs, full Mermaid syntax, full HTML behavior, drag selection through offscreen virtualized blocks, richer AI chat presentation, and complete Flutter style-sheet coverage still need implementation. Do not treat this as a parity release.

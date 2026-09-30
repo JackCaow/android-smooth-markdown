@@ -74,6 +74,19 @@ class ImageBuilderRenderTest {
         compose.onNodeWithContentDescription("Stream").assertExists()
     }
 
+    @Test fun finiteStreamPublishesFinalTextBeforeCompletingOnce() {
+        val completions = mutableListOf<String>()
+        compose.setContent {
+            MaterialTheme {
+                StreamMarkdown(flowOf("Hello ", "**world**"), throttleMillis = 1_000,
+                    onComplete = { completions += it })
+            }
+        }
+        compose.waitUntil(5_000) { completions.size == 1 }
+        compose.onNodeWithText("Hello world", substring = true).assertExists()
+        compose.runOnIdle { assertEquals(listOf("Hello **world**"), completions) }
+    }
+
     private fun SemanticsNodeInteraction.tapInlineImage(index: Int) {
         val results = mutableListOf<TextLayoutResult>()
         val action = fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action

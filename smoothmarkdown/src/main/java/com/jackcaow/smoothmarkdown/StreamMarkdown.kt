@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 
 /** Appends incoming chunks and renders the accumulated Markdown document.
  * [imageBuilder] is forwarded to [SmoothMarkdown] for safe block, inline, and HTML images.
+ * [onComplete] receives the full source after a finite flow finishes and its final text is shown.
  */
 @Composable
 fun StreamMarkdown(
@@ -41,8 +42,13 @@ fun StreamMarkdown(
     showDefaultCopyAction: Boolean = true,
     builderRegistry: MarkdownBuilderRegistry? = null,
     useEnhancedComponents: Boolean = false,
+    onComplete: ((String) -> Unit)? = null,
+    onMentionClick: ((String) -> Unit)? = null,
+    onHashtagClick: ((String) -> Unit)? = null,
+    onWikilinkClick: ((String) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
+    val completionHandler by rememberUpdatedState(onComplete)
     // HTML is a rendering option, not a new stream. Keep collecting the same
     // Flow when the switch changes and project the current prefix below.
     val snapshot by produceState(initialValue = StreamSnapshot(), key1 = chunks, key2 = throttleMillis) {
@@ -68,6 +74,7 @@ fun StreamMarkdown(
             pending?.cancel()
             buffer.finish(SystemClock.uptimeMillis())
             value = StreamSnapshot(buffer.visibleText, complete = true, hasReceivedData = hasReceivedData)
+            completionHandler?.invoke(buffer.fullText)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -81,11 +88,12 @@ fun StreamMarkdown(
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
         onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction, builderRegistry,
         useEnhancedComponents,
-        loadingContent, errorContent)
+        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick)
 }
 
 /** Renders a cumulative streaming source. A late-composed chat bubble receives the latest
  * complete prefix from [StateFlow], so lazy list recycling cannot lose earlier chunks.
+ * [onComplete] runs only if the StateFlow itself completes; ordinary hot StateFlows do not.
  */
 @Composable
 fun StreamMarkdown(
@@ -112,8 +120,13 @@ fun StreamMarkdown(
     showDefaultCopyAction: Boolean = true,
     builderRegistry: MarkdownBuilderRegistry? = null,
     useEnhancedComponents: Boolean = false,
+    onComplete: ((String) -> Unit)? = null,
+    onMentionClick: ((String) -> Unit)? = null,
+    onHashtagClick: ((String) -> Unit)? = null,
+    onWikilinkClick: ((String) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
+    val completionHandler by rememberUpdatedState(onComplete)
     val snapshot by produceState(initialValue = StreamSnapshot(), key1 = prefixes, key2 = throttleMillis) {
         value = StreamSnapshot()
         val buffer = StreamMarkdownBuffer(throttleMillis.coerceAtLeast(0), SystemClock.uptimeMillis())
@@ -132,6 +145,10 @@ fun StreamMarkdown(
                     }
                 }
             }
+            pending?.cancel()
+            buffer.finish(SystemClock.uptimeMillis())
+            value = StreamSnapshot(buffer.visibleText, complete = true, hasReceivedData = true)
+            completionHandler?.invoke(buffer.fullText)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
@@ -145,7 +162,7 @@ fun StreamMarkdown(
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
         onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction, builderRegistry,
         useEnhancedComponents,
-        loadingContent, errorContent)
+        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick)
 }
 
 @Composable
@@ -171,6 +188,9 @@ private fun StreamMarkdownContent(
     useEnhancedComponents: Boolean,
     loadingContent: (@Composable () -> Unit)?,
     errorContent: (@Composable (Throwable) -> Unit)?,
+    onMentionClick: ((String) -> Unit)?,
+    onHashtagClick: ((String) -> Unit)?,
+    onWikilinkClick: ((String) -> Unit)?,
 ) {
     when {
         snapshot.error != null && errorContent != null -> errorContent(snapshot.error)
@@ -182,7 +202,9 @@ private fun StreamMarkdownContent(
             scrollable = scrollable, enableCache = false, selectable = selectable,
             selectionController = selectionController, selectionMenuActions = selectionMenuActions,
             showDefaultCopyAction = showDefaultCopyAction, builderRegistry = builderRegistry,
-            useEnhancedComponents = useEnhancedComponents)
+            useEnhancedComponents = useEnhancedComponents,
+            onMentionClick = onMentionClick, onHashtagClick = onHashtagClick,
+            onWikilinkClick = onWikilinkClick)
     }
 }
 
