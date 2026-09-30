@@ -5,7 +5,7 @@ import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode
 import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode.Kind
 
 /** Projects the immutable source scanner tree into the public, mutable library-owned AST. */
-internal class NativeMarkdownMarkupConverter(
+class NativeMarkdownMarkupConverter(
     private val source: String,
     private val special: ((NativeMarkdownNode) -> Markup?)? = null,
 ) {

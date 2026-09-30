@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
-internal object NativeMarkdownEmphasisParser {
+object NativeMarkdownEmphasisParser {
     private class Token(var node: NativeMarkdownNode? = null) { var previous: Token? = null; var next: Token? = null }
     private class Delimiter(val token: Token, val marker: Char, var count: Int, val opens: Boolean, val closes: Boolean) {
         val originalCount = count; var active = true

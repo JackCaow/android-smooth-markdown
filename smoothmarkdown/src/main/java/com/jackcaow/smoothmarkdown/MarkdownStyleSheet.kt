@@ -15,11 +15,7 @@ data class MarkdownBlockquoteDecoration(
     val backgroundColor: Color? = null,
     val borderColor: Color? = null,
     val borderWidth: Dp = 4.dp,
-) {
-    init {
-        require(borderWidth.value >= 0) { "Blockquote borderWidth cannot be negative" }
-    }
-}
+)
 
 /** Fill, outline, and corner radius of a fenced or indented code block. */
 data class MarkdownCodeBlockDecoration(
@@ -27,23 +23,13 @@ data class MarkdownCodeBlockDecoration(
     val borderColor: Color? = null,
     val borderWidth: Dp = 0.dp,
     val cornerRadius: Dp = 6.dp,
-) {
-    init {
-        require(borderWidth.value >= 0 && cornerRadius.value >= 0) {
-            "Code block borderWidth and cornerRadius cannot be negative"
-        }
-    }
-}
+)
 
 /** One edge of a table border. A null edge in [MarkdownTableBorder] is not drawn. */
 data class MarkdownTableBorderSide(
     val color: Color,
     val width: Dp = 1.dp,
-) {
-    init {
-        require(width.value >= 0) { "Table border width cannot be negative" }
-    }
-}
+)
 
 /** Flutter TableBorder's four outside edges and two shared inside rules. */
 data class MarkdownTableBorder(
@@ -125,12 +111,74 @@ data class MarkdownStyleSheet(
     val kbdStyle: TextStyle? = null,
     /** Per-edge table border; when absent, [tableBorderColor] colors a 1dp full grid. */
     val tableBorder: MarkdownTableBorder? = null,
+    /** Additional component decoration tokens; existing typography and decoration fields remain supported. */
+    val designTokens: MarkdownDesignTokens = MarkdownDesignTokens(),
 ) {
-    init {
-        require(headingStyles == null || headingStyles.size == 6) { "headingStyles must contain H1 through H6" }
-        require(blockSpacing.value >= 0 && listSpacing.value >= 0 && contentPadding.value >= 0 && listIndent.value >= 0 &&
-            codePadding.value >= 0 && tableCellPadding.value >= 0) { "Markdown spacing cannot be negative" }
-        require(horizontalRuleThickness.value >= 0) { "horizontalRuleThickness cannot be negative" }
+
+
+    /** Canonical precedence: explicit design tokens > legacy decoration/style > legacy scalar > host theme.
+     * Resolution is shared by every reader and streaming mode. Render options never override appearance. */
+    fun resolved(): MarkdownStyleSheet {
+        val tokens = designTokens.normalized()
+        val document = tokens.document
+        val typography = tokens.typography
+        val quote = tokens.quote
+        val code = tokens.code
+        val oldQuote = blockquoteDecoration?.copy(borderWidth = blockquoteDecoration.borderWidth.safe())
+        val oldCode = codeBlockDecoration?.copy(borderWidth = codeBlockDecoration.borderWidth.safe(), cornerRadius = codeBlockDecoration.cornerRadius.safe())
+        return copy(
+            designTokens = tokens,
+            backgroundColor = document.backgroundColor ?: backgroundColor,
+            textColor = document.textColor ?: textColor,
+            headingColor = document.headingColor ?: headingColor,
+            linkColor = document.linkColor ?: linkColor,
+            codeBackground = document.codeBackground ?: codeBackground,
+            inlineCodeBackground = document.inlineCodeBackground ?: inlineCodeBackground,
+            inlineCodeTextColor = document.inlineCodeTextColor ?: inlineCodeTextColor,
+            highlightColor = document.highlightColor ?: highlightColor,
+            footnoteColor = document.footnoteColor ?: footnoteColor,
+            quoteBarColor = document.quoteBarColor ?: quoteBarColor,
+            quoteBackground = document.quoteBackground ?: quoteBackground,
+            tableBorderColor = document.tableBorderColor ?: tableBorderColor,
+            ruleColor = document.ruleColor ?: ruleColor,
+            tableHeaderBackgroundColor = document.tableHeaderBackgroundColor ?: tableHeaderBackgroundColor,
+
+            blockSpacing = blockSpacing.safe(), listSpacing = listSpacing.safe(), contentPadding = contentPadding.safe(),
+            listIndent = listIndent.safe(), codePadding = codePadding.safe(), tableCellPadding = tableCellPadding.safe(),
+            horizontalRuleThickness = horizontalRuleThickness.safe(), tableBorder = tableBorder?.normalized(document.tableBorderColor),
+            paragraphStyle = (typography.paragraph ?: paragraphStyle?.safe())?.let { it.copy(color = document.textColor ?: it.color) },
+            headingStyles = (typography.headings?.asList() ?: headingStyles?.let { styles -> List(6) { styles.getOrNull(it)?.safe() ?: TextStyle.Default } })?.map { it.copy(color = document.headingColor ?: it.color) },
+            codeStyle = typography.code ?: codeStyle?.safe(),
+            boldStyle = boldStyle?.safe(),
+            italicStyle = italicStyle?.safe(),
+            strikethroughStyle = strikethroughStyle?.safe(),
+            underlineStyle = underlineStyle?.safe(),
+            highlightStyle = highlightStyle?.safe()?.let { it.copy(background = document.highlightColor ?: it.background) },
+            linkStyle = linkStyle?.safe()?.let { it.copy(color = document.linkColor ?: it.color) },
+            inlineCodeStyle = inlineCodeStyle?.safe()?.let { it.copy(color = document.inlineCodeTextColor ?: it.color, background = document.inlineCodeBackground ?: it.background) },
+            subscriptStyle = subscriptStyle?.safe(),
+            superscriptStyle = superscriptStyle?.safe(),
+            tableHeaderStyle = typography.tableHeader ?: tableHeaderStyle?.safe(),
+            tableCellStyle = typography.tableCell ?: tableCellStyle?.safe(),
+            listBulletStyle = typography.listBullet ?: listBulletStyle?.safe(),
+            kbdStyle = typography.keyboard ?: kbdStyle?.safe(),
+            blockquotePadding = quote.padding ?: blockquotePadding.safe(),
+            blockquoteDecoration = if (quote.backgroundColor != null || document.quoteBackground != null || quote.borderColor != null || document.quoteBarColor != null || quote.borderWidth != null)
+                MarkdownBlockquoteDecoration(
+                    backgroundColor = quote.backgroundColor ?: document.quoteBackground ?: oldQuote?.backgroundColor,
+                    borderColor = quote.borderColor ?: document.quoteBarColor ?: oldQuote?.borderColor,
+                    borderWidth = quote.borderWidth ?: oldQuote?.borderWidth ?: 4.dp,
+                ) else oldQuote,
+            codeTextColor = code.textColor ?: document.codeTextColor ?: codeTextColor,
+            codeBlockPadding = code.padding ?: codeBlockPadding?.safe(),
+            codeBlockDecoration = if (code.backgroundColor != null || document.codeBackground != null || code.borderColor != null || code.borderWidth != null || code.cornerRadius != null)
+                MarkdownCodeBlockDecoration(
+                    backgroundColor = code.backgroundColor ?: document.codeBackground ?: oldCode?.backgroundColor,
+                    borderColor = code.borderColor ?: oldCode?.borderColor,
+                    borderWidth = code.borderWidth ?: oldCode?.borderWidth ?: 0.dp,
+                    cornerRadius = code.cornerRadius ?: oldCode?.cornerRadius ?: 6.dp,
+                ) else oldCode,
+        )
     }
 
     companion object {

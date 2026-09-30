@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,6 +72,57 @@ class NativeImageLoaderTest {
     @Test fun boundedReadsAcceptExactLimitAndRejectOneExtraByte() {
         assertArrayEquals(byteArrayOf(1, 2, 3), NativeImageLoader.readBounded(ByteArrayInputStream(byteArrayOf(1, 2, 3)), 3))
         rejects { NativeImageLoader.readBounded(ByteArrayInputStream(ByteArray(4)), 3) }
+    }
+
+    @Test fun hostLoaderUsesHeadersAndIsolatesCachePolicies() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        var calls = 0
+        val loader = MarkdownResourceLoader { request ->
+            calls++
+            val width = if (request.headers["Authorization"] == "account-a") 20 else 30
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$width\" height=\"10\"/>".toByteArray()
+        }
+        val source = "https://example.test/${java.util.UUID.randomUUID()}.svg"
+        val options = MarkdownResourceOptions(headers = mapOf("Authorization" to "account-a"), loader = loader)
+        assertEquals(20f, NativeImageLoader.load(context, source, options).width, 0f)
+        NativeImageLoader.load(context, source, options)
+        assertEquals(1, calls)
+        NativeImageLoader.load(context, source, options.copy(cachePolicy = MarkdownResourceCachePolicy.RELOAD))
+        NativeImageLoader.load(context, source, options)
+        assertEquals(2, calls)
+        NativeImageLoader.load(context, source, options.copy(cachePolicy = MarkdownResourceCachePolicy.NO_STORE))
+        NativeImageLoader.load(context, source, options.copy(cachePolicy = MarkdownResourceCachePolicy.NO_STORE))
+        assertEquals(4, calls)
+        assertEquals(30f, NativeImageLoader.load(context, source, options.copy(headers = mapOf("Authorization" to "account-b"))).width, 0f)
+        assertEquals(5, calls)
+    }
+
+    @Test fun cancelledHostLoaderIsNotRetained() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val started = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        val attempts = java.util.concurrent.atomic.AtomicInteger(0)
+        val loader = MarkdownResourceLoader {
+            if (attempts.incrementAndGet() == 1) {
+                started.complete(Unit)
+                try { kotlinx.coroutines.awaitCancellation() }
+                finally { cancelled.set(true) }
+            } else {
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"10\"/>".toByteArray()
+            }
+        }
+        val source = "https://example.test/cancel-${java.util.UUID.randomUUID()}.svg"
+        val options = MarkdownResourceOptions(loader = loader)
+        val job = launch { NativeImageLoader.load(context, source, options) }
+        kotlinx.coroutines.withTimeout(5_000) { started.await() }
+        job.cancel()
+        job.join()
+        assertTrue(cancelled.get())
+        // Reusing the exact source/options must run the loader again after cancellation.
+        assertEquals(20f, NativeImageLoader.load(context, source, options).width, 0f)
+        assertEquals(2, attempts.get())
+        NativeImageLoader.load(context, source, options)
+        assertEquals(2, attempts.get())
     }
 
     private fun rejects(action: () -> Unit) {

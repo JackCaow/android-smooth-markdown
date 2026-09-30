@@ -207,7 +207,7 @@ fun SmoothMarkdown(
     onLinkClick: (String) -> Unit = {},
     onImageClick: (String) -> Unit = {},
     enableHtml: Boolean = false,
-    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockOptions: CodeBlockOptions? = null,
     codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
     onCodeCopied: ((String) -> Unit)? = null,
     styleSheet: MarkdownStyleSheet = MarkdownStyleSheet.default(),
@@ -240,11 +240,17 @@ fun SmoothMarkdown(
     builderRegistry: MarkdownBuilderRegistry? = null,
     /** Match Flutter's opt-in decorative headers, quotes, links and code controls. */
     useEnhancedComponents: Boolean = false,
+    resourceOptions: MarkdownResourceOptions = LocalMarkdownResources.current,
+    strings: MarkdownStrings = LocalMarkdownStrings.current,
+    onCodeCopiedWithMetadata: ((String, String?) -> Unit)? = null,
 ) {
-    val document = if (enableCache) remember(markdown, plugins, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
+    val pluginVersion = plugins?.version
+    val builderVersion = builderRegistry?.version
+    val resolvedStyleSheet = styleSheet.resolved()
+    val document = if (enableCache) remember(markdown, plugins, pluginVersion, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
         else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
-    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, plugins) {
+    val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, builderVersion, plugins, pluginVersion) {
         groupSelectableBlocks(
             blocks,
             bridgeVisibleNonText = selectable || selectableAsSingleRegion,
@@ -279,11 +285,14 @@ fun SmoothMarkdown(
         activeController?.let { controller -> { key: Any -> controller.removeTarget(key) } }
     }
     CompositionLocalProvider(
-        LocalCodeBlockOptions provides if (useEnhancedComponents) codeBlockOptions else CodeBlockOptions(
-            showCopyButton = false, showLanguageTag = false, enableSyntaxHighlighting = false),
+        LocalMarkdownResources provides resourceOptions,
+        LocalMarkdownStrings provides strings,
+        LocalCodeBlockOptions provides (codeBlockOptions ?: if (useEnhancedComponents) CodeBlockOptions() else CodeBlockOptions(
+            showCopyButton = false, showLanguageTag = false, enableSyntaxHighlighting = false)),
         LocalCodeBlockBuilder provides codeBlockBuilder,
         LocalOnCodeCopied provides onCodeCopied,
-        LocalMarkdownStyleSheet provides styleSheet,
+        LocalOnCodeCopiedWithMetadata provides onCodeCopiedWithMetadata,
+        LocalMarkdownStyleSheet provides resolvedStyleSheet,
         LocalParserPlugins provides plugins,
         LocalMarkdownBuilders provides builderRegistry,
         LocalReaderSelectionController provides activeController,
@@ -294,7 +303,7 @@ fun SmoothMarkdown(
         LocalOnMentionClick provides onMentionClick,
         LocalOnHashtagClick provides onHashtagClick,
         LocalOnWikilinkClick provides onWikilinkClick,
-        LocalMarkdownSelectionOptions provides MarkdownSelectionOptions(
+        LocalMarkdownSelectionOptions provides ReaderSelectionOptions(
             selectable = selectable || selectableAsSingleRegion,
             outerRegion = selectable || selectableAsSingleRegion,
             nonTextSelectionAnchor = selectable && !selectableAsSingleRegion,
@@ -302,13 +311,13 @@ fun SmoothMarkdown(
             onTextDisposed = targetDisposed,
         ),
     ) {
-        val backgroundModifier = if (styleSheet.backgroundColor != null) modifier.background(styleSheet.backgroundColor) else modifier
+        val backgroundModifier = if (resolvedStyleSheet.backgroundColor != null) modifier.background(resolvedStyleSheet.backgroundColor) else modifier
         val content: @Composable () -> Unit = {
             if (scrollable && !fullDocumentSelectionMode) {
                 LazyColumn(
                     modifier = backgroundModifier,
                     state = lazyListState,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(styleSheet.contentPadding),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(resolvedStyleSheet.contentPadding),
                 ) {
                     itemsIndexed(selectionGroups) { _, group ->
                         MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
@@ -317,7 +326,7 @@ fun SmoothMarkdown(
             } else {
                 val fullModifier = if (scrollable) backgroundModifier.verticalScroll(rememberScrollState())
                     else backgroundModifier
-                Column(fullModifier.padding(styleSheet.contentPadding).onGloballyPositioned {
+                Column(fullModifier.padding(resolvedStyleSheet.contentPadding).onGloballyPositioned {
                     if (fullDocumentSelectionMode) activeController?.onFullDocumentLaidOut()
                 }) {
                     selectionGroups.forEach { group ->
@@ -632,23 +641,24 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                     modifier = Modifier.semantics { heading() },
                 )
             } else {
-                val primary = MaterialTheme.colorScheme.primary
-                val decorated = node.level <= 2
+                val tokens = sheet.designTokens.heading
+                val primary = tokens.accentColor ?: MaterialTheme.colorScheme.primary
+                val decorated = node.level <= tokens.decoratedThroughLevel
                 val barHeight = with(LocalDensity.current) {
                     if (resolvedStyle.fontSize.isSpecified) resolvedStyle.fontSize.toDp() else 24.dp
                 }
                 Column(Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)) {
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                    Modifier.fillMaxWidth().padding(tokens.padding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (decorated) {
                         Box(
-                            Modifier.padding(end = 12.dp)
-                                .width(4.dp)
+                            Modifier.padding(end = tokens.barSpacing)
+                                .width(tokens.barWidth)
                                 .height(barHeight)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Brush.verticalGradient(listOf(primary, primary.copy(alpha = 0.3f)))),
+                                .clip(RoundedCornerShape(tokens.barRadius))
+                                .background(Brush.verticalGradient(listOf(primary, primary.copy(alpha = tokens.barEndAlpha)))),
                         )
                     }
                     Box(Modifier.weight(1f)) {
@@ -665,8 +675,8 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
                 }
                 if (decorated) {
                     Box(
-                        Modifier.fillMaxWidth().height(2.dp).background(
-                            Brush.horizontalGradient(listOf(primary.copy(alpha = 0.3f), primary.copy(alpha = 0f))),
+                        Modifier.fillMaxWidth().height(tokens.ruleThickness).background(
+                            Brush.horizontalGradient(listOf(primary.copy(alpha = tokens.ruleStartAlpha), primary.copy(alpha = tokens.ruleEndAlpha))),
                         ),
                     )
                 }
@@ -721,7 +731,7 @@ private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClic
             }
         }
         is FootnoteDefinitionNode -> Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+            Modifier.fillMaxWidth().padding(sheet.designTokens.footnotePadding),
         ) {
             Text(
                 "[${node.label}]: ",
@@ -798,11 +808,15 @@ internal fun resolveBlockquoteDecoration(sheet: MarkdownStyleSheet, defaultBorde
 @Composable
 private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, enhanced: Boolean = false, content: @Composable () -> Unit) {
     val decoration = resolveBlockquoteDecoration(sheet, MaterialTheme.colorScheme.primary)
+    val tokens = sheet.designTokens.quote
     val primary = MaterialTheme.colorScheme.primary
-    val background = if (enhanced) Modifier.background(Brush.linearGradient(
-        listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f))))
-    else decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
+    val explicitFill = sheet.blockquoteDecoration?.backgroundColor ?: sheet.quoteBackground
+    val background = if (enhanced) {
+        if (explicitFill != null) Modifier.background(explicitFill)
+        else Modifier.background(Brush.linearGradient(listOf(
+            tokens.gradientStartColor ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = tokens.backgroundStartAlpha),
+            tokens.gradientEndColor ?: MaterialTheme.colorScheme.surfaceVariant.copy(alpha = tokens.backgroundEndAlpha))))
+    } else decoration.backgroundColor?.let { Modifier.background(it) } ?: Modifier
     Column(
         Modifier.fillMaxWidth()
             .padding(bottom = sheet.blockSpacing)
@@ -811,7 +825,7 @@ private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, enhanced: Boolean = fa
             .drawBehind {
                 if (decoration.borderWidth.value > 0) {
                     drawRect(
-                        color = if (enhanced) primary.copy(alpha = 0.6f) else decoration.borderColor,
+                        color = if (enhanced && sheet.blockquoteDecoration?.borderColor == null && sheet.quoteBarColor == null) primary.copy(alpha = tokens.borderAlpha) else decoration.borderColor,
                         size = Size(decoration.borderWidth.toPx().coerceAtMost(size.width), size.height),
                     )
                 }
@@ -820,10 +834,12 @@ private fun MarkdownBlockquote(sheet: MarkdownStyleSheet, enhanced: Boolean = fa
     ) {
         if (enhanced) {
             Row(verticalAlignment = Alignment.Top) {
-                DisableSelection {
-                    Text("❝", color = primary.copy(alpha = 0.4f), fontSize = 24.sp)
+                if (tokens.showIcon) {
+                    DisableSelection {
+                        Text("❝", color = tokens.iconColor ?: primary.copy(alpha = tokens.iconAlpha), style = tokens.iconStyle)
+                    }
+                    Spacer(Modifier.width(tokens.iconSpacing))
                 }
-                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) { content() }
             }
         } else content()
@@ -838,34 +854,38 @@ private fun MarkdownDetails(
     enableHtml: Boolean,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
+    val strings = LocalMarkdownStrings.current
+    val tokens = sheet.designTokens.details
+    val borderColor = tokens.borderColor ?: sheet.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant
     val selectionController = LocalReaderSelectionController.current
     val expanded = rememberSaveable(node) {
         mutableStateOf(selectionController?.detailsExpanded(node) ?: node.isOpen)
     }
     SideEffect { selectionController?.setDetailsExpanded(node, expanded.value) }
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(tokens.cornerRadius)
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            .border(1.dp, sheet.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant, shape)
+        Modifier.fillMaxWidth().padding(tokens.outerPadding)
+            .background(tokens.backgroundColor ?: Color.Transparent, shape)
+            .let { if (tokens.borderWidth > 0.dp) it.border(tokens.borderWidth, borderColor, shape) else it }
             .clip(shape),
     ) {
         Row(
             Modifier.fillMaxWidth()
-                .semantics { stateDescription = if (expanded.value) "Expanded" else "Collapsed" }
+                .semantics { stateDescription = if (expanded.value) strings.expanded else strings.collapsed }
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = if (expanded.value) "Collapse details" else "Expand details",
+                    onClickLabel = if (expanded.value) strings.collapseDetails else strings.expandDetails,
                 ) {
                     expanded.value = !expanded.value
                     selectionController?.setDetailsExpanded(node, expanded.value)
                 }
-                .padding(12.dp),
+                .padding(tokens.summaryPadding),
         ) {
             DisableSelection {
-                Text(if (expanded.value) "⌄" else "›", style = MaterialTheme.typography.titleMedium,
-                    color = sheet.textColor ?: Color.Unspecified)
+                Text(if (expanded.value) "⌄" else "›", style = tokens.iconStyle ?: MaterialTheme.typography.titleMedium,
+                    color = tokens.iconColor ?: tokens.iconStyle?.color?.takeUnless { it == Color.Unspecified } ?: sheet.textColor ?: Color.Unspecified)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(tokens.iconSpacing))
             Box(Modifier.weight(1f)) {
                 val summary = node.summary.singleOrNull()
                 if (summary is Paragraph) {
@@ -885,8 +905,8 @@ private fun MarkdownDetails(
             }
         }
         if (expanded.value && node.body.isNotEmpty()) {
-            HorizontalDivider(color = sheet.tableBorderColor ?: MaterialTheme.colorScheme.outlineVariant)
-            Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+            if (tokens.dividerThickness > 0.dp) HorizontalDivider(color = borderColor, thickness = tokens.dividerThickness)
+            Column(Modifier.fillMaxWidth().padding(tokens.bodyPadding)) {
                 node.body.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
             }
         }
@@ -896,17 +916,18 @@ private fun MarkdownDetails(
 @Composable
 private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier, onPlainTextTap: (() -> Unit)? = null) {
     val sheet = LocalMarkdownStyleSheet.current
+    val strings = LocalMarkdownStrings.current
     val onMentionClick = LocalOnMentionClick.current
     val onHashtagClick = LocalOnHashtagClick.current
     val onWikilinkClick = LocalOnWikilinkClick.current
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     val links = text.getStringAnnotations("url", 0, text.length).filter { isSafeLink(it.item) }
     val actions = links.map { link ->
-        CustomAccessibilityAction("Open link ${text.text.substring(link.start, link.end)}") {
+        CustomAccessibilityAction("${strings["Open link"]} ${text.text.substring(link.start, link.end)}") {
             onLinkClick(link.item)
             true
         }
-    } + pluginAccessibilityActions(text, onMentionClick, onHashtagClick, onWikilinkClick)
+    } + pluginAccessibilityActions(text, onMentionClick, onHashtagClick, onWikilinkClick, strings)
     val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val selectionOptions = LocalMarkdownSelectionOptions.current
     val selectionKey = remember { Any() }
@@ -980,6 +1001,7 @@ private fun MarkdownInlineText(
     onPlainTextTap: (() -> Unit)? = null,
 ) {
     val sheet = LocalMarkdownStyleSheet.current
+    val strings = LocalMarkdownStrings.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val onMentionClick = LocalOnMentionClick.current
     val onHashtagClick = LocalOnHashtagClick.current
@@ -1028,8 +1050,9 @@ private fun MarkdownInlineText(
             ?: LocalConfiguration.current.screenWidthDp.toFloat()
         val customImageBuilder = LocalImageBuilder.current
         val inline = render.images.mapValues { (_, image) ->
-            val natural = if (customImageBuilder == null && (image.width == null || image.height == null))
-                rememberImageIntrinsicSize(image.source) else null
+            val model = imageModel(image.source)
+            val imageState = if (customImageBuilder == null && model != null) rememberNativeImage(model) else null
+            val natural = imageState?.data?.let { ImageSize(it.width, it.height) }
             val size = imageSize(image.width, image.height, natural, maxImageWidth)
             InlineTextContent(
                 placeholder = Placeholder(
@@ -1038,7 +1061,7 @@ private fun MarkdownInlineText(
                     placeholderVerticalAlign = PlaceholderVerticalAlign.Center,
                 ),
             ) {
-                InlineImage(image, size.width, size.height, if (interactive) onImageClick else null)
+                InlineImage(image, size.width, size.height, if (interactive) onImageClick else null, imageState)
             }
         }.toMutableMap()
         render.math.forEach { (id, latex) ->
@@ -1056,14 +1079,15 @@ private fun MarkdownInlineText(
             }
         }
         render.kbds.forEach { (id, label) ->
-            val border = sheet.ruleColor ?: Color(0xFFBDBDBD)
+            val tokens = sheet.designTokens.keyboard
+            val border = tokens.borderColor ?: sheet.ruleColor ?: Color(0xFFBDBDBD)
             val base = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
-            val keyStyle = base.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+            val keyStyle = base.copy(fontFamily = FontFamily.Monospace).merge(tokens.textStyle)
                 .merge(sheet.kbdStyle).let { it.copy(color = it.color.takeUnless { color -> color == Color.Unspecified } ?: foreground) }
             val measured = textMeasurer.measure(label, style = keyStyle, maxLines = 1, softWrap = false)
-            val width = with(density) { measured.size.width.toDp() } + 12.dp
-            val height = with(density) { measured.size.height.toDp() } + 4.dp
-            val shape = RoundedCornerShape(4.dp)
+            val width = with(density) { measured.size.width.toDp() } + tokens.padding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr) + tokens.padding.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr) + tokens.extraWidth
+            val height = with(density) { measured.size.height.toDp() } + tokens.padding.calculateTopPadding() + tokens.padding.calculateBottomPadding() + tokens.extraHeight
+            val shape = RoundedCornerShape(tokens.cornerRadius)
             inline[id] = InlineTextContent(
                 placeholder = Placeholder(
                     width = with(density) { width.toSp() },
@@ -1074,8 +1098,8 @@ private fun MarkdownInlineText(
                 // The parent annotated text already contains the key label for selection.
                 // Its visual inline child must not register that label a second time.
                 DisableSelection {
-                    Box(Modifier.background(border.copy(alpha = 0.12f), shape).border(1.dp, border, shape)
-                        .padding(horizontal = 5.dp, vertical = 1.dp)) {
+                    Box(Modifier.background(tokens.backgroundColor ?: border.copy(alpha = tokens.backgroundAlpha), shape).let { if (tokens.borderWidth > 0.dp) it.border(tokens.borderWidth, border, shape) else it }
+                        .padding(tokens.padding)) {
                         Text(label, style = keyStyle, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip)
                     }
                 }
@@ -1116,12 +1140,12 @@ private fun MarkdownInlineText(
         } else {
             val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
             val actions = links.map { link ->
-                CustomAccessibilityAction("Open link ${render.text.text.substring(link.start, link.end)}") {
+                CustomAccessibilityAction("${strings["Open link"]} ${render.text.text.substring(link.start, link.end)}") {
                     onLinkClick(link.item)
                     true
                 }
-            } + pluginAccessibilityActions(render.text, onMentionClick, onHashtagClick, onWikilinkClick) + render.images.values.map { image ->
-                CustomAccessibilityAction("Open image ${image.alt.ifBlank { image.title ?: "Image" }}") {
+            } + pluginAccessibilityActions(render.text, onMentionClick, onHashtagClick, onWikilinkClick, strings) + render.images.values.map { image ->
+                CustomAccessibilityAction("${strings["Open image"]} ${image.alt.ifBlank { image.title ?: strings["Image"] }}") {
                     dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
                     true
                 }
@@ -1146,31 +1170,26 @@ private fun MarkdownInlineText(
 }
 
 @Composable
-private fun rememberImageIntrinsicSize(source: String): ImageSize? {
-    val model = imageModel(source) ?: return null
-    val image = rememberNativeImage(model).data ?: return null
-    return ImageSize(image.width, image.height)
-}
-
-@Composable
-private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: ((String) -> Unit)?) {
+private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, onImageClick: ((String) -> Unit)?, imageState: NativeImageState? = null) {
     val sheet = LocalMarkdownStyleSheet.current
+    val strings = LocalMarkdownStrings.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val imageBuilder = LocalImageBuilder.current
     val model = imageModel(image.source) ?: return Text(image.alt, color = sheet.textColor ?: Color.Unspecified)
     val modifier = Modifier.width(width.dp).height(height.dp)
-        .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
+        .semantics { contentDescription = image.alt.ifBlank { image.title ?: strings["Image"] } }
     Box(if (onImageClick != null) modifier.clickable(
-            role = Role.Button, onClickLabel = "Open image",
+            role = Role.Button, onClickLabel = strings["Open image"],
         ) { dispatchImageClick(image, onImageClick, onImageClickWithMetadata) } else modifier) {
         if (imageBuilder != null) imageBuilder(image.source, image.alt, image.title)
         else NativeMarkdownImage(
             source = model,
+            imageState = imageState,
             contentDescription = null,
             modifier = Modifier.width(width.dp).height(height.dp),
             contentScale = ContentScale.Fit,
             loading = { androidx.compose.material3.CircularProgressIndicator() },
-            error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
+            error = { Text(image.alt.ifBlank { image.title ?: strings["Image"] }, color = sheet.textColor ?: Color.Unspecified) },
         )
     }
 }
@@ -1178,6 +1197,7 @@ private fun InlineImage(image: SafeHtml.ImageSpec, width: Float, height: Float, 
 @Composable
 private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> Unit) {
     val sheet = LocalMarkdownStyleSheet.current
+    val strings = LocalMarkdownStrings.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
     val imageBuilder = LocalImageBuilder.current
     val url = image.source
@@ -1186,8 +1206,8 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
         Text(image.alt, modifier = Modifier.padding(bottom = sheet.blockSpacing), color = sheet.textColor ?: Color.Unspecified)
         return
     }
-    val natural = if (imageBuilder == null && (image.width == null || image.height == null))
-        rememberImageIntrinsicSize(url) else null
+    val imageState = if (imageBuilder == null) rememberNativeImage(model) else null
+    val natural = imageState?.data?.let { ImageSize(it.width, it.height) }
     SelectableNonTextBlock(onClick = {
         dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
     }) {
@@ -1199,18 +1219,19 @@ private fun MarkdownImage(image: SafeHtml.ImageSpec, onImageClick: (String) -> U
             val customModifier = Modifier
                 .then(if (image.width != null) Modifier.width(image.width.dp) else Modifier)
                 .then(if (image.height != null) Modifier.height(image.height.dp) else Modifier)
-            Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                .semantics { contentDescription = image.alt.ifBlank { image.title ?: "Image" } }
-                .clickable(role = Role.Button, onClickLabel = "Open image") {
+            Box(Modifier.padding(bottom = sheet.blockSpacing).sizeIn(minWidth = sheet.designTokens.imagePlaceholderMinSize, minHeight = sheet.designTokens.imagePlaceholderMinSize)
+                .semantics { contentDescription = image.alt.ifBlank { image.title ?: strings["Image"] } }
+                .clickable(role = Role.Button, onClickLabel = strings["Open image"]) {
                     dispatchImageClick(image, onImageClick, onImageClickWithMetadata)
                 }) {
                 if (imageBuilder != null) Box(customModifier) { imageBuilder(url, image.alt, image.title) }
                 else NativeMarkdownImage(
                     source = model,
+                    imageState = imageState,
                     contentDescription = null,
                     modifier = imageModifier,
                     loading = { androidx.compose.material3.CircularProgressIndicator() },
-                    error = { Text(image.alt.ifBlank { image.title ?: "Image" }, color = sheet.textColor ?: Color.Unspecified) },
+                    error = { Text(image.alt.ifBlank { image.title ?: strings["Image"] }, color = sheet.textColor ?: Color.Unspecified) },
                 )
             }
         }
@@ -1465,7 +1486,11 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                 val presentation = plugins?.renderInline(current)
                 if (presentation != null) {
                     append(presentation.text)
-                    addStyle(presentation.style, start, length)
+                    addStyle(when (current) {
+                        is MentionNode -> styleSheet.designTokens.plugins.mentionStyle
+                        is HashtagNode -> styleSheet.designTokens.plugins.hashtagStyle
+                        else -> presentation.style
+                    }, start, length)
                     when (current) {
                         is MentionNode -> addStringAnnotation("mention", current.username, start, length)
                         is HashtagNode -> addStringAnnotation("hashtag", current.tag, start, length)
@@ -1528,10 +1553,11 @@ private fun pluginAccessibilityActions(
     onMentionClick: ((String) -> Unit)?,
     onHashtagClick: ((String) -> Unit)?,
     onWikilinkClick: ((String) -> Unit)? = null,
+    strings: MarkdownStrings = MarkdownStrings(),
 ): List<CustomAccessibilityAction> = buildList {
     if (onMentionClick != null) {
         text.getStringAnnotations("mention", 0, text.length).forEach { mention ->
-            if (safeLinkAt(text, mention.start) == null) add(CustomAccessibilityAction("Open mention @${mention.item}") {
+            if (safeLinkAt(text, mention.start) == null) add(CustomAccessibilityAction("${strings["Open mention"]} @${mention.item}") {
                 onMentionClick(mention.item)
                 true
             })
@@ -1539,7 +1565,7 @@ private fun pluginAccessibilityActions(
     }
     if (onHashtagClick != null) {
         text.getStringAnnotations("hashtag", 0, text.length).forEach { hashtag ->
-            if (safeLinkAt(text, hashtag.start) == null) add(CustomAccessibilityAction("Open hashtag #${hashtag.item}") {
+            if (safeLinkAt(text, hashtag.start) == null) add(CustomAccessibilityAction("${strings["Open hashtag"]} #${hashtag.item}") {
                 onHashtagClick(hashtag.item)
                 true
             })
@@ -1547,7 +1573,7 @@ private fun pluginAccessibilityActions(
     }
     if (onWikilinkClick != null) {
         text.getStringAnnotations("wikilink", 0, text.length).forEach { wikilink ->
-            if (safeLinkAt(text, wikilink.start) == null) add(CustomAccessibilityAction("Open note ${wikilink.item}") {
+            if (safeLinkAt(text, wikilink.start) == null) add(CustomAccessibilityAction("${strings["Open note"]} ${wikilink.item}") {
                 onWikilinkClick(wikilink.item)
                 true
             })

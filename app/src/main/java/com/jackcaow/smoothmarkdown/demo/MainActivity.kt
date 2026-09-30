@@ -281,7 +281,7 @@ private fun DemoHome(
     val currentTitle = when (pageId) {
         "editor" -> "Markdown Editor"
         "math" -> "Math Formula Demo"
-        "stream" -> "Streaming Markdown Demo"
+        "stream" -> "Streaming Markdown"
         "footnote" -> "Footnotes Demo"
         "html" -> "HTML Tags Demo"
         "plugin" -> "Plugin System Demo"
@@ -393,7 +393,7 @@ private fun DemoHome(
                         modifier = Modifier.testTag("open-navigation")) {
                         Icon(Icons.Filled.Menu, contentDescription = localizations.chrome(language, "examples"))
                     }
-                    Text("Smooth Markdown Demo", style = MaterialTheme.typography.titleMedium,
+                    Text("Smooth Markdown", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f).testTag("demo-app-title"))
                     IconButton(onClick = { select("editor") }, modifier = Modifier.testTag("open-editor")) {
@@ -422,12 +422,12 @@ private fun DemoHome(
                     }
                 }
             } else {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back")) {
-                        Text("‹ ${localizations.chrome(language, "examples")}")
-                    }
-                    Text(currentTitle, style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.testTag("current-title"))
+                Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp)
+                    .background(MaterialTheme.colorScheme.surface), verticalAlignment = Alignment.CenterVertically) {
+                    DemoBackButton(onClick = { pageId = exampleId }, modifier = Modifier.testTag("demo-back"))
+                    Text(currentTitle, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp, end = 16.dp).testTag("current-title"))
                 }
             }
             if (isEditor) {

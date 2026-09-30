@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
 /** WHATWG standard named entity data, ported from our own Swift table. */
-internal object NativeHTMLEntityTable {
+object NativeHTMLEntityTable {
     val values: Map<String,String> by lazy { buildMap {
         putAll(part0())
         putAll(part1())

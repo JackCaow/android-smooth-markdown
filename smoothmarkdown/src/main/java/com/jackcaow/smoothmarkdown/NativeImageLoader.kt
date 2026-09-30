@@ -8,10 +8,17 @@ import android.util.Base64
 import android.util.LruCache
 import android.util.Xml
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.xmlpull.v1.XmlPullParser
@@ -35,42 +42,74 @@ internal object NativeImageLoader {
     private const val MAX_DECODE_PIXELS = 4_000_000L
     private const val MAX_SOURCE_PIXELS = 64_000_000L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val pending = mutableMapOf<String, Deferred<NativeImageData>>()
     private val downloads = Semaphore(6)
-    private val cache = object : LruCache<String, NativeImageData>(32 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: NativeImageData): Int = when (value) {
+    private data class CacheKey(val source: String, val headers: Map<String, String>, val loader: MarkdownResourceLoader?)
+    private val cache = object : LruCache<CacheKey, NativeImageData>(32 * 1024 * 1024) {
+        override fun sizeOf(key: CacheKey, value: NativeImageData): Int = when (value) {
             is NativeImageData.BitmapImage -> value.bitmap.allocationByteCount
             is NativeImageData.SvgImage -> value.markup.length * 2
         }
     }
 
-    suspend fun load(context: Context, source: String): NativeImageData {
-        val application = context.applicationContext
-        val request = synchronized(this) {
-            cache.get(source)?.let { return it }
-            pending[source] ?: scope.async {
-                val data = downloads.withPermit { read(application, source) }
-                synchronized(this@NativeImageLoader) { cache.put(source, data) }
-                data
-            }.also { deferred ->
-                pending[source] = deferred
-                deferred.invokeOnCompletion {
-                    synchronized(this@NativeImageLoader) {
-                        if (pending[source] === deferred) pending.remove(source)
+    suspend fun load(context: Context, source: String, options: MarkdownResourceOptions = MarkdownResourceOptions()): NativeImageData {
+        val request = MarkdownResourceRequest(source, options.headers.toMap(), options.cachePolicy)
+        val key = CacheKey(source, request.headers, options.loader)
+        if (options.cachePolicy == MarkdownResourceCachePolicy.DEFAULT) synchronized(this) { cache.get(key)?.let { return it } }
+        val data = downloads.withPermit {
+            if (options.loader != null) withContext(Dispatchers.IO) { decode(options.loader.load(request), source) }
+            else suspendCancellableCoroutine { continuation ->
+                val connection = AtomicReference<HttpURLConnection?>()
+                val cancelled = AtomicBoolean(false)
+                val job = scope.launch {
+                    try {
+                        val encoded = read(context.applicationContext, source, request.headers, connection, cancelled)
+                        val result = decode(encoded.first, encoded.second)
+                        if (continuation.isActive) continuation.resume(result)
+                    } catch (error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
                     }
                 }
+                continuation.invokeOnCancellation { cancelled.set(true); connection.get()?.disconnect(); job.cancel() }
             }
         }
-        return request.await()
+        currentCoroutineContext().ensureActive()
+        if (options.cachePolicy != MarkdownResourceCachePolicy.NO_STORE) synchronized(this) { cache.put(key, data) }
+        return data
     }
 
-    private fun read(context: Context, source: String): NativeImageData {
+    private val resourceCache = object : LruCache<CacheKey, ByteArray>(16 * 1024 * 1024) {
+        override fun sizeOf(key: CacheKey, value: ByteArray) = value.size
+    }
+
+    /** Raw nested SVG images/fonts use the same host transport and credential/cache isolation. */
+    suspend fun loadBytes(context: Context, source: String, options: MarkdownResourceOptions): ByteArray {
+        val request = MarkdownResourceRequest(source, options.headers.toMap(), options.cachePolicy)
+        val key = CacheKey(source, request.headers, options.loader)
+        if (options.cachePolicy == MarkdownResourceCachePolicy.DEFAULT) synchronized(this) { resourceCache.get(key)?.let { return it } }
+        val bytes = if (options.loader != null) options.loader.load(request) else suspendCancellableCoroutine { continuation ->
+            val connection = AtomicReference<HttpURLConnection?>()
+            val cancelled = AtomicBoolean(false)
+            val job = scope.launch {
+                try {
+                    val result = read(context.applicationContext, source, request.headers, connection, cancelled).first
+                    if (continuation.isActive) continuation.resume(result)
+                } catch (error: Exception) { if (continuation.isActive) continuation.resumeWithException(error) }
+            }
+            continuation.invokeOnCancellation { cancelled.set(true); connection.get()?.disconnect(); job.cancel() }
+        }
+        currentCoroutineContext().ensureActive()
+        require(bytes.size <= MAX_DOWNLOAD_BYTES) { "Resource exceeds size limit" }
+        if (options.cachePolicy != MarkdownResourceCachePolicy.NO_STORE) synchronized(this) { resourceCache.put(key, bytes) }
+        return bytes
+    }
+
+    private fun read(context: Context, source: String, headers: Map<String, String>, active: AtomicReference<HttpURLConnection?>, cancelled: AtomicBoolean): Pair<ByteArray, String?> {
         val bytes: ByteArray
         var baseUrl: String? = null
         when {
             source.startsWith("data:", true) -> bytes = decodeDataUrl(source)
             source.startsWith("https://", true) || source.startsWith("http://", true) -> {
-                val response = readRemote(source)
+                val response = readRemote(source, headers, active, cancelled)
                 bytes = response.first
                 baseUrl = response.second
             }
@@ -94,7 +133,7 @@ internal object NativeImageLoader {
                 baseUrl = Uri.Builder().scheme("file").path("/android_asset/$asset").build().toString()
             }
         }
-        return decode(bytes, baseUrl)
+        return bytes to baseUrl
     }
 
     /** Match Android asset URI decoding, while denying traversal and general filesystem access. */
@@ -181,27 +220,35 @@ internal object NativeImageLoader {
         else URLDecoder.decode(body.replace("+", "%2B"), "UTF-8").toByteArray(Charsets.UTF_8)
     }
 
-    private fun readRemote(source: String): Pair<ByteArray, String> {
-        var current = URL(source)
+    private fun readRemote(source: String, headers: Map<String, String>, active: AtomicReference<HttpURLConnection?>, cancelled: AtomicBoolean): Pair<ByteArray, String> {
+        val original = URL(source)
+        var current = original
         repeat(6) { redirect ->
             require(current.protocol == "https" || current.protocol == "http") { "Unsupported image redirect" }
             val connection = current.openConnection() as HttpURLConnection
+            active.set(connection)
+            if (cancelled.get() || Thread.currentThread().isInterrupted) { connection.disconnect(); throw InterruptedException() }
             try {
                 connection.connectTimeout = 15_000
                 connection.readTimeout = 20_000
                 connection.instanceFollowRedirects = false
                 connection.setRequestProperty("Accept", "image/*")
                 connection.setRequestProperty("User-Agent", "SmoothMarkdown/Android")
+                if (current.host == original.host && current.port == original.port && current.protocol == original.protocol) {
+                    headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+                }
                 val status = connection.responseCode
                 if (status in listOf(301, 302, 303, 307, 308)) {
                     require(redirect < 5) { "Too many image redirects" }
-                    current = URL(current, requireNotNull(connection.getHeaderField("Location")))
+                    val next = URL(current, requireNotNull(connection.getHeaderField("Location")))
+                    require(original.protocol != "https" || next.protocol == "https") { "Insecure image redirect" }
+                    current = next
                 } else {
                     require(status in 200..299) { "Image request failed: $status" }
                     require(connection.contentLengthLong <= MAX_DOWNLOAD_BYTES) { "Image exceeds size limit" }
                     return connection.inputStream.use { readBounded(it, MAX_DOWNLOAD_BYTES) } to current.toExternalForm()
                 }
-            } finally { connection.disconnect() }
+            } finally { active.compareAndSet(connection, null); connection.disconnect() }
         }
         error("Too many image redirects")
     }
@@ -210,6 +257,7 @@ internal object NativeImageLoader {
         val output = ByteArrayOutputStream(minOf(limit, 8192))
         val buffer = ByteArray(8192)
         while (true) {
+            if (Thread.currentThread().isInterrupted) throw InterruptedException()
             val count = input.read(buffer)
             if (count < 0) break
             require(output.size().toLong() + count <= limit) { "Image exceeds size limit" }

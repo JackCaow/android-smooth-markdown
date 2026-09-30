@@ -1,6 +1,7 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -75,22 +76,30 @@ interface MarkdownNodeBuilder {
  * builder without moving its position in that fallback order.
  */
 class MarkdownBuilderRegistry {
+    private val revision = mutableStateOf(0L)
+    /** Observable configuration version. Mutate on the UI thread or inside a mutable snapshot. */
+    val version: Long get() = revision.value
+    private fun changed() { revision.value = revision.value + 1 }
     private val builders = linkedMapOf<KClass<out Node>, MarkdownNodeBuilder>()
 
     fun register(nodeType: KClass<out Node>, builder: MarkdownNodeBuilder): MarkdownBuilderRegistry = apply {
-        builders[nodeType] = builder
+        if (builders[nodeType] !== builder) {
+            builders[nodeType] = builder
+            changed()
+        }
     }
 
     inline fun <reified T : Node> register(builder: MarkdownNodeBuilder): MarkdownBuilderRegistry =
         register(T::class, builder)
 
-    fun getBuilder(nodeType: KClass<out Node>): MarkdownNodeBuilder? = builders[nodeType]
-    fun hasBuilder(nodeType: KClass<out Node>): Boolean = builders.containsKey(nodeType)
-    fun unregister(nodeType: KClass<out Node>): MarkdownNodeBuilder? = builders.remove(nodeType)
-    fun clear() = builders.clear()
+    fun getBuilder(nodeType: KClass<out Node>): MarkdownNodeBuilder? = builders.also { version }[nodeType]
+    fun hasBuilder(nodeType: KClass<out Node>): Boolean = builders.also { version }.containsKey(nodeType)
+    fun unregister(nodeType: KClass<out Node>): MarkdownNodeBuilder? = builders.remove(nodeType).also { if (it != null) changed() }
+    fun clear() { if (builders.isNotEmpty()) { builders.clear(); changed() } }
     fun copy(): MarkdownBuilderRegistry = MarkdownBuilderRegistry().also { it.builders.putAll(builders) }
 
     fun findBuilder(node: Node): MarkdownNodeBuilder? {
+        version
         builders[node::class]?.let { if (it.canBuild(node)) return it }
         return builders.values.firstOrNull { it.canBuild(node) }
     }

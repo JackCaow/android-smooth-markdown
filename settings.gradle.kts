@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "android-smooth-markdown"
-include(":smoothmarkdown", ":app")
+include(":smoothmarkdown-core", ":smoothmarkdown", ":app", ":consumer-smoke", ":consumer-reader")

@@ -103,6 +103,7 @@ kotlin {
 }
 
 dependencies {
+    api(project(":smoothmarkdown-core"))
     api(platform("androidx.compose:compose-bom:2026.09.00"))
     api("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")

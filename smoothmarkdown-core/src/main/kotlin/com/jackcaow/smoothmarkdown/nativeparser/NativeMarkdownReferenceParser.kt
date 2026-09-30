@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
-internal object NativeMarkdownReferenceParser {
+object NativeMarkdownReferenceParser {
     data class Definition(val label: String, val destination: String, val title: String?, val lineCount: Int)
     fun normalize(label: String) = NativeMarkdownInlineParser.normalizeReference(label)
     fun parse(source: String): Definition? {

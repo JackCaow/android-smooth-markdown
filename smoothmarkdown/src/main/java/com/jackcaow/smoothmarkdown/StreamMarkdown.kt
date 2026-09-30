@@ -31,7 +31,7 @@ fun StreamMarkdown(
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     scrollable: Boolean = true,
-    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockOptions: CodeBlockOptions? = null,
     codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
     onCodeCopied: ((String) -> Unit)? = null,
     selectable: Boolean = false,
@@ -46,6 +46,11 @@ fun StreamMarkdown(
     onMentionClick: ((String) -> Unit)? = null,
     onHashtagClick: ((String) -> Unit)? = null,
     onWikilinkClick: ((String) -> Unit)? = null,
+    resourceOptions: MarkdownResourceOptions = LocalMarkdownResources.current,
+    strings: MarkdownStrings = LocalMarkdownStrings.current,
+    selectableAsSingleRegion: Boolean = false,
+    onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
+    onCodeCopiedWithMetadata: ((String, String?) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val completionHandler by rememberUpdatedState(onComplete)
@@ -88,7 +93,8 @@ fun StreamMarkdown(
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
         onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction, builderRegistry,
         useEnhancedComponents,
-        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick)
+        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick,
+        resourceOptions, strings, selectableAsSingleRegion, onTextPositioned, onCodeCopiedWithMetadata)
 }
 
 /** Renders a cumulative streaming source. A late-composed chat bubble receives the latest
@@ -109,7 +115,7 @@ fun StreamMarkdown(
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)? = null,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     scrollable: Boolean = true,
-    codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+    codeBlockOptions: CodeBlockOptions? = null,
     codeBlockBuilder: (@Composable (String, String?) -> Unit)? = null,
     onCodeCopied: ((String) -> Unit)? = null,
     selectable: Boolean = false,
@@ -124,6 +130,11 @@ fun StreamMarkdown(
     onMentionClick: ((String) -> Unit)? = null,
     onHashtagClick: ((String) -> Unit)? = null,
     onWikilinkClick: ((String) -> Unit)? = null,
+    resourceOptions: MarkdownResourceOptions = LocalMarkdownResources.current,
+    strings: MarkdownStrings = LocalMarkdownStrings.current,
+    selectableAsSingleRegion: Boolean = false,
+    onTextPositioned: ((MarkdownSelectionTarget) -> Unit)? = null,
+    onCodeCopiedWithMetadata: ((String, String?) -> Unit)? = null,
 ) {
     val errorHandler by rememberUpdatedState(onError)
     val completionHandler by rememberUpdatedState(onComplete)
@@ -162,7 +173,8 @@ fun StreamMarkdown(
         plugins, onImageClickWithMetadata, imageBuilder, scrollable, codeBlockOptions, codeBlockBuilder,
         onCodeCopied, selectable, selectionController, selectionMenuActions, showDefaultCopyAction, builderRegistry,
         useEnhancedComponents,
-        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick)
+        loadingContent, errorContent, onMentionClick, onHashtagClick, onWikilinkClick,
+        resourceOptions, strings, selectableAsSingleRegion, onTextPositioned, onCodeCopiedWithMetadata)
 }
 
 @Composable
@@ -177,7 +189,7 @@ private fun StreamMarkdownContent(
     onImageClickWithMetadata: ((String, String?, String?) -> Unit)?,
     imageBuilder: (@Composable (String, String?, String?) -> Unit)?,
     scrollable: Boolean,
-    codeBlockOptions: CodeBlockOptions,
+    codeBlockOptions: CodeBlockOptions?,
     codeBlockBuilder: (@Composable (String, String?) -> Unit)?,
     onCodeCopied: ((String) -> Unit)?,
     selectable: Boolean,
@@ -191,6 +203,11 @@ private fun StreamMarkdownContent(
     onMentionClick: ((String) -> Unit)?,
     onHashtagClick: ((String) -> Unit)?,
     onWikilinkClick: ((String) -> Unit)?,
+    resourceOptions: MarkdownResourceOptions,
+    strings: MarkdownStrings,
+    selectableAsSingleRegion: Boolean,
+    onTextPositioned: ((MarkdownSelectionTarget) -> Unit)?,
+    onCodeCopiedWithMetadata: ((String, String?) -> Unit)?,
 ) {
     when {
         snapshot.error != null && errorContent != null -> errorContent(snapshot.error)
@@ -204,7 +221,9 @@ private fun StreamMarkdownContent(
             showDefaultCopyAction = showDefaultCopyAction, builderRegistry = builderRegistry,
             useEnhancedComponents = useEnhancedComponents,
             onMentionClick = onMentionClick, onHashtagClick = onHashtagClick,
-            onWikilinkClick = onWikilinkClick)
+            onWikilinkClick = onWikilinkClick, resourceOptions = resourceOptions, strings = strings,
+            selectableAsSingleRegion = selectableAsSingleRegion, onTextPositioned = onTextPositioned,
+            onCodeCopiedWithMetadata = onCodeCopiedWithMetadata)
     }
 }
 

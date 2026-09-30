@@ -11,7 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.ast.CustomBlock
 import com.jackcaow.smoothmarkdown.ast.CustomNode
 
@@ -22,13 +21,14 @@ internal class BlockMathNode(var latex: String = "") : CustomBlock()
 @Composable
 internal fun rememberMathRenderer(latex: String, displayMode: Boolean): NativeMathExtent {
     val sheet = LocalMarkdownStyleSheet.current
-    val style = sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
+    val tokens = sheet.designTokens.math
+    val style = (sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge).merge(tokens.textStyle)
     val density = LocalDensity.current
     val font = style.fontSize.takeIf { it != androidx.compose.ui.unit.TextUnit.Unspecified }?.value ?: 16f
-    val size = font * density.fontScale * density.density * if (displayMode) 1.2f else 1f
-    return remember(latex, size, displayMode) {
+    val size = font * density.fontScale * density.density * if (displayMode) tokens.displayScale else 1f
+    return remember(latex, size, displayMode, tokens.fontFamily, style.fontWeight, style.fontStyle) {
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = android.graphics.Typeface.create("serif", android.graphics.Typeface.NORMAL)
+            typeface = android.graphics.Typeface.create(tokens.fontFamily, mathTypefaceStyle(style))
         }
         NativeTeXMetrics.preferredExtent(NativeTeXParser.parse(latex), size, displayMode) { text, textSize ->
             paint.textSize = textSize
@@ -46,8 +46,20 @@ internal fun NativeMath(latex: String, displayMode: Boolean, modifier: Modifier 
 internal fun BlockMath(node: BlockMathNode) {
     if (node.latex.isEmpty()) return
     SelectableNonTextBlock {
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(LocalMarkdownStyleSheet.current.designTokens.math.blockPadding), contentAlignment = Alignment.Center) {
             NativeMath(node.latex, displayMode = true)
         }
+    }
+}
+
+/** The measurement font mirrors the CSS weight and slant used by offline MathML. */
+internal fun mathTypefaceStyle(style: androidx.compose.ui.text.TextStyle): Int {
+    val bold = (style.fontWeight?.weight ?: 400) >= 600
+    val italic = style.fontStyle == androidx.compose.ui.text.font.FontStyle.Italic
+    return when {
+        bold && italic -> android.graphics.Typeface.BOLD_ITALIC
+        bold -> android.graphics.Typeface.BOLD
+        italic -> android.graphics.Typeface.ITALIC
+        else -> android.graphics.Typeface.NORMAL
     }
 }

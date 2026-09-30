@@ -38,12 +38,13 @@ internal fun enhancedLinkDecoration(
     color: Color,
 ): Modifier {
     if (!enabled) return Modifier
+    val tokens = LocalMarkdownStyleSheet.current.designTokens.link
     val links = remember(text) { enhancedLinkRanges(text) }
     if (links.isEmpty()) return Modifier
     var hovered by remember(text) { mutableIntStateOf(-1) }
     val hoverFraction by animateFloatAsState(
         targetValue = if (hovered >= 0) 1f else 0f,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = tween(durationMillis = tokens.hoverDurationMillis),
         label = "enhanced-link-underline",
     )
     return Modifier.pointerInput(text, links) {
@@ -74,28 +75,29 @@ internal fun enhancedLinkDecoration(
                 if (start >= end) continue
                 val first = result.getBoundingBox(start)
                 val last = result.getBoundingBox(end - 1)
-                val y = maxOf(first.bottom, last.bottom) - 1.dp.toPx()
-                drawLine(color.copy(alpha = 0.3f + 0.7f * fraction),
+                val y = maxOf(first.bottom, last.bottom) - tokens.underlineOffset.toPx()
+                drawLine((tokens.underlineColor ?: color).copy(alpha = tokens.underlineAlpha + (tokens.hoverUnderlineAlpha - tokens.underlineAlpha) * fraction),
                     Offset(minOf(first.left, last.left), y), Offset(maxOf(first.right, last.right), y),
-                    strokeWidth = (1f + fraction) * 1.dp.toPx())
+                    strokeWidth = tokens.underlineThickness.toPx() + (tokens.hoverUnderlineThickness - tokens.underlineThickness).toPx() * fraction)
             }
-            if (!link.external) return@forEachIndexed
+            if (!link.external || !tokens.showExternalIcon) return@forEachIndexed
             val last = result.getBoundingBox(link.end - 1)
-            val x = last.right + 2.dp.toPx()
+            val x = last.right + tokens.iconGap.toPx()
             val next = if (link.end < text.length && result.getLineForOffset(link.end) == lastLine)
                 result.getBoundingBox(link.end).left else size.width
-            val iconSize = 12.dp.toPx()
+            val iconSize = tokens.iconSize.toPx()
             // A trailing icon needs real visual space. Never add a placeholder to selectable text.
             if (next - x < iconSize || x + iconSize > size.width) return@forEachIndexed
-            val y = last.top + 1.dp.toPx()
-            val unit = 1.2.dp.toPx()
-            val stroke = 1.2.dp.toPx()
-            drawLine(color, Offset(x, y + 4 * unit), Offset(x, y + 10 * unit), stroke)
-            drawLine(color, Offset(x, y + 10 * unit), Offset(x + 7 * unit, y + 10 * unit), stroke)
-            drawLine(color, Offset(x + 7 * unit, y + 10 * unit), Offset(x + 7 * unit, y + 5 * unit), stroke)
-            drawLine(color, Offset(x + 3 * unit, y + 7 * unit), Offset(x + 9 * unit, y + unit), stroke)
-            drawLine(color, Offset(x + 5 * unit, y + unit), Offset(x + 9 * unit, y + unit), stroke)
-            drawLine(color, Offset(x + 9 * unit, y + unit), Offset(x + 9 * unit, y + 5 * unit), stroke)
+            val y = last.top + tokens.iconTopOffset.toPx()
+            val unit = iconSize / 10f
+            val stroke = tokens.iconStrokeWidth.toPx()
+            val iconColor = tokens.iconColor ?: color
+            drawLine(iconColor, Offset(x, y + 4 * unit), Offset(x, y + 10 * unit), stroke)
+            drawLine(iconColor, Offset(x, y + 10 * unit), Offset(x + 7 * unit, y + 10 * unit), stroke)
+            drawLine(iconColor, Offset(x + 7 * unit, y + 10 * unit), Offset(x + 7 * unit, y + 5 * unit), stroke)
+            drawLine(iconColor, Offset(x + 3 * unit, y + 7 * unit), Offset(x + 9 * unit, y + unit), stroke)
+            drawLine(iconColor, Offset(x + 5 * unit, y + unit), Offset(x + 9 * unit, y + unit), stroke)
+            drawLine(iconColor, Offset(x + 9 * unit, y + unit), Offset(x + 9 * unit, y + 5 * unit), stroke)
         }
     }
 }

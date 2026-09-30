@@ -2,8 +2,22 @@ package com.jackcaow.smoothmarkdown
 
 /** Offline standards-based MathML, with no executable input or remote resources. */
 internal object NativeTeXMathML {
-    fun html(latex: String, size: Float = 20f, display: Boolean, color: String = "#111111"): String =
-        """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1"><style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}body{display:flex;align-items:center;min-height:100vh}#formula{display:inline-block;color:${escape(color)};font-family:serif;font-size:${size.coerceIn(1f,200f)}px;line-height:normal;white-space:nowrap}math{margin:0}</style></head><body><div id="formula"><math xmlns="http://www.w3.org/1998/Math/MathML" display="${if(display) "block" else "inline"}">${markup(NativeTeXParser.parse(latex),display)}</math></div></body></html>"""
+    fun html(latex: String, size: Float = 20f, display: Boolean, color: String = "#111111",
+        fontFamily: String = "serif", fontWeight: Int = 400, italic: Boolean = false): String =
+        """<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1"><style>html,body{margin:0;padding:0;background:transparent;overflow:hidden}body{display:flex;align-items:center;min-height:100vh}#formula{display:inline-block;color:${escape(color)};font-family:${cssFontFamily(fontFamily)};font-weight:${fontWeight.coerceIn(100,900)};font-style:${if (italic) "italic" else "normal"};font-size:${size.coerceIn(1f,200f)}px;line-height:normal;white-space:nowrap}math{margin:0}</style></head><body><div id="formula"><math xmlns="http://www.w3.org/1998/Math/MathML" display="${if(display) "block" else "inline"}">${markup(NativeTeXParser.parse(latex),display)}</math></div></body></html>"""
+    /** Quote custom family names; CSS escapes keep caller input inside one declaration. */
+    internal fun cssFontFamily(value: String): String {
+        if (value in setOf("serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui")) return value
+        return "\"" + buildString {
+            value.codePoints().forEach { point ->
+                if ((point in 65..90) || (point in 97..122) || (point in 48..57) || point == 32 || point == 45 || point == 95) {
+                    appendCodePoint(point)
+                } else {
+                    append('\\').append(point.toString(16)).append(' ')
+                }
+            }
+        } + "\""
+    }
     fun markup(node: NativeTeXNode, display: Boolean): String = when(node) {
         is NativeTeXNode.Text -> {
             val value = escape(node.value)

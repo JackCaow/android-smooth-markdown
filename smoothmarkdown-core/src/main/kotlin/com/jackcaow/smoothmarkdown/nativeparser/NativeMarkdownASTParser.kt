@@ -3,7 +3,7 @@ package com.jackcaow.smoothmarkdown.nativeparser
 import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode.Kind
 
 /** Kotlin port of SmoothMarkdown's original CommonMark/GFM source-preserving block scanner. */
-internal class NativeMarkdownASTParser(
+class NativeMarkdownASTParser(
     private val enableGFM: Boolean = true,
     private val customInline: ((source: String, index: Int, absoluteOffset: Int) -> NativeCustomInlineMatch?)? = null,
     private val customBlock: ((lines: List<String>, startIndex: Int, sourceOffset: Int) -> NativeCustomBlockMatch?)? = null,
@@ -290,4 +290,4 @@ internal class NativeMarkdownASTParser(
     }
     private fun match(pattern: String, source: String): List<String>? = Regex(pattern).find(source)?.groupValues
 }
-internal data class NativeCustomBlockMatch(val node: NativeMarkdownNode, val linesConsumed: Int)
+data class NativeCustomBlockMatch(val node: NativeMarkdownNode, val linesConsumed: Int)

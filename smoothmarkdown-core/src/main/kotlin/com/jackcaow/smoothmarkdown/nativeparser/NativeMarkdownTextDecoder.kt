@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
-internal object NativeMarkdownTextDecoder {
+object NativeMarkdownTextDecoder {
     private val punctuation = "!\"#\$%&'()*+,-./:;<=>?@[\\]^_`{|}~"
     fun decode(source: String): String = buildString {
         var i = 0

@@ -83,13 +83,13 @@ class MarkdownStyleSheetTest {
         }.item.color)
     }
 
-    @Test fun invalidSpacingAndHeadingCountAreRejected() {
-        assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(listIndent = (-1).dp) }
-        assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(horizontalRuleThickness = (-1).dp) }
-        assertThrows(IllegalArgumentException::class.java) { MarkdownStyleSheet(headingStyles = listOf(TextStyle.Default)) }
-        assertThrows(IllegalArgumentException::class.java) { MarkdownBlockquoteDecoration(borderWidth = (-1).dp) }
-        assertThrows(IllegalArgumentException::class.java) { MarkdownCodeBlockDecoration(borderWidth = (-1).dp) }
-        assertThrows(IllegalArgumentException::class.java) { MarkdownCodeBlockDecoration(cornerRadius = (-1).dp) }
+    @Test fun invalidSpacingAndHeadingCountNormalizeAtConsumption() {
+        assertEquals(0.dp, MarkdownStyleSheet(listIndent = (-1).dp).resolved().listIndent)
+        assertEquals(0.dp, MarkdownStyleSheet(horizontalRuleThickness = (-1).dp).resolved().horizontalRuleThickness)
+        assertEquals(6, MarkdownStyleSheet(headingStyles = listOf(TextStyle.Default)).resolved().headingStyles?.size)
+        assertEquals(0.dp, MarkdownStyleSheet(blockquoteDecoration = MarkdownBlockquoteDecoration(borderWidth = (-1).dp)).resolved().blockquoteDecoration?.borderWidth)
+        assertEquals(0.dp, MarkdownStyleSheet(codeBlockDecoration = MarkdownCodeBlockDecoration(borderWidth = (-1).dp)).resolved().codeBlockDecoration?.borderWidth)
+        assertEquals(0.dp, MarkdownStyleSheet(codeBlockDecoration = MarkdownCodeBlockDecoration(cornerRadius = (-1).dp)).resolved().codeBlockDecoration?.cornerRadius)
     }
 
     @Test fun codeBlockDecorationOverridesLegacyFillAndUsesPerEdgePadding() {

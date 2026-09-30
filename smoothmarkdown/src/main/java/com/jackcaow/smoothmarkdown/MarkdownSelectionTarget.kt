@@ -28,7 +28,7 @@ internal fun textLayoutContainsWindowPoint(layout: TextLayoutResult?, point: Off
     return local.x >= layout.getLineLeft(line) && local.x <= layout.getLineRight(line)
 }
 
-internal data class MarkdownSelectionOptions(
+internal data class ReaderSelectionOptions(
     val selectable: Boolean = false,
     val outerRegion: Boolean = false,
     val nonTextSelectionAnchor: Boolean = false,
@@ -36,7 +36,7 @@ internal data class MarkdownSelectionOptions(
     val onTextDisposed: ((Any) -> Unit)? = null,
 )
 
-internal val LocalMarkdownSelectionOptions = compositionLocalOf { MarkdownSelectionOptions() }
+internal val LocalMarkdownSelectionOptions = compositionLocalOf { ReaderSelectionOptions() }
 
 @Composable
 internal fun SelectableMarkdownContent(content: @Composable () -> Unit) {

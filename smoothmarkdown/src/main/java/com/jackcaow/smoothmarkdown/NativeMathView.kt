@@ -34,21 +34,25 @@ import java.util.Locale
 internal fun SystemMath(latex: String, displayMode: Boolean, modifier: Modifier = Modifier) {
     if(latex.isEmpty()) return
     val sheet=LocalMarkdownStyleSheet.current
-    val style=sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge
+    val tokens=sheet.designTokens.math
+    val style=(sheet.paragraphStyle ?: MaterialTheme.typography.bodyLarge).merge(tokens.textStyle)
     val density=LocalDensity.current
     val font=style.fontSize.takeIf { it != TextUnit.Unspecified }?.value ?: 16f
-    val cssSize=(font * if(displayMode)1.2f else 1f) * density.fontScale
-    val foreground=(sheet.textColor ?: style.color.takeIf { it != androidx.compose.ui.graphics.Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface).toArgb()
+    val cssSize=(font * if(displayMode)tokens.displayScale else 1f) * density.fontScale
+    val foreground=(tokens.color ?: tokens.textStyle?.color?.takeIf { it != androidx.compose.ui.graphics.Color.Unspecified } ?: sheet.textColor ?: style.color.takeIf { it != androidx.compose.ui.graphics.Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface).toArgb()
     val cssColor=remember(foreground) { String.format(Locale.ROOT,"#%06X",foreground and 0xFFFFFF) }
     val tree=remember(latex) { NativeTeXParser.parse(latex) }
-    val extent=remember(tree,cssSize,displayMode) {
-        val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface=Typeface.create("serif",Typeface.NORMAL) }
+    val extent=remember(tree,cssSize,displayMode,tokens.fontFamily,style.fontWeight,style.fontStyle) {
+        val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface=Typeface.create(tokens.fontFamily,mathTypefaceStyle(style)) }
         NativeTeXMetrics.preferredExtent(tree,cssSize,displayMode) { text,size->paint.textSize=size;paint.measureText(text) }
     }
     // A small reserve avoids clipping italic overhangs and operator dictionary spacing.
     val width=extent.width
-    var height by remember(latex,cssSize,displayMode) { mutableFloatStateOf(extent.height) }
-    val html=remember(latex,cssSize,displayMode,cssColor) { NativeTeXMathML.html(latex,cssSize,displayMode,cssColor) }
+    var height by remember(latex,cssSize,displayMode,tokens.fontFamily,style.fontWeight,style.fontStyle) { mutableFloatStateOf(extent.height) }
+    val html=remember(latex,cssSize,displayMode,cssColor,tokens.fontFamily,style.fontWeight,style.fontStyle) {
+        NativeTeXMathML.html(latex,cssSize,displayMode,cssColor,tokens.fontFamily,
+            style.fontWeight?.weight ?: 400, style.fontStyle == androidx.compose.ui.text.font.FontStyle.Italic)
+    }
     var webView by remember { mutableStateOf<WebView?>(null) }
     DisposableEffect(Unit) { onDispose { webView?.stopLoading();webView?.destroy();webView=null } }
     AndroidView(

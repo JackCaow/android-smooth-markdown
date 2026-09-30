@@ -1,15 +1,16 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -51,6 +53,7 @@ data class CodeBlockOptions(
 internal val LocalCodeBlockOptions = staticCompositionLocalOf { CodeBlockOptions() }
 internal val LocalCodeBlockBuilder = staticCompositionLocalOf<(@Composable (String, String?) -> Unit)?> { null }
 internal val LocalOnCodeCopied = staticCompositionLocalOf<((String) -> Unit)?> { null }
+internal val LocalOnCodeCopiedWithMetadata = androidx.compose.runtime.staticCompositionLocalOf<((String, String?) -> Unit)?> { null }
 
 internal fun codeLanguage(info: String?): String? = info?.trim()?.substringBefore(' ')?.substringBefore('\t')
     ?.takeIf { it.isNotEmpty() }
@@ -136,19 +139,11 @@ internal fun codeTokens(code: String, language: String?): List<CodeToken> {
     return tokens
 }
 
-internal fun highlightedCode(code: String, language: String?, dark: Boolean): AnnotatedString = buildAnnotatedString {
+internal fun highlightedCode(code: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null): AnnotatedString = buildAnnotatedString {
     append(code)
-    val palette = if (dark) mapOf(
-        CodeTokenKind.KEYWORD to Color(0xFFFF7B72),
-        CodeTokenKind.STRING to Color(0xFFA5D6FF),
-        CodeTokenKind.COMMENT to Color(0xFF8B949E),
-        CodeTokenKind.NUMBER to Color(0xFF79C0FF),
-    ) else mapOf(
-        CodeTokenKind.KEYWORD to Color(0xFFCF222E),
-        CodeTokenKind.STRING to Color(0xFF0A3069),
-        CodeTokenKind.COMMENT to Color(0xFF6E7781),
-        CodeTokenKind.NUMBER to Color(0xFF0550AE),
-    )
+    val colors = syntaxColors ?: if (dark) MarkdownSyntaxColors.dark() else MarkdownSyntaxColors.light()
+    val palette = mapOf(CodeTokenKind.KEYWORD to colors.keyword, CodeTokenKind.STRING to colors.string,
+        CodeTokenKind.COMMENT to colors.comment, CodeTokenKind.NUMBER to colors.number)
     codeTokens(code, language).forEach { token ->
         addStyle(SpanStyle(color = palette.getValue(token.kind)), token.start, token.end)
     }
@@ -176,6 +171,7 @@ internal fun resolveCodeBlockDecoration(sheet: MarkdownStyleSheet, fallback: Col
 @Composable
 internal fun EnhancedCodeBlock(code: String, info: String?) {
     val sheet = LocalMarkdownStyleSheet.current
+    val tokens = sheet.designTokens.code
     val language = codeLanguage(info)
     val custom = LocalCodeBlockBuilder.current
     if (custom != null) {
@@ -184,19 +180,21 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
     }
     val options = LocalCodeBlockOptions.current
     val onCodeCopied = LocalOnCodeCopied.current
+    val onCodeCopiedWithMetadata = LocalOnCodeCopiedWithMetadata.current
     val clipboard = LocalClipboardManager.current
     var copied by androidx.compose.runtime.remember { mutableStateOf(false) }
+    val strings = LocalMarkdownStrings.current
     var copyCount by androidx.compose.runtime.remember { mutableIntStateOf(0) }
     LaunchedEffect(copyCount) {
         if (copyCount > 0) {
-            delay(2_000)
+            delay(tokens.copyFeedbackMillis)
             copied = false
         }
     }
     val decoration = resolveCodeBlockDecoration(sheet, MaterialTheme.colorScheme.surfaceVariant)
     val dark = decoration.backgroundColor.luminance() < 0.5f
-    val codeText = androidx.compose.runtime.remember(code, language, dark, options.enableSyntaxHighlighting) {
-        if (options.enableSyntaxHighlighting) highlightedCode(code, language, dark) else AnnotatedString(code)
+    val codeText = androidx.compose.runtime.remember(code, language, dark, options.enableSyntaxHighlighting, tokens.syntaxColors) {
+        if (options.enableSyntaxHighlighting) highlightedCode(code, language, dark, tokens.syntaxColors) else AnnotatedString(code)
     }
     val shape = RoundedCornerShape(decoration.cornerRadius)
     val codeContainer = Modifier.fillMaxWidth().padding(bottom = sheet.blockSpacing)
@@ -206,36 +204,38 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                 base.border(decoration.borderWidth, decoration.borderColor, shape)
             else base
         }
+    val horizontalState = rememberScrollState()
     Column(codeContainer) {
         if ((options.showLanguageTag && language != null) || options.showCopyButton) {
             DisableSelection {
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp)) {
-                    Spacer(Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth().padding(tokens.headerPadding),
+                    verticalAlignment = Alignment.CenterVertically) {
                     if (options.showLanguageTag && language != null) {
                         Text(
                             language.uppercase(),
-                            modifier = Modifier.padding(top = 10.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = sheet.codeTextColor ?: MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier,
+                            style = (tokens.languageStyle ?: MaterialTheme.typography.labelSmall).copy(
+                                color = tokens.languageStyle?.color?.takeUnless { it == Color.Unspecified } ?: sheet.codeTextColor ?: MaterialTheme.colorScheme.primary,
+                                fontWeight = tokens.languageStyle?.fontWeight ?: FontWeight.SemiBold,
                             ),
                         )
-                        Spacer(Modifier.width(8.dp))
                     }
+                    Spacer(Modifier.weight(1f))
                     if (options.showCopyButton) {
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString(code))
                             onCodeCopied?.invoke(code)
+                            onCodeCopiedWithMetadata?.invoke(code, language)
                             copied = true
                             copyCount++
                         }) {
-                            Text(if (copied) "Copied!" else "Copy", color = if (copied) Color(0xFF2DA44E) else sheet.linkColor)
+                            Text(if (copied) tokens.copiedLabel ?: strings.copied else tokens.copyLabel ?: strings.copy, style = tokens.copyStyle ?: MaterialTheme.typography.labelMedium, color = if (copied) tokens.copiedColor else tokens.copyColor ?: tokens.copyStyle?.color?.takeUnless { it == Color.Unspecified } ?: sheet.linkColor)
                         }
                     }
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(decoration.padding)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(horizontalState).padding(decoration.padding)) {
             val selectionOptions = LocalMarkdownSelectionOptions.current
             val selectionKey = androidx.compose.runtime.remember { Any() }
             DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
@@ -269,13 +269,27 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                     onTextLayout = { codeLayout.value = it },
                     softWrap = false,
                     style = (sheet.codeStyle ?: MaterialTheme.typography.bodyMedium).copy(
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = sheet.codeStyle?.fontFamily ?: FontFamily.Monospace,
                         color = sheet.codeTextColor ?: sheet.textColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
                 )
             }
             if (LocalMarkdownSelectionOptions.current.outerRegion || !LocalMarkdownSelectionOptions.current.selectable) content()
             else SelectionContainer { content() }
+        }
+        if (tokens.showScrollbar && horizontalState.maxValue > 0) {
+            val trackColor = tokens.scrollbarTrackColor ?: (sheet.codeTextColor ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = tokens.scrollbarTrackAlpha)
+            val thumbColor = tokens.scrollbarThumbColor ?: trackColor.copy(alpha = tokens.scrollbarThumbAlpha)
+            Canvas(Modifier.fillMaxWidth().padding(tokens.scrollbarPadding).height(tokens.scrollbarThickness)) {
+                drawRoundRect(trackColor, cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
+                val viewport = horizontalState.viewportSize.toFloat()
+                val total = viewport + horizontalState.maxValue
+                val thumbWidth = (size.width * viewport / total).coerceAtLeast(tokens.scrollbarMinThumbWidth.toPx()).coerceAtMost(size.width)
+                val left = (size.width - thumbWidth) * horizontalState.value / horizontalState.maxValue
+                drawRoundRect(thumbColor, topLeft = androidx.compose.ui.geometry.Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(thumbWidth, size.height),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
+            }
         }
     }
 }

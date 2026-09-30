@@ -163,7 +163,7 @@ private fun ChatListScreen(
                 Modifier.fillMaxWidth().background(chrome).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onBack, modifier = Modifier.testTag("chat-back")) { Text("‹ Back") }
+                DemoBackButton(onClick = onBack, modifier = Modifier.testTag("chat-back"))
                 Text("🤖", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
