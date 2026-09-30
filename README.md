@@ -82,6 +82,23 @@ SmoothMarkdown(markdown = content, plugins = plugins)
 
 `InlineParserPlugin` provides a one-character trigger, `canParse`, `parse`, and `render` hooks. `BlockParserPlugin` provides `canStart`, `createNode`, `isClosingLine`, `complete`, and a Compose `RenderBlock` hook; the node-aware `isClosingLine(node, line)` variant supports multiple delimiter styles. Its `parseFencedCodeBlock` hook converts CommonMark fenced blocks while preserving ordinary code on a `null` result. Custom nodes extend `PluginInlineNode` or `PluginBlockNode`. A `null` parse result lets the next plugin or CommonMark handle the source. Higher priorities run first; equal priorities keep registration order. Registry IDs must be unique within the block or inline group. `copy`, `clear`, lookup, and unregister operations are available. Configure the registry before passing it to Compose; provide a new registry instance after changing its contents so the Markdown AST is rebuilt.
 
+`MarkdownBuilderRegistry` overrides the rendering of parsed nodes, including built-in nodes. It is separate from `ParserPluginRegistry`, which controls syntax. Android registers CommonMark node classes instead of Flutter's string node types. An exact class match with `canBuild == true` wins; otherwise registered builders are tried in insertion order, then the built-in renderer handles the node. The registry is forwarded by both `StreamMarkdown` overloads and by `SmoothMarkdownEditor` in Preview and Split. Configure it before composing and supply a new instance when changing registrations.
+
+```kotlin
+val builders = remember {
+    MarkdownBuilderRegistry().register(Heading::class, object : MarkdownNodeBuilder {
+        override fun canBuild(node: Node) = node is Heading && node.level == 1
+        @Composable override fun Render(node: Node, context: MarkdownBuilderContext) {
+            context.renderInlineChildren(node, MaterialTheme.typography.headlineLarge)
+        }
+    })
+}
+SmoothMarkdown(markdown = content, builderRegistry = builders)
+SmoothMarkdownEditor(controller = editorController, builderRegistry = builders)
+```
+
+`MarkdownBuilderContext.renderChild`, `renderChildren`, and `renderInlineChildren` reuse the same registry for nested nodes. For nodes inside a line of text, implement `renderInline` to return `MarkdownInlinePresentation.Text` or `Widget`; a widget needs explicit width, height, and copy fallback text because Compose lays out the paragraph before composing inline content. Returning `null` keeps the native inline rendering. A standalone image uses `Render` directly, while an image among text uses `renderInline`. The editor's Formatted mode keeps its separate `customBlockBuilder` and `customBlockEditorBuilder` hooks. Custom block rendering owns its selection semantics; the reader cannot infer selection geometry for an arbitrary Compose subtree.
+
 The built-in plugins match Flutter's mention, hashtag, emoji, admonition, and Mermaid fence syntax. Emoji supports a custom shortcode map. Admonition content is parsed as Markdown. The opt-in Thinking, Artifact, and ToolCall plugins parse Flutter's corresponding AI chat block syntaxes. Thinking starts collapsed and can be expanded; artifact and tool inputs are rendered as selectable text without executing HTML or tool calls. Code artifacts reuse the native code block renderer. These readers do not yet provide artifact download, live tool status updates, or rich HTML/component previews.
 
 ## Flutter example fixture parity
