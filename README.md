@@ -2,6 +2,43 @@
 
 Native Kotlin/Jetpack Compose library and demo, based on [Flutter Smooth Markdown](https://github.com/JackCaow/flutter-smooth-markdown) version 0.10.0.
 
+## Use in a Compose app
+
+The library is currently available as source code; **there is no published Maven artifact or dependency coordinate yet**. Place this repository under your app project, for example at `third_party/android-smooth-markdown`, then add its library module to your app's `settings.gradle.kts`:
+
+```kotlin
+include(":smoothmarkdown")
+project(":smoothmarkdown").projectDir = file("third_party/android-smooth-markdown/smoothmarkdown")
+```
+
+Add the module dependency to your app module's `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation(project(":smoothmarkdown"))
+}
+```
+
+Render Markdown from a composable:
+
+```kotlin
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import com.jackcaow.smoothmarkdown.SmoothMarkdown
+
+@Composable
+fun MarkdownScreen(content: String) {
+    SmoothMarkdown(
+        markdown = content,
+        modifier = Modifier.fillMaxSize(),
+        useEnhancedComponents = true,
+    )
+}
+```
+
+Your app must enable Jetpack Compose and resolve the Android/Kotlin plugins and repositories required by this module. This repository's [Gradle files](build.gradle.kts) show a working toolchain; the included `app` module is a runnable example. The library requires Android API 24 or newer.
+
 ## Status
 
 Reader and editor work in progress. The library renders headings, paragraphs, inline emphasis, links, enhanced code blocks with language labels, copy and initial syntax colors, blockquotes, ordered/bullet/task lists, GFM tables, standalone or mixed inline network/bundled-asset bitmap and SVG images, footnotes, collapsible `details` blocks, inline `$...$` and display `$$...$$` math, and horizontal rules. Opt-in parser/renderer plugins provide mentions, hashtags, emoji shortcodes, admonitions, AI thinking/artifact/tool-call blocks, and an initial Mermaid flowchart/sequence/pie/timeline/Gantt/Kanban/Radar/XYChart/ER renderer. Inline and block images use their decoded intrinsic size once loaded, preserve aspect ratio for one-sided HTML dimensions, and fit within the available Markdown width. Inline images use a 32 dp placeholder while loading. It supports selection across mounted prose, tables, images, rules, built-in code blocks, and expanded `details` blocks, `Flow<String>` chunk accumulation with a 50 ms update throttle and completion flush, and blocks unsafe link/image schemes. Opt-in HTML handles common inline formatting, safe link styling, bounded font/color styles, `br`, `hr`, standalone or mixed `img` with pixel dimensions and alt fallback, and `div`/`p`/`center`/`blockquote` containers; streaming withholds incomplete tags outside code. The source editor supports UTF-16 selections, undo/redo, grouped transactions, search, formatting commands, and source/preview/split layouts. Source-backed GFM tables support insertion, cell replacement, row/column edits, alignment, and deletion at the current selection. Formatted mode edits paragraphs, ATX headings, fenced code, ordered/bullet/task items including nested items and continuation lines, explicit blockquote lines, and GFM table cells with add/remove row and column controls. Untouched list and quote source is preserved; Enter splits supported list items and Tab/Shift+Tab changes their nesting with undo/redo. Empty top-level list exit, bounded top-level outdent, block/list/table range selection, and source-backed formatting for supported inline marks are implemented. Quote line endpoints support Markdown copy and same-quote-line or same-depth multiline edit; lazy continuation quote lines still use raw source fallback. Formatted block selection can turn contiguous top-level paragraphs and ATX headings into one bullet, ordered, or task list or one quote, or convert each block to a paragraph or H1–H6. These source-backed changes reparse before committing and use one undo step; unsupported blocks, setext headings, and transforms that merge with untouched neighbors are rejected. Richer list and table cell editing, unsupported inline constructs, full Mermaid syntax, full HTML behavior, drag selection through offscreen virtualized blocks, richer AI chat presentation, and complete Flutter style-sheet coverage still need implementation. Do not treat this as a parity release.
