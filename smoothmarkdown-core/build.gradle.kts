@@ -14,8 +14,8 @@ publishing {
             groupId = if (isJitPack) providers.environmentVariable("GROUP").orElse("com.github.JackCaow.android-smooth-markdown").get()
                 else providers.gradleProperty("publicationGroup").orElse("io.github.jackcaow").get()
             artifactId = "smoothmarkdown-core"
-            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.2.0").get()
-                else providers.gradleProperty("publicationVersion").orElse("0.2.0").get()
+            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.3.0").get()
+                else providers.gradleProperty("publicationVersion").orElse("0.3.0").get()
             pom {
                 name.set("Smooth Markdown Core")
                 description.set("Pure JVM source-preserving CommonMark and GFM parser")
@@ -26,7 +26,7 @@ publishing {
             }
         }
     }
-    repositories { maven { name = "CentralBundle"; url = uri(layout.buildDirectory.dir("central-staging")) } }
+    repositories { maven { name = "CentralBundle"; url = uri(rootProject.layout.buildDirectory.dir("central-staging")) } }
 }
 val signingKey = providers.environmentVariable("SIGNING_KEY").orElse(providers.gradleProperty("signingKey"))
 val signingPassword = providers.environmentVariable("SIGNING_PASSWORD").orElse(providers.gradleProperty("signingPassword"))

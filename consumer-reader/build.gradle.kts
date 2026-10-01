@@ -7,4 +7,5 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
-dependencies { implementation(project(":smoothmarkdown")) }
+dependencies { val artifactVersion = providers.gradleProperty("consumerArtifactVersion").orNull
+    implementation(if (artifactVersion == null) project(":smoothmarkdown") else "io.github.jackcaow:smooth-markdown:$artifactVersion") }

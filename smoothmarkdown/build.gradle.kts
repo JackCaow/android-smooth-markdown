@@ -29,9 +29,9 @@ android {
 
 val isJitPack = providers.environmentVariable("JITPACK").orNull == "true"
 val publicationVersion = if (isJitPack) {
-    providers.environmentVariable("VERSION").orElse("0.2.0").get()
+    providers.environmentVariable("VERSION").orElse("0.3.0").get()
 } else {
-    providers.gradleProperty("publicationVersion").orElse("0.2.0").get()
+    providers.gradleProperty("publicationVersion").orElse("0.3.0").get()
 }
 val publicationGroup = if (isJitPack) {
     providers.environmentVariable("GROUP").orElse("com.github.JackCaow.android-smooth-markdown").get()
@@ -82,7 +82,7 @@ publishing {
     repositories {
         maven {
             name = "CentralBundle"
-            url = uri(layout.buildDirectory.dir("central-staging"))
+            url = uri(rootProject.layout.buildDirectory.dir("central-staging"))
         }
     }
 }
