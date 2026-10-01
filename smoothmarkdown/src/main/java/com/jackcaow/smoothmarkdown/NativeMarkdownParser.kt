@@ -18,7 +18,12 @@ class NativeMarkdownParser(
             customInline = if (enableExtensions || hasHostPlugins) ::inlinePlugin else null,
             customBlock = if (enableExtensions || hasHostPlugins) ::blockPlugin else null,
             enableNativeExtensions = enableExtensions)
-        val tree = scanner.parse(source)
+        return convertTree(source, scanner.parse(source))
+    }
+
+    /** Internal streaming projection of the shared native scanner result. */
+    @JvmSynthetic
+    internal fun convertTree(source: String, tree: NativeMarkdownNode): Markup {
         val references = mutableMapOf<String, NativeMarkdownReference>()
         fun collect(node: NativeMarkdownNode) {
             if (node.kind == NativeMarkdownNode.Kind.REFERENCE_DEFINITION)
@@ -28,8 +33,8 @@ class NativeMarkdownParser(
         collect(tree)
         return NativeMarkdownMarkupConverter(source) { node ->
             if (!enableExtensions) null else when (node.kind) {
-                NativeMarkdownNode.Kind.INLINE_MATH -> InlineMathNode(node.source.removePrefix("$").removeSuffix("$"))
-                NativeMarkdownNode.Kind.BLOCK_MATH -> BlockMathNode(node.source.trim().removePrefix("$$").removeSuffix("$$").trim())
+                NativeMarkdownNode.Kind.INLINE_MATH -> InlineMathNode(node.literalText ?: node.source.removePrefix("$").removeSuffix("$"))
+                NativeMarkdownNode.Kind.BLOCK_MATH -> BlockMathNode(node.literalText ?: node.source.trim().removePrefix("$$").removeSuffix("$$").trim())
                 NativeMarkdownNode.Kind.FOOTNOTE_REFERENCE -> FootnoteReferenceNode(node.label)
                 NativeMarkdownNode.Kind.FOOTNOTE_DEFINITION -> {
                     val lines = (node.literalText ?: node.source).lines()

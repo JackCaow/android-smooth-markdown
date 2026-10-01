@@ -60,4 +60,76 @@ class ReaderPerformanceBenchmark {
             "heapBeforeMiB=${"%.1f".format(before / 1048576.0)} heapPeakMiB=${"%.1f".format(peak / 1048576.0)} " +
             "heapAfterGCMiB=${"%.1f".format(after / 1048576.0)}")
     }
+    /** Mirrors StreamMarkdown's real cache-disabled parse path, including JNI and postprocessing. */
+    @Test fun uncachedRapidStreamBaseline() {
+        assumeTrue(System.getenv("SMOOTH_MARKDOWN_BENCH") == "1")
+        val readme = requireNotNull(javaClass.getResource("/performance/flutter-readme.md")).readText()
+        val source = List(4) { readme }.joinToString("\n\n")
+        val chunks = source.chunked(32)
+        fun run(): Pair<Long, Int> {
+            val buffer = StreamMarkdownBuffer(50, 0)
+            var publishes = 0
+            val elapsed = measureNanoTime {
+                chunks.forEachIndexed { index, chunk ->
+                    if (buffer.append(chunk, index + 1L) == null) {
+                        assertTrue(parseMarkdown(buffer.visibleText, enableCache = false).firstChild != null)
+                        publishes++
+                    }
+                }
+                buffer.finish(chunks.size + 1L)
+                assertTrue(parseMarkdown(buffer.visibleText, enableCache = false).firstChild != null)
+            }
+            return elapsed to publishes
+        }
+        repeat(2) { run() }
+        val results = List(5) { run() }
+        println("BENCH android uncached bytes=${source.toByteArray().size} chunks=${chunks.size} " +
+            "publishes=${results.first().second + 1} streamMedianMs=${results.map { it.first }.sorted()[2] / 1e6}")
+    }
+
+    @Test fun incrementalStreamAgainstUncachedBatch() {
+        assumeTrue(System.getenv("SMOOTH_MARKDOWN_BENCH") == "1")
+        val readme = requireNotNull(javaClass.getResource("/performance/flutter-readme.md")).readText()
+        val sample = "# Update 中文🙂\n\nParagraph with **bold**, `code`, and [link](https://example.test).\n\n" +
+            "- one\n- two\n\n> A quoted explanation\n\n```kotlin\nval count = 1\n```\n\n" +
+            "| Column | Value |\n| :--- | ---: |\n| Test | 123 |\n\n"
+        val chat = sample.repeat(100_000 / sample.toByteArray().size)
+        for ((name, source) in listOf("readme-mixed" to List(4) { readme }.joinToString("\n\n"), "chat-standard" to chat)) {
+            val chunks = source.chunked(32)
+            fun run(incremental: Boolean): Pair<Long, Int> {
+                val buffer = StreamMarkdownBuffer(50, 0)
+                val session = if (incremental) StreamingMarkdownSession() else null
+                var reused = 0
+                val elapsed = measureNanoTime {
+                    try {
+                        chunks.forEachIndexed { index, chunk ->
+                            if (buffer.append(chunk, index + 1L) == null) {
+                                val tree = session?.parse(buffer.visibleText)?.document ?: parseMarkdown(buffer.visibleText, enableCache = false)
+                                assertTrue(tree.firstChild != null)
+                                reused += session?.retainedBlockCount ?: 0
+                            }
+                        }
+                        buffer.finish(chunks.size + 1L)
+                        val tree = session?.parse(buffer.visibleText)?.document ?: parseMarkdown(buffer.visibleText, enableCache = false)
+                        assertTrue(tree.firstChild != null)
+                        reused += session?.retainedBlockCount ?: 0
+                    } finally { session?.close() }
+                }
+                return elapsed to reused
+            }
+            repeat(2) { run(false); run(true) }
+            val batch = mutableListOf<Long>()
+            val incremental = mutableListOf<Long>()
+            var reused = 0
+            repeat(5) {
+                batch += run(false).first
+                val result = run(true)
+                incremental += result.first
+                reused = result.second
+            }
+            println("BENCH android stream scenario=$name bytes=${source.toByteArray().size} chunks=${chunks.size} " +
+                "batchMedianMs=${batch.sorted()[2] / 1e6} incrementalMedianMs=${incremental.sorted()[2] / 1e6} reusedBlocks=$reused")
+        }
+    }
+
 }

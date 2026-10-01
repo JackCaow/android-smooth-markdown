@@ -22,6 +22,59 @@ internal object RustMarkdownBridge {
     private external fun parseInlineNative(source: String, options: Int, referenceTriples: Array<String?>?, callbacks: Any?): ByteArray?
     private external fun renderWireNative(ast: ByteArray, escapeHtml: Boolean): String?
     private external fun exportSourceNative(source: String, options: Int, escapeHtml: Boolean): String?
+    private external fun streamNewNative(options: Int): Long
+    private external fun streamUpdateNative(handle: Long, source: String): ByteArray?
+    private external fun streamFreeNative(handle: Long)
+
+    /** A stream is confined to its creator thread; it owns the native parser session. */
+    internal class StreamSession private constructor(private var handle: Long) : AutoCloseable {
+        private val owner = Thread.currentThread()
+        private var previousBlockCount = 0
+        data class Update(val retainedBlocks: Int, val replacement: NativeMarkdownNode)
+
+        fun update(source: String): Update? {
+            check(Thread.currentThread() === owner) { "Markdown stream sessions cannot cross threads" }
+            check(handle != 0L) { "Markdown stream session is closed" }
+            val bytes = streamUpdateNative(handle, source)
+            if (bytes == null) {
+                check(System.getProperty("smoothmarkdown.rust.required") != "true") { "Required Rust stream update failed" }
+                return null
+            }
+            require(bytes.size >= 12) { "Invalid Rust stream response" }
+            var retained = 0L
+            repeat(4) { retained = retained or ((bytes[it].toLong() and 255) shl (it * 8)) }
+            require(retained <= previousBlockCount) { "Invalid Rust stream retained block count" }
+            val tree = filterHtml(RustMarkdownWire.decode(bytes, source, startOffset = 4), true)
+            previousBlockCount = retained.toInt() + tree.children.size
+            successfulParses.incrementAndGet()
+            return Update(retained.toInt(), tree)
+        }
+
+        override fun close() {
+            check(Thread.currentThread() === owner) { "Markdown stream sessions cannot cross threads" }
+            if (handle != 0L) {
+                streamFreeNative(handle)
+                handle = 0L
+            }
+        }
+
+        companion object {
+            fun create(): StreamSession? {
+                if (!requireAvailable()) return null
+                return try {
+                    val handle = streamNewNative(flags(true, true))
+                    if (handle == 0L) {
+                        check(System.getProperty("smoothmarkdown.rust.required") != "true") { "Required Rust stream session creation failed" }
+                        null
+                    } else StreamSession(handle)
+                } catch (error: LinkageError) {
+                    if (System.getProperty("smoothmarkdown.rust.required") == "true")
+                        throw IllegalStateException("Required Rust stream ABI is unavailable", error)
+                    null
+                }
+            }
+        }
+    }
 
     /** Parse-local host nodes never cross the C ABI; Rust records only their opaque IDs. */
     internal class Hooks(
@@ -163,12 +216,15 @@ internal object RustMarkdownBridge {
 
 /** Bounds checks protect the fallback boundary from incompatible or malformed native output. */
 internal object RustMarkdownWire {
-    fun decode(bytes: ByteArray, originalSource: String, customNodes: Map<Int, NativeMarkdownNode> = emptyMap()): NativeMarkdownNode {
+    fun decode(bytes: ByteArray, originalSource: String, customNodes: Map<Int, NativeMarkdownNode> = emptyMap(),
+               startOffset: Int = 0): NativeMarkdownNode {
         val cursor = Cursor(bytes, originalSource, customNodes)
-        require(bytes.size >= 8 && bytes[0] == 83.toByte() && bytes[1] == 77.toByte() && bytes[2] == 82.toByte() && bytes[3] == 49.toByte()) { "Unsupported Rust AST wire version" }
-        cursor.offset = 4
+        require(startOffset in 0..bytes.size && bytes.size - startOffset >= 8 &&
+            bytes[startOffset] == 83.toByte() && bytes[startOffset + 1] == 77.toByte() &&
+            bytes[startOffset + 2] == 82.toByte() && bytes[startOffset + 3] == 49.toByte()) { "Unsupported Rust AST wire version" }
+        cursor.offset = startOffset + 4
         val nodes = cursor.count()
-        require(nodes > 0 && nodes <= bytes.size / 32) { "Invalid AST node count" }
+        require(nodes > 0 && nodes <= (bytes.size - startOffset) / 32) { "Invalid AST node count" }
         cursor.remainingNodes = nodes
         val root = cursor.node(0)
         require(root.kind == NativeMarkdownNode.Kind.DOCUMENT && root.sourceRange == SourceRange(0, originalSource.length))

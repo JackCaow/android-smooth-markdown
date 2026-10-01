@@ -24,6 +24,8 @@ for jar in jars:
             # Kotlin internal transports are JVM-public implementation classes, not consumer API.
             if re.match(r'^com\.jackcaow\.smoothmarkdown\.nativeparser\.(RustMarkdownBridge|RustMarkdownWire)(\$|$)', cls):
                 continue
+            if re.match(r'^com\.jackcaow\.smoothmarkdown\.StreamingMarkdown(Session|Document|SessionKt)(\$|$)', cls):
+                continue
             classes.add(cls)
 result = subprocess.check_output(['javap', '-public', '-classpath', ':'.join(map(str, jars)), *sorted(classes)], text=True)
 lines = [line.rstrip() for line in result.splitlines() if not line.startswith('Compiled from')]
@@ -31,6 +33,13 @@ lines = [line.rstrip() for line in result.splitlines() if not line.startswith('C
 # Inspect class-file flags before ignoring compiler artifacts. A user-written public
 # method named access$... remains API unless it actually has ACC_SYNTHETIC.
 header = re.compile(r'^[^ ].*\b(?:class|interface) ([^\s<{]+)')
+
+def internal_adapter_method(owner, line):
+    # This explicitly internal Kotlin projection hook is hidden from Java by @JvmSynthetic.
+    # Exclude it only after checking its class-file flag below, like generated accessors.
+    return owner == 'com.jackcaow.smoothmarkdown.NativeMarkdownParser' and bool(
+        re.search(r'\bconvertTree\$smoothmarkdown\(', line))
+
 candidates = set()
 current_class = None
 for line in lines:
@@ -39,7 +48,7 @@ for line in lines:
         current_class = match.group(1)
         if current_class.endswith('$WhenMappings'):
             candidates.add(current_class)
-    if current_class and re.search(r'\baccess\$[^ (]+\(', line):
+    if current_class and (re.search(r'\baccess\$[^ (]+\(', line) or internal_adapter_method(current_class, line)):
         candidates.add(current_class)
 
 synthetic_classes = set()
@@ -61,7 +70,7 @@ if candidates:
             current_class = match.group(1).replace('/', '.')
             if class_synthetic and current_class.endswith('$WhenMappings'):
                 synthetic_classes.add(current_class)
-        if line.startswith('  public ') and re.search(r'\baccess\$[^ (]+\(', line):
+        if line.startswith('  public ') and (re.search(r'\baccess\$[^ (]+\(', line) or internal_adapter_method(current_class, line)):
             pending_method = line.strip()
         elif pending_method and 'flags:' in line:
             if 'ACC_SYNTHETIC' in line:

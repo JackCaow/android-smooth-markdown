@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
@@ -209,10 +212,15 @@ private fun StreamMarkdownContent(
     onTextPositioned: ((MarkdownSelectionTarget) -> Unit)?,
     onCodeCopiedWithMetadata: ((String, String?) -> Unit)?,
 ) {
+    val pluginVersion = plugins?.version
+    val session = remember(plugins, pluginVersion, enableHtml) { StreamingMarkdownSession(plugins, enableHtml) }
+    DisposableEffect(session) { onDispose { session.close() } }
+    val renderText = snapshot.renderText(enableHtml)
     when {
         snapshot.error != null && errorContent != null -> errorContent(snapshot.error)
         !snapshot.hasReceivedData && !snapshot.complete && loadingContent != null -> loadingContent()
-        else -> SmoothMarkdown(snapshot.renderText(enableHtml), modifier, onLinkClick, onImageClick, enableHtml,
+        else -> CompositionLocalProvider(LocalStreamingMarkdownDocument provides session.parse(renderText)) {
+            SmoothMarkdown(renderText, modifier, onLinkClick, onImageClick, enableHtml,
             codeBlockOptions = codeBlockOptions, codeBlockBuilder = codeBlockBuilder,
             onCodeCopied = onCodeCopied, styleSheet = styleSheet, plugins = plugins,
             onImageClickWithMetadata = onImageClickWithMetadata, imageBuilder = imageBuilder,
@@ -224,6 +232,7 @@ private fun StreamMarkdownContent(
             onWikilinkClick = onWikilinkClick, resourceOptions = resourceOptions, strings = strings,
             selectableAsSingleRegion = selectableAsSingleRegion, onTextPositioned = onTextPositioned,
             onCodeCopiedWithMetadata = onCodeCopiedWithMetadata)
+        }
     }
 }
 

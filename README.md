@@ -183,3 +183,9 @@ Source builds use the owned Rust parser and need its build toolchain; see the [p
 ```
 
 Source: [`smoothmarkdown`](smoothmarkdown/) · Demo: [`app`](app/) · [Implementation reference](docs/reference.md)
+
+### Streaming performance
+
+Eligible plain Markdown streams reuse committed AST blocks and send only their mutable tail across the native bridge. This bypasses the global parse cache and preserves the existing public API. Plugins, formulas/footnotes, enabled HTML and details keep the established full-document parser; references invalidate earlier blocks. Large single containers may see no improvement. Parsing is currently synchronous; background scheduling is not implemented.
+
+See [same-input parser measurements and compatibility boundaries](benchmarks/android-stream-parser-2026-10-01.md). The measured host speedup is not a Compose frame-rate or device claim.

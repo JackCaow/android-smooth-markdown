@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-01",
+  "runtime": "Android API 35 emulator",
+  "suite": "PublicLibraryUiSuite",
+  "tests": 21,
+  "failed": 0,
+  "coverage": [
+    "packaged streaming JNI and stable block identity",
+    "late reference definition invalidation",
+    "finite stream completion",
+    "image builder and callbacks",
+    "registry/resources/design tokens"
+  ],
+  "packaging": "four ABI AAR with 16KB ELF alignment verified",
+  "host_tests": {
+    "core": 17,
+    "reader": 484,
+    "failed": 0
+  },
+  "public_api": "reviewed baseline unchanged",
+  "boundaries": [
+    "no physical device timing",
+    "no Compose frame-time claim",
+    "background parsing not implemented"
+  ]
+}

@@ -140,3 +140,29 @@ JNIEXPORT jstring JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMark
     (void)self;if(!source)return NULL;jsize length=(*env)->GetStringLength(env,source);const jchar *units=(*env)->GetStringChars(env,source,NULL);if(!units)return NULL;
     SmrBuffer out={0};int32_t status=smr_export_html_utf16(units,(size_t)length,(uint32_t)flags|(escape?4:0),&out);(*env)->ReleaseStringChars(env,source,units);return html_result(env,&out,status);
 }
+
+JNIEXPORT jlong JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_streamNewNative(JNIEnv *env,jobject self,jint flags){
+    (void)env;(void)self;
+    return (jlong)(intptr_t)smr_stream_new((uint32_t)flags);
+}
+JNIEXPORT jbyteArray JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_streamUpdateNative(JNIEnv *env,jobject self,jlong handle,jstring source){
+    (void)self;if(!handle||!source)return NULL;
+    jsize length=(*env)->GetStringLength(env,source);
+    const jchar *units=(*env)->GetStringChars(env,source,NULL);if(!units)return NULL;
+    SmrBuffer out={0};uint32_t retained=0;
+    int32_t status=smr_stream_update_utf16((void *)(intptr_t)handle,units,(size_t)length,&out,&retained);
+    (*env)->ReleaseStringChars(env,source,units);
+    jbyteArray result=NULL;
+    if(status==SMR_OK&&!(*env)->ExceptionCheck(env)&&out.data&&out.len<=INT_MAX-4){
+        result=(*env)->NewByteArray(env,(jsize)out.len+4);
+        if(result){
+            jbyte header[4]={(jbyte)retained,(jbyte)(retained>>8),(jbyte)(retained>>16),(jbyte)(retained>>24)};
+            (*env)->SetByteArrayRegion(env,result,0,4,header);
+            if(!(*env)->ExceptionCheck(env))(*env)->SetByteArrayRegion(env,result,4,(jsize)out.len,(const jbyte *)out.data);
+        }
+    }
+    smr_buffer_free(&out);return result;
+}
+JNIEXPORT void JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_streamFreeNative(JNIEnv *env,jobject self,jlong handle){
+    (void)env;(void)self;if(handle)smr_stream_free((void *)(intptr_t)handle);
+}
