@@ -14,7 +14,15 @@ Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other libr
 
 ## Install
 
-The reader requires Android API 24+, **compileSdk 37 or newer**, Jetpack Compose, and Java 17. Kotlin `2.4.20` and its matching Compose compiler plugin are the tested compiler setup. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
+### Compatibility baseline in this change
+
+Source builds now use Kotlin **1.9.24**, Compose Foundation **1.6.8**, Compose compiler **1.5.14**, compileSdk **35**, AGP **8.9.1** and Gradle **8.11.1**. The reader AAR declares compileSdk **35** and AGP **8.6.0** as consumer minimums. Android API 24 and Java 17 are unchanged. The reader does not export a Compose BOM; your application chooses its own Compose versions at or above the Foundation baseline.
+
+The compatibility change is not included in the existing `0.3.1` tag. That published artifact keeps the requirements below. For the compatible source build, verification instructions and custom-builder migration, see [Android compatibility](docs/android-compatibility.md).
+
+### Install the published 0.3.1 release
+
+The existing `0.3.1` reader artifact requires Android API 24+, **compileSdk 37 or newer**, Jetpack Compose, and Java 17. That release used Kotlin `2.4.20` and its matching Compose compiler plugin. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
 
 ```kotlin
 dependencyResolutionManagement {
@@ -69,6 +77,8 @@ For source integration, pin this repository to a reviewed commit, include both `
 See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md) for the structured APIs in `0.3.1`.
 
 ## Quick start
+
+[中文接入手册](docs/integration-guide.zh-CN.md)：安装、样式、流式回复、图片、插件、编辑器及最新固定提交接入。
 
 ### Read Markdown
 
@@ -168,7 +178,7 @@ The Demo contains reader, streaming, editor, conversation, AI chat, and Mermaid 
 
 ## Compatibility and limits
 
-- Android API 24+, compileSdk 37+, and Java 17; the Compose and Kotlin versions in this repository's Gradle files are the tested setup.
+- Source builds use Android API 24+, compileSdk 35 and Java 17; the existing `0.3.1` artifact still needs compileSdk 37. See the [compatibility baseline](docs/android-compatibility.md) for compiler and custom-builder migration.
 - HTML rendering is off by default; supported math is parsed by default.
 - Complete Mermaid and HTML syntax coverage and fully rich formatted editing are still in progress. Review [known limits](docs/reference.md#status) before depending on advanced behavior.
 - A local Demo API key is a debug-only convenience. Never ship or commit a key; the library does not require one.

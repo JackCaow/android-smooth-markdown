@@ -5,6 +5,7 @@ import java.net.URI
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -33,14 +34,6 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.DisableSelection
-import androidx.compose.foundation.text.selection.SelectionState
-import androidx.compose.foundation.text.selection.rememberSelectionState
-import androidx.compose.foundation.text.contextmenu.builder.item
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
-import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
-import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMenuComponents
-import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuDropdownProvider
-import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -96,10 +89,9 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -254,6 +246,7 @@ fun SmoothMarkdown(
     val document = streamingDocument?.document ?: if (enableCache)
         remember(markdown, plugins, pluginVersion, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
     else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
+    val sourceOrderMap = remember(document) { readerSelectionSourceOrder(document) }
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, builderVersion, plugins, pluginVersion) {
         groupSelectableBlocks(
@@ -265,7 +258,8 @@ fun SmoothMarkdown(
                 readerBlockSelectionMode(node, builderRegistry, plugins) else null },
         )
     }
-    val activeController = selectionController.takeIf { selectable && !selectableAsSingleRegion }
+    val localController = remember { SmoothSelectionController() }
+    val activeController = (selectionController ?: localController).takeIf { selectable && !selectableAsSingleRegion }
     SideEffect {
         activeController?.bindDocument(
             document, enableHtml, plugins, builderRegistry,
@@ -278,6 +272,7 @@ fun SmoothMarkdown(
     }
     val fullDocumentSelectionMode = activeController?.fullDocumentSelectionMode == true
     val lazyListState = rememberLazyListState()
+    val fullScrollState = rememberScrollState()
     val targetCallback = remember(activeController, onTextPositioned) {
         if (activeController == null) onTextPositioned
         else { target: MarkdownSelectionTarget ->
@@ -290,6 +285,7 @@ fun SmoothMarkdown(
         activeController?.let { controller -> { key: Any -> controller.removeTarget(key) } }
     }
     CompositionLocalProvider(
+        LocalReaderSelectionSourceOrder provides sourceOrderMap,
         LocalMarkdownResources provides resourceOptions,
         LocalMarkdownStrings provides strings,
         LocalCodeBlockOptions provides (codeBlockOptions ?: if (useEnhancedComponents) CodeBlockOptions() else CodeBlockOptions(
@@ -333,7 +329,7 @@ fun SmoothMarkdown(
                     }
                 }
             } else {
-                val fullModifier = if (scrollable) backgroundModifier.verticalScroll(rememberScrollState())
+                val fullModifier = if (scrollable) backgroundModifier.verticalScroll(fullScrollState)
                     else backgroundModifier
                 Column(fullModifier.padding(resolvedStyleSheet.contentPadding).onGloballyPositioned {
                     if (fullDocumentSelectionMode) activeController?.onFullDocumentLaidOut()
@@ -349,7 +345,10 @@ fun SmoothMarkdown(
             }
         }
         if (selectable && !selectableAsSingleRegion) {
-            MarkdownSelectionRegion(activeController, selectionMenuActions, showDefaultCopyAction, content)
+            MarkdownSelectionRegion(activeController, selectionMenuActions, showDefaultCopyAction,
+                onScroll = { delta -> if (scrollable) {
+                    if (fullDocumentSelectionMode) fullScrollState.scrollBy(delta) else lazyListState.scrollBy(delta)
+                } }, content = content)
         } else content()
     }
 }
@@ -359,145 +358,88 @@ private fun MarkdownSelectionRegion(
     controller: SmoothSelectionController?,
     menuActions: List<SmoothSelectionMenuAction>,
     showDefaultCopyAction: Boolean,
+    onScroll: suspend (Float) -> Unit,
     content: @Composable () -> Unit,
 ) {
-    val clipboard = LocalClipboard.current
+    val clipboard = LocalClipboardManager.current
+    val view = LocalView.current
     val anchorRegistry = remember { NonTextAnchorRegistry() }
-    // SelectionState captures LocalClipboard when it is created. Keep a stable
-    // reference so the clipboard can inspect annotated ranges at Copy time.
-    val stateHolder = remember { ReaderSelectionStateHolder() }
-    val readerClipboard = remember(clipboard, stateHolder, anchorRegistry, controller) {
-        object : Clipboard {
-            override suspend fun getClipEntry(): ClipEntry? = clipboard.getClipEntry()
-            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
-                val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
-                clipboard.setClipEntry(readerCopyClipEntry(
-                    clipEntry, selectedTexts, anchorRegistry.snapshot(),
-                    controller?.fullDocumentSemanticText(selectedTexts)))
-            }
-        }
+    val state = remember { ReaderSelectionState() }
+    val selectionForCopy: () -> VisibleSelection = {
+        val selected = state.selectedTexts
+        controller?.fullDocumentSemanticText(selected)?.let { VisibleSelection(it, true) }
+            ?: visibleSelectedText(selected, anchorRegistry.snapshot())
     }
-    val scope = rememberCoroutineScope()
     val copyVisible: (String) -> Unit = { text ->
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("selection", text)))
-        }
-        stateHolder.state?.clear()
+        clipboard.setText(AnnotatedString(text))
+        state.clear()
         controller?.exitFullDocumentSelection()
     }
-    val selectionForCopy: () -> VisibleSelection = remember(controller, stateHolder, anchorRegistry) {
-        {
-            val selectedTexts = stateHolder.state?.selectedTexts.orEmpty()
-            val semantic = controller?.fullDocumentSemanticText(selectedTexts)
-            if (semantic != null) VisibleSelection(semantic, hadAnchor = true)
-            else visibleSelectedText(selectedTexts, anchorRegistry.snapshot())
-        }
+    val menuObserver = LocalReaderSelectionMenuObserver.current
+    val menu = remember(view, state) { ReaderCopyMenuProvider(view) }
+    DisposableEffect(menu) { onDispose { menu.hide() } }
+    val selectedTexts = state.selectedTexts
+    // Subscribe during composition so ending a drag republishes the native toolbar.
+    val dragging = state.dragPosition != null
+    SideEffect {
+        if (selectedTexts.isNotEmpty() && !dragging) {
+            menu.show(state.selectionBounds, selectionForCopy, copyVisible,
+                menuActions, showDefaultCopyAction, state::selectAll, { state.clear(); controller?.exitFullDocumentSelection() }, state.selectionRevision)
+            menuObserver?.invoke(menu.snapshot())
+        } else { menu.hide(); menuObserver?.invoke(null) }
     }
-    val toolbarProvider = LocalTextContextMenuToolbarProvider.current
-    val dropdownProvider = LocalTextContextMenuDropdownProvider.current
-    val legacyToolbar = LocalTextToolbar.current
-    val wrappedToolbar = remember(toolbarProvider, selectionForCopy, clipboard) {
-        toolbarProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
-        }
+    DisposableEffect(controller, state, anchorRegistry, clipboard) {
+        controller?.attach(state, anchorRegistry, copyVisible)
+        onDispose { controller?.detach(state) }
     }
-    val wrappedDropdown = remember(dropdownProvider, selectionForCopy, clipboard) {
-        dropdownProvider?.let { provider ->
-            ReaderCopyMenuProvider(provider, selectionForCopy, copyVisible)
-        }
-    }
-    val wrappedLegacyToolbar = remember(legacyToolbar, selectionForCopy, clipboard, showDefaultCopyAction) {
-        ReaderCopyTextToolbar(legacyToolbar, selectionForCopy, copyVisible, showDefaultCopyAction)
-    }
-    CompositionLocalProvider(
-        LocalNonTextAnchorRegistry provides anchorRegistry,
-        LocalTextContextMenuToolbarProvider provides wrappedToolbar,
-        LocalTextContextMenuDropdownProvider provides wrappedDropdown,
-        LocalTextToolbar provides wrappedLegacyToolbar,
-        LocalClipboard provides readerClipboard,
-    ) {
-        val state = rememberSelectionState()
-        stateHolder.state = state
-        DisposableEffect(controller, state, anchorRegistry, clipboard) {
-            controller?.attach(state, anchorRegistry, copyVisible)
-            onDispose {
-                controller?.detach(state)
-                if (stateHolder.state === state) stateHolder.state = null
+    val fullRequest = controller?.fullDocumentSelectRequest ?: 0
+    val fullReady = controller?.fullDocumentLayoutReady ?: 0
+    LaunchedEffect(controller, state, fullRequest, fullReady) {
+        if (controller != null && fullRequest > 0 && fullReady == fullRequest &&
+            controller.fullDocumentSelectionMode) {
+            withFrameNanos { }
+            if (controller.fullDocumentSelectRequest == fullRequest && controller.fullDocumentSelectionMode) {
+                state.selectAll()
+                if (state.selectedTexts.isEmpty()) controller.exitFullDocumentSelection()
+                else controller.markFullDocumentSelected(fullRequest, state.selectedTexts)
             }
         }
-        val fullRequest = controller?.fullDocumentSelectRequest ?: 0
-        val fullReady = controller?.fullDocumentLayoutReady ?: 0
-        LaunchedEffect(controller, state, fullRequest, fullReady) {
-            if (controller != null && fullRequest > 0 && fullReady == fullRequest &&
-                controller.fullDocumentSelectionMode) {
-                // The complete Column has been positioned. Let selectable text publish its
-                // coordinates before asking Compose for native handles over the whole region.
-                withFrameNanos { }
-                if (controller.fullDocumentSelectRequest == fullRequest &&
-                    controller.fullDocumentSelectionMode) {
-                    state.selectAll()
-                    if (state.selectedTexts.isEmpty()) controller.exitFullDocumentSelection()
-                    else controller.markFullDocumentSelected(fullRequest, state.selectedTexts)
-                }
-            }
-        }
-        LaunchedEffect(controller, state) {
-            snapshotFlow { state.selectedTexts.isNotEmpty() }.collect { hasSelection ->
-                if (!hasSelection && controller?.fullDocumentSelectionEstablished == true) {
-                    controller.exitFullDocumentSelection()
-                }
-            }
-        }
-        val filterModifier = if (showDefaultCopyAction) Modifier else Modifier.filterTextContextMenuComponents {
-            it.key != TextContextMenuKeys.CopyKey
-        }
-        val menuModifier = if (menuActions.isEmpty()) filterModifier else filterModifier.appendTextContextMenuComponents {
-            if (state.selectedTexts.any { it.isNotEmpty() }) {
-                separator()
-                for (action in menuActions) {
-                    item(key = action.key, label = action.label) {
-                        action.onClick(selectionForCopy().text)
-                        close()
-                    }
-                }
-            }
-        }
-        val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
-            if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
-                (event.isCtrlPressed || event.isMetaPressed)) {
-                val selected = selectionForCopy()
-                if (selected.hadAnchor) {
-                    copyVisible(selected.text)
-                    true
-                } else false
-            } else false
-        }
-        SelectionContainer(state = state, modifier = menuModifier.then(keyboardCopy)) { content() }
     }
-}
-
-private class ReaderSelectionStateHolder {
-    var state: SelectionState? = null
+    LaunchedEffect(controller, state) {
+        snapshotFlow { state.selectedTexts.isNotEmpty() }.collect { hasSelection ->
+            if (!hasSelection && controller?.fullDocumentSelectionEstablished == true) {
+                controller.exitFullDocumentSelection()
+            }
+        }
+    }
+    val keyboardCopy = Modifier.onPreviewKeyEvent { event ->
+        if (event.key == Key.Back && state.selectedTexts.isNotEmpty()) {
+            if (event.type == KeyEventType.KeyUp) { state.clear(); controller?.exitFullDocumentSelection() }
+            true
+        } else if (event.type == KeyEventType.KeyDown && event.key == Key.C &&
+            (event.isCtrlPressed || event.isMetaPressed) && state.selectedTexts.isNotEmpty()) {
+            copyVisible(selectionForCopy().text)
+            true
+        } else false
+    }
+    CompositionLocalProvider(LocalNonTextAnchorRegistry provides anchorRegistry) {
+        ReaderSelectionRegion(state, keyboardCopy, onScroll, content)
+    }
 }
 
 internal data class VisibleSelection(val text: String, val hadAnchor: Boolean)
 
-/** Compose's system floating Copy writes directly through LocalClipboard on Android. */
-internal fun readerCopyClipEntry(
-    entry: ClipEntry?,
+/** Filter only this Reader's annotated nontext geometry while preserving unrelated clipboard text. */
+internal fun readerCopyText(
+    incoming: AnnotatedString?,
     selectedTexts: List<AnnotatedString>,
     anchors: Set<String>,
     fullDocumentSemanticText: String? = null,
-): ClipEntry? {
-    if (entry == null || entry.clipData.itemCount != 1) return entry
-    val incoming = entry.clipData.getItemAt(0).text?.toString() ?: return entry
-    if (fullDocumentSemanticText != null && incoming == selectedTexts.joinToString("\n") { it.text }) {
-        return ClipEntry(ClipData.newPlainText(
-            entry.clipData.description.label ?: "selection", fullDocumentSemanticText))
-    }
+): AnnotatedString? {
+    if (incoming == null || incoming.text != selectedTexts.joinToString("\n") { it.text }) return incoming
+    if (fullDocumentSemanticText != null) return AnnotatedString(fullDocumentSemanticText)
     val selected = visibleSelectedText(selectedTexts, anchors)
-    if (!selected.hadAnchor || incoming != selectedTexts.joinToString("\n") { it.text }) return entry
-    return ClipEntry(ClipData.newPlainText(entry.clipData.description.label ?: "selection", selected.text))
+    return if (selected.hadAnchor) AnnotatedString(selected.text) else incoming
 }
 
 /** Strip only selected ranges annotated by this mounted Reader's nontext blocks. */
@@ -622,11 +564,27 @@ internal fun groupSelectableBlocks(
 private fun ReaderCustomBlockSelection(mode: MarkdownBlockSelectionMode, content: @Composable () -> Unit) {
     if (mode == MarkdownBlockSelectionMode.NON_TEXT) {
         SelectableNonTextBlock { DisableSelection { content() } }
+    } else if (mode == MarkdownBlockSelectionMode.NATIVE_TEXT) {
+        // Arbitrary host Text composables retain their native local selection. Hosts that need
+        // programmatic cross-block selection render SmoothSelectableText or context children.
+        SelectionContainer { content() }
     } else content()
 }
 
 @Composable
 private fun MarkdownBlock(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
+    val sourceIndex = LocalReaderSelectionSourceOrder.current[node]
+    val parent = LocalReaderSelectionOrder.current
+    // Scope paths retain AST order. Positioned children establish their order within this
+    // scope, including builders that recompose independently and reinsert an earlier Text.
+    val order = ReaderSelectionOrder(sourceIndex?.let { listOf(it) } ?: parent?.allocate().orEmpty())
+    CompositionLocalProvider(LocalReaderSelectionOrder provides order) {
+        MarkdownBlockContent(node, onLinkClick, onImageClick, enableHtml, textAlign)
+    }
+}
+
+@Composable
+private fun MarkdownBlockContent(node: Node, onLinkClick: (String) -> Unit, onImageClick: (String) -> Unit, enableHtml: Boolean, textAlign: TextAlign? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val plugins = LocalParserPlugins.current
     val builder = LocalMarkdownBuilders.current?.findBuilder(node)
@@ -935,6 +893,12 @@ private fun MarkdownDetails(
 
 @Composable
 private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier, onPlainTextTap: (() -> Unit)? = null) {
+    if (LocalReaderSelectionState.current != null) DisableSelection { MarkdownTextContent(text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap) }
+    else MarkdownTextContent(text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
+}
+
+@Composable
+private fun MarkdownTextContent(text: AnnotatedString, style: androidx.compose.ui.text.TextStyle, onLinkClick: (String) -> Unit, textAlign: TextAlign? = null, bottomPadding: androidx.compose.ui.unit.Dp? = null, modifier: Modifier = Modifier, onPlainTextTap: (() -> Unit)? = null) {
     val sheet = LocalMarkdownStyleSheet.current
     val strings = LocalMarkdownStrings.current
     val onMentionClick = LocalOnMentionClick.current
@@ -951,18 +915,25 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
     val layout = remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     val selectionOptions = LocalMarkdownSelectionOptions.current
     val selectionKey = remember { Any() }
+    val sourceOrder = rememberReaderSelectionOrder()
+    RetainReaderSelectionTarget(selectionKey)
     DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
         onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
     }
     val tracking = selectionOptions.onTextPositioned?.let { callback ->
         Modifier.onGloballyPositioned { coordinates ->
-            val bounds = coordinates.boundsInWindow()
+            val bounds = androidx.compose.ui.geometry.Rect(
+                coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero),
+                androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()),
+            )
             callback(MarkdownSelectionTarget(
                 selectionKey, bounds, text,
                 offsetAtWindowPosition = { windowPoint ->
                     layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                 },
             ).apply {
+                this.sourceOrder = sourceOrder
+                layoutResult = layout.value
                 wordBoundaryAtWindowPosition = { windowPoint ->
                     layout.value?.let { result ->
                         result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
@@ -974,8 +945,9 @@ private fun MarkdownText(text: AnnotatedString, style: androidx.compose.ui.text.
             })
         }
     } ?: Modifier
+    val selectionHighlight = readerSelectionHighlight(selectionKey)
     val base = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-        .then(enhancedLinkDecoration(text, layout)).then(tracking)
+        .then(enhancedLinkDecoration(text, layout)).then(tracking).then(selectionHighlight)
     Text(
         text = text,
         style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
@@ -1020,6 +992,22 @@ private fun MarkdownInlineText(
     modifier: Modifier = Modifier,
     onPlainTextTap: (() -> Unit)? = null,
 ) {
+    if (LocalReaderSelectionState.current != null) DisableSelection { MarkdownInlineTextContent(render, style, onLinkClick, onImageClick, textAlign, bottomPadding, interactive, modifier, onPlainTextTap) }
+    else MarkdownInlineTextContent(render, style, onLinkClick, onImageClick, textAlign, bottomPadding, interactive, modifier, onPlainTextTap)
+}
+
+@Composable
+private fun MarkdownInlineTextContent(
+    render: InlineRender,
+    style: androidx.compose.ui.text.TextStyle,
+    onLinkClick: (String) -> Unit,
+    onImageClick: (String) -> Unit,
+    textAlign: TextAlign? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp? = null,
+    interactive: Boolean = true,
+    modifier: Modifier = Modifier,
+    onPlainTextTap: (() -> Unit)? = null,
+) {
     val sheet = LocalMarkdownStyleSheet.current
     val strings = LocalMarkdownStrings.current
     val onImageClickWithMetadata = LocalOnImageClickWithMetadata.current
@@ -1029,19 +1017,26 @@ private fun MarkdownInlineText(
     val foreground = if (style.color != Color.Unspecified) style.color else sheet.textColor ?: MaterialTheme.colorScheme.onSurface
     val selectionOptions = LocalMarkdownSelectionOptions.current
     val selectionKey = remember { Any() }
+    val sourceOrder = rememberReaderSelectionOrder()
+    RetainReaderSelectionTarget(selectionKey)
     val layout = remember(render.text) { mutableStateOf<TextLayoutResult?>(null) }
     DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
         onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
     }
     val tracking = selectionOptions.onTextPositioned?.let { callback ->
         Modifier.onGloballyPositioned { coordinates ->
-            val bounds = coordinates.boundsInWindow()
+            val bounds = androidx.compose.ui.geometry.Rect(
+                coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero),
+                androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()),
+            )
             callback(MarkdownSelectionTarget(
                 selectionKey, bounds, render.text,
                 offsetAtWindowPosition = { windowPoint ->
                     layout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                 },
             ).apply {
+                this.sourceOrder = sourceOrder
+                layoutResult = layout.value
                 wordBoundaryAtWindowPosition = { windowPoint ->
                     layout.value?.let { result ->
                         result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
@@ -1053,13 +1048,14 @@ private fun MarkdownInlineText(
             })
         }
     } ?: Modifier
+    val selectionHighlight = readerSelectionHighlight(selectionKey)
     if (render.images.isEmpty() && render.math.isEmpty() && render.kbds.isEmpty() && render.customWidgets.isEmpty()) {
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
             style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
             modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-                .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
+                .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight),
         )
         return
     }
@@ -1155,7 +1151,7 @@ private fun MarkdownInlineText(
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
                 modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking),
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight),
             )
         } else {
             val links = render.text.getStringAnnotations("url", 0, render.text.length).filter { isSafeLink(it.item) }
@@ -1175,7 +1171,7 @@ private fun MarkdownInlineText(
                 inlineContent = inline,
                 style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
                 modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
-                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking)
+                    .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight)
                     .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
                     detectTapGestures { position ->
                         layout.value?.getOffsetForPosition(position)?.let { offset ->
@@ -1361,12 +1357,18 @@ private fun MarkdownTable(table: TableBlock, onLinkClick: (String) -> Unit, onIm
                                 collectionItemInfo = CollectionItemInfo(rowIndex, 1, columnIndex, 1)
                                 if (cell?.isHeader == true) heading()
                             }, contentAlignment = cellAlignment) {
-                            if (cell != null) MarkdownInlineText(
-                                inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current),
-                                style, onLinkClick, onImageClick,
-                                textAlign = cellTextAlign,
-                                bottomPadding = 0.dp,
-                            )
+                            if (cell != null) {
+                                val sourceIndex = LocalReaderSelectionSourceOrder.current[cell]
+                                val cellOrder = ReaderSelectionOrder(listOf(sourceIndex ?: Int.MAX_VALUE))
+                                CompositionLocalProvider(LocalReaderSelectionOrder provides cellOrder) {
+                                    MarkdownInlineText(
+                                        inlineRender(cell, enableHtml, sheet, LocalParserPlugins.current, LocalMarkdownBuilders.current),
+                                        style, onLinkClick, onImageClick,
+                                        textAlign = cellTextAlign,
+                                        bottomPadding = 0.dp,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

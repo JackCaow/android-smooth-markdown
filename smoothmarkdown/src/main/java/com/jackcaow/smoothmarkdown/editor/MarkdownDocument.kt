@@ -140,8 +140,9 @@ object MarkdownDocumentCodec {
                 val last = spans.maxOf { it.lineIndex }
                 if (first in lines.indices && last in lines.indices) {
                     val start = lines[first].first
+                    val currentNode = node
                     val sourceOverride = plugins?.sourceBlockPlugins?.firstNotNullOfOrNull { plugin ->
-                        validSourceEnd(plugin, sourceLines, first, last, node)
+                        validSourceEnd(plugin, sourceLines, first, last, currentNode)
                     }
                     val endLine = sourceOverride?.first ?: last
                     val end = lines[endLine].second

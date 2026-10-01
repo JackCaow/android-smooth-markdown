@@ -44,9 +44,9 @@ class MermaidRadarXYTest {
             curve 张三{编程: 5, 设计: 3, 沟通: 4}
         """.trimIndent())!!
         assertEquals("技能评估", diagram.radar!!.title)
-        assertEquals(listOf("编程", "设计", "沟通"), diagram.radar.axes.map { it.id })
-        assertEquals(listOf(5.0, 3.0, 4.0), diagram.radar.curves[0].values)
-        assertEquals("张三", diagram.radar.curves[0].label)
+        assertEquals(listOf("编程", "设计", "沟通"), diagram.radar!!.axes.map { it.id })
+        assertEquals(listOf(5.0, 3.0, 4.0), diagram.radar!!.curves[0].values)
+        assertEquals("张三", diagram.radar!!.curves[0].label)
     }
 
     @Test fun radarFallsBackOnMissingAndMismatchedData() {

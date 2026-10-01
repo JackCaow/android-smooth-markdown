@@ -19,10 +19,6 @@ public final class com.jackcaow.smoothmarkdown.AdmonitionPlugin implements com.j
   public boolean isClosingLine(java.lang.String);
   public void complete(com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List<java.lang.String>);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
-  public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
 }
 public final class com.jackcaow.smoothmarkdown.AdmonitionType extends java.lang.Enum<com.jackcaow.smoothmarkdown.AdmonitionType> {
   public static final com.jackcaow.smoothmarkdown.AdmonitionType NOTE;
@@ -58,10 +54,6 @@ public final class com.jackcaow.smoothmarkdown.ArtifactPlugin implements com.jac
   public boolean isClosingLine(java.lang.String);
   public void complete(com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List<java.lang.String>);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
-  public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
 }
 public final class com.jackcaow.smoothmarkdown.ArtifactType extends java.lang.Enum<com.jackcaow.smoothmarkdown.ArtifactType> {
   public static final com.jackcaow.smoothmarkdown.ArtifactType CODE;
@@ -93,15 +85,6 @@ public interface com.jackcaow.smoothmarkdown.BlockParserPlugin extends com.jackc
   public default java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public default com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public abstract void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public static boolean access$canStart$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, java.lang.String);
-  public static com.jackcaow.smoothmarkdown.PluginBlockNode access$createNode$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, java.lang.String);
-  public static boolean access$isClosingLine$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, java.lang.String);
-  public static boolean access$isClosingLine$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public static void access$complete$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List);
-  public static com.jackcaow.smoothmarkdown.PluginBlockNode access$parseFencedCodeBlock$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
-  public static java.lang.String access$documentText$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public static com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode access$selectionMode$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin, com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public static int access$getPriority$jd(com.jackcaow.smoothmarkdown.BlockParserPlugin);
 }
 public final class com.jackcaow.smoothmarkdown.BlockParserPlugin$DefaultImpls {
   public static boolean canStart(com.jackcaow.smoothmarkdown.BlockParserPlugin, java.lang.String);
@@ -115,8 +98,6 @@ public final class com.jackcaow.smoothmarkdown.BlockParserPlugin$DefaultImpls {
   public static int getPriority(com.jackcaow.smoothmarkdown.BlockParserPlugin);
 }
 public final class com.jackcaow.smoothmarkdown.BuiltinPluginsKt {
-  public static final boolean access$isAsciiLetter(char);
-  public static final java.util.List access$childrenList(com.jackcaow.smoothmarkdown.ast.Markup);
 }
 public final class com.jackcaow.smoothmarkdown.CodeBlockOptions {
   public static final int $stable;
@@ -146,8 +127,6 @@ public final class com.jackcaow.smoothmarkdown.CodeBlocksKt {
   public static androidx.compose.ui.text.AnnotatedString highlightedCode$default(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int, java.lang.Object);
   public static final com.jackcaow.smoothmarkdown.ResolvedCodeBlockDecoration resolveCodeBlockDecoration-4WTKRHQ(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, long);
   public static final void EnhancedCodeBlock(java.lang.String, java.lang.String, androidx.compose.runtime.Composer, int);
-  public static final int access$EnhancedCodeBlock$lambda$5(androidx.compose.runtime.MutableIntState);
-  public static final void access$EnhancedCodeBlock$lambda$3(androidx.compose.runtime.MutableState, boolean);
 }
 public final class com.jackcaow.smoothmarkdown.CodeToken {
   public static final int $stable;
@@ -213,8 +192,6 @@ public class com.jackcaow.smoothmarkdown.DelimitedBlockPlugin implements com.jac
   public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
 }
 public final class com.jackcaow.smoothmarkdown.DetailsNode extends com.jackcaow.smoothmarkdown.ast.CustomBlock {
   public static final int $stable;
@@ -248,7 +225,6 @@ public final class com.jackcaow.smoothmarkdown.EmojiPlugin implements com.jackca
   public com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
   public com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
   public com.jackcaow.smoothmarkdown.EmojiPlugin();
-  public static final java.util.Map access$getDefaultEmojis$cp();
 }
 public final class com.jackcaow.smoothmarkdown.EmojiPlugin$Companion {
   public final java.util.Map<java.lang.String, java.lang.String> getDefaultEmojis();
@@ -257,7 +233,6 @@ public final class com.jackcaow.smoothmarkdown.EmojiPlugin$Companion {
 public final class com.jackcaow.smoothmarkdown.EnhancedLinkDecorationKt {
   public static final java.util.List<com.jackcaow.smoothmarkdown.EnhancedLinkRange> enhancedLinkRanges(androidx.compose.ui.text.AnnotatedString);
   public static final androidx.compose.ui.Modifier enhancedLinkDecoration-Bx497Mc(androidx.compose.ui.text.AnnotatedString, androidx.compose.runtime.State<androidx.compose.ui.text.TextLayoutResult>, boolean, long, androidx.compose.runtime.Composer, int);
-  public static final void access$enhancedLinkDecoration_Bx497Mc$lambda$3(androidx.compose.runtime.MutableIntState, int);
 }
 public final class com.jackcaow.smoothmarkdown.EnhancedLinkRange {
   public static final int $stable;
@@ -363,7 +338,6 @@ public interface com.jackcaow.smoothmarkdown.InlineParserPlugin extends com.jack
   public abstract boolean canParse(java.lang.String, int);
   public abstract com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
   public abstract com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
-  public static int access$getPriority$jd(com.jackcaow.smoothmarkdown.InlineParserPlugin);
 }
 public final class com.jackcaow.smoothmarkdown.InlineParserPlugin$DefaultImpls {
   public static int getPriority(com.jackcaow.smoothmarkdown.InlineParserPlugin);
@@ -411,7 +385,6 @@ public final class com.jackcaow.smoothmarkdown.LruMarkdownParseCache {
   public static void put$default(com.jackcaow.smoothmarkdown.LruMarkdownParseCache, java.lang.String, com.jackcaow.smoothmarkdown.ast.Markup, boolean, int, java.lang.Object);
   public final synchronized void clear();
   public final synchronized com.jackcaow.smoothmarkdown.MarkdownCacheStatistics getStatistics();
-  public static final int access$getMaxSize$p(com.jackcaow.smoothmarkdown.LruMarkdownParseCache);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens {
   public static final int $stable;
@@ -429,6 +402,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens {
   public final float getAccentHeight-D9Ej5fM();
   public final androidx.compose.ui.graphics.Color getTitleColor-QN2ZGVo();
   public final androidx.compose.ui.text.TextStyle getTitleStyle();
+  public com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens();
   public final java.util.Map<com.jackcaow.smoothmarkdown.AdmonitionType, androidx.compose.ui.graphics.Color> component1();
   public final androidx.compose.foundation.layout.PaddingValues component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
@@ -447,7 +421,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens();
   public com.jackcaow.smoothmarkdown.MarkdownAdmonitionTokens(java.util.Map, androidx.compose.foundation.layout.PaddingValues, androidx.compose.foundation.layout.PaddingValues, float, float, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, float, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.text.TextStyle, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode extends java.lang.Enum<com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode> {
@@ -464,6 +437,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration {
   public final androidx.compose.ui.graphics.Color getBackgroundColor-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color getBorderColor-QN2ZGVo();
   public final float getBorderWidth-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final float component3-D9Ej5fM();
@@ -472,7 +446,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration();
   public com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownBuilderContext {
@@ -537,6 +510,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration {
   public final androidx.compose.ui.graphics.Color getBorderColor-QN2ZGVo();
   public final float getBorderWidth-D9Ej5fM();
   public final float getCornerRadius-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final float component3-D9Ej5fM();
@@ -546,7 +520,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration();
   public com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownCodeTokens {
@@ -575,6 +548,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownCodeTokens {
   public final androidx.compose.ui.unit.Dp getBorderWidth-lTKBWiU();
   public final androidx.compose.ui.unit.Dp getCornerRadius-lTKBWiU();
   public final androidx.compose.foundation.layout.PaddingValues getPadding();
+  public com.jackcaow.smoothmarkdown.MarkdownCodeTokens();
   public final androidx.compose.foundation.layout.PaddingValues component1();
   public final androidx.compose.ui.text.TextStyle component2();
   public final androidx.compose.ui.text.TextStyle component3();
@@ -603,7 +577,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownCodeTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownCodeTokens();
   public com.jackcaow.smoothmarkdown.MarkdownCodeTokens(androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, long, java.lang.String, java.lang.String, long, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, boolean, androidx.compose.foundation.layout.PaddingValues, float, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.foundation.layout.PaddingValues, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownCoreParser {
@@ -629,6 +602,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDesignTokens {
   public final com.jackcaow.smoothmarkdown.MarkdownPluginTokens getPlugins();
   public final com.jackcaow.smoothmarkdown.MarkdownTypographyTokens getTypography();
   public final com.jackcaow.smoothmarkdown.MarkdownDocumentTokens getDocument();
+  public com.jackcaow.smoothmarkdown.MarkdownDesignTokens();
   public final com.jackcaow.smoothmarkdown.MarkdownHeadingTokens component1();
   public final com.jackcaow.smoothmarkdown.MarkdownQuoteTokens component2();
   public final com.jackcaow.smoothmarkdown.MarkdownCodeTokens component3();
@@ -647,7 +621,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDesignTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownDesignTokens();
   public com.jackcaow.smoothmarkdown.MarkdownDesignTokens(com.jackcaow.smoothmarkdown.MarkdownHeadingTokens, com.jackcaow.smoothmarkdown.MarkdownQuoteTokens, com.jackcaow.smoothmarkdown.MarkdownCodeTokens, com.jackcaow.smoothmarkdown.MarkdownLinkTokens, com.jackcaow.smoothmarkdown.MarkdownDetailsTokens, com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens, com.jackcaow.smoothmarkdown.MarkdownMathTokens, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, com.jackcaow.smoothmarkdown.MarkdownPluginTokens, com.jackcaow.smoothmarkdown.MarkdownTypographyTokens, com.jackcaow.smoothmarkdown.MarkdownDocumentTokens, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownDetailsTokens {
@@ -664,6 +637,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDetailsTokens {
   public final androidx.compose.ui.text.TextStyle getIconStyle();
   public final androidx.compose.ui.graphics.Color getIconColor-QN2ZGVo();
   public final float getDividerThickness-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownDetailsTokens();
   public final float component1-D9Ej5fM();
   public final androidx.compose.foundation.layout.PaddingValues component2();
   public final float component3-D9Ej5fM();
@@ -680,7 +654,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDetailsTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownDetailsTokens();
   public com.jackcaow.smoothmarkdown.MarkdownDetailsTokens(float, androidx.compose.foundation.layout.PaddingValues, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.foundation.layout.PaddingValues, androidx.compose.foundation.layout.PaddingValues, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownDocumentTokens {
@@ -701,6 +674,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDocumentTokens {
   public final androidx.compose.ui.graphics.Color getTableBorderColor-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color getRuleColor-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color getTableHeaderBackgroundColor-QN2ZGVo();
+  public com.jackcaow.smoothmarkdown.MarkdownDocumentTokens();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component3-QN2ZGVo();
@@ -721,7 +695,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownDocumentTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownDocumentTokens();
   public com.jackcaow.smoothmarkdown.MarkdownDocumentTokens(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownEvents {
@@ -788,6 +761,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownHeadingTokens {
   public final float getRuleThickness-D9Ej5fM();
   public final float getRuleStartAlpha();
   public final float getRuleEndAlpha();
+  public com.jackcaow.smoothmarkdown.MarkdownHeadingTokens();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final int component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
@@ -803,7 +777,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownHeadingTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownHeadingTokens();
   public com.jackcaow.smoothmarkdown.MarkdownHeadingTokens(androidx.compose.ui.graphics.Color, int, androidx.compose.foundation.layout.PaddingValues, float, float, float, float, float, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownImageEvent {
@@ -865,6 +838,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens {
   public final float getExtraHeight-D9Ej5fM();
   public final androidx.compose.ui.text.TextStyle getTextStyle();
   public final float getBackgroundAlpha();
+  public com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final float component3-D9Ej5fM();
@@ -879,7 +853,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens();
   public com.jackcaow.smoothmarkdown.MarkdownKeyboardTokens(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, float, androidx.compose.foundation.layout.PaddingValues, float, float, androidx.compose.ui.text.TextStyle, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownLinkTokens {
@@ -898,6 +871,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownLinkTokens {
   public final float getIconGap-D9Ej5fM();
   public final float getIconTopOffset-D9Ej5fM();
   public final float getIconStrokeWidth-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownLinkTokens();
   public final int component1();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final float component3();
@@ -916,7 +890,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownLinkTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownLinkTokens();
   public com.jackcaow.smoothmarkdown.MarkdownLinkTokens(int, androidx.compose.ui.graphics.Color, float, float, float, float, float, boolean, androidx.compose.ui.graphics.Color, float, float, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMathTokens {
@@ -927,6 +900,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMathTokens {
   public final androidx.compose.foundation.layout.PaddingValues getBlockPadding();
   public final java.lang.String getFontFamily();
   public final androidx.compose.ui.graphics.Color getColor-QN2ZGVo();
+  public com.jackcaow.smoothmarkdown.MarkdownMathTokens();
   public final androidx.compose.ui.text.TextStyle component1();
   public final float component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
@@ -937,7 +911,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMathTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownMathTokens();
   public com.jackcaow.smoothmarkdown.MarkdownMathTokens(androidx.compose.ui.text.TextStyle, float, androidx.compose.foundation.layout.PaddingValues, java.lang.String, androidx.compose.ui.graphics.Color, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
@@ -947,6 +920,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography getTypography();
   public final androidx.compose.foundation.layout.PaddingValues getOuterPadding();
   public final float getMaxHeight-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors component1();
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
@@ -956,7 +930,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens();
   public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTypography {
@@ -1006,9 +979,6 @@ public interface com.jackcaow.smoothmarkdown.MarkdownNodeBuilder {
   public default com.jackcaow.smoothmarkdown.MarkdownInlinePresentation renderInline(com.jackcaow.smoothmarkdown.ast.Markup);
   public default java.lang.String documentText(com.jackcaow.smoothmarkdown.ast.Markup);
   public default com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.ast.Markup);
-  public static com.jackcaow.smoothmarkdown.MarkdownInlinePresentation access$renderInline$jd(com.jackcaow.smoothmarkdown.MarkdownNodeBuilder, com.jackcaow.smoothmarkdown.ast.Markup);
-  public static java.lang.String access$documentText$jd(com.jackcaow.smoothmarkdown.MarkdownNodeBuilder, com.jackcaow.smoothmarkdown.ast.Markup);
-  public static com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode access$selectionMode$jd(com.jackcaow.smoothmarkdown.MarkdownNodeBuilder, com.jackcaow.smoothmarkdown.ast.Markup);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownNodeBuilder$DefaultImpls {
   public static com.jackcaow.smoothmarkdown.MarkdownInlinePresentation renderInline(com.jackcaow.smoothmarkdown.MarkdownNodeBuilder, com.jackcaow.smoothmarkdown.ast.Markup);
@@ -1043,6 +1013,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownPluginPanelTokens {
   public final androidx.compose.ui.text.TextStyle getIconStyle();
   public final float getDividerThickness-D9Ej5fM();
   public final float getIconSpacing-D9Ej5fM();
+  public com.jackcaow.smoothmarkdown.MarkdownPluginPanelTokens();
   public final androidx.compose.foundation.layout.PaddingValues component1();
   public final androidx.compose.foundation.layout.PaddingValues component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
@@ -1068,7 +1039,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownPluginPanelTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownPluginPanelTokens();
   public com.jackcaow.smoothmarkdown.MarkdownPluginPanelTokens(androidx.compose.foundation.layout.PaddingValues, androidx.compose.foundation.layout.PaddingValues, androidx.compose.foundation.layout.PaddingValues, androidx.compose.foundation.layout.PaddingValues, float, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownPluginTokens {
@@ -1111,6 +1081,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownQuoteTokens {
   public final androidx.compose.ui.graphics.Color getBorderColor-QN2ZGVo();
   public final androidx.compose.ui.unit.Dp getBorderWidth-lTKBWiU();
   public final androidx.compose.foundation.layout.PaddingValues getPadding();
+  public com.jackcaow.smoothmarkdown.MarkdownQuoteTokens();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
   public final float component3();
@@ -1130,7 +1101,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownQuoteTokens {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownQuoteTokens();
   public com.jackcaow.smoothmarkdown.MarkdownQuoteTokens(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, float, float, float, boolean, androidx.compose.ui.graphics.Color, float, androidx.compose.ui.text.TextStyle, float, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.foundation.layout.PaddingValues, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownRenderOptions {
@@ -1425,6 +1395,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet {
   public final androidx.compose.ui.text.TextStyle getKbdStyle();
   public final com.jackcaow.smoothmarkdown.MarkdownTableBorder getTableBorder();
   public final com.jackcaow.smoothmarkdown.MarkdownDesignTokens getDesignTokens();
+  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet();
   public final com.jackcaow.smoothmarkdown.MarkdownStyleSheet resolved();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
@@ -1475,7 +1446,6 @@ public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet();
   public com.jackcaow.smoothmarkdown.MarkdownStyleSheet(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet$Companion {
@@ -1624,12 +1594,6 @@ public final class com.jackcaow.smoothmarkdown.MermaidPlugin implements com.jack
   public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public boolean canStart(java.lang.String);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode createNode(java.lang.String);
-  public boolean isClosingLine(java.lang.String);
-  public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public void complete(com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List<java.lang.String>);
-  public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
   public com.jackcaow.smoothmarkdown.MermaidPlugin();
 }
 public abstract class com.jackcaow.smoothmarkdown.NativeImageData {
@@ -1662,8 +1626,6 @@ public final class com.jackcaow.smoothmarkdown.NativeImageLoader {
   public static com.jackcaow.smoothmarkdown.NativeImageData decode$smoothmarkdown$default(com.jackcaow.smoothmarkdown.NativeImageLoader, byte[], java.lang.String, int, java.lang.Object);
   public final kotlin.Pair<java.lang.Float, java.lang.Float> svgSize$smoothmarkdown(java.lang.String);
   public final byte[] readBounded$smoothmarkdown(java.io.InputStream, int);
-  public static final kotlinx.coroutines.CoroutineScope access$getScope$p();
-  public static final kotlin.Pair access$read(com.jackcaow.smoothmarkdown.NativeImageLoader, android.content.Context, java.lang.String, java.util.Map, java.util.concurrent.atomic.AtomicReference, java.util.concurrent.atomic.AtomicBoolean);
 }
 final class com.jackcaow.smoothmarkdown.NativeImageLoader$CacheKey {
   public com.jackcaow.smoothmarkdown.NativeImageLoader$CacheKey(java.lang.String, java.util.Map<java.lang.String, java.lang.String>, com.jackcaow.smoothmarkdown.MarkdownResourceLoader);
@@ -1716,17 +1678,11 @@ public final class com.jackcaow.smoothmarkdown.NativeMarkdownImageKt {
   public static final void SmoothMarkdownImage(java.lang.String, java.lang.String, androidx.compose.ui.Modifier, androidx.compose.ui.layout.ContentScale, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, androidx.compose.runtime.Composer, int, int);
   public static final void NativeMarkdownImage(java.lang.String, java.lang.String, androidx.compose.ui.Modifier, androidx.compose.ui.layout.ContentScale, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, com.jackcaow.smoothmarkdown.NativeImageState, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, androidx.compose.runtime.Composer, int, int);
   public static final void NativeSVGView(com.jackcaow.smoothmarkdown.NativeImageData$SvgImage, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, androidx.compose.runtime.Composer, int, int);
-  public static final java.lang.String access$svgDocument(com.jackcaow.smoothmarkdown.NativeImageData$SvgImage, float, float);
-  public static final void access$rememberNativeImage$lambda$2(androidx.compose.runtime.MutableState, com.jackcaow.smoothmarkdown.NativeImageState);
-  public static final com.jackcaow.smoothmarkdown.MarkdownResourceOptions access$NativeSVGView$lambda$0(androidx.compose.runtime.State);
 }
 public final class com.jackcaow.smoothmarkdown.NativeMarkdownMarkupConverter {
   public com.jackcaow.smoothmarkdown.NativeMarkdownMarkupConverter(java.lang.String, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode, ? extends com.jackcaow.smoothmarkdown.ast.Markup>);
   public com.jackcaow.smoothmarkdown.NativeMarkdownMarkupConverter(java.lang.String, kotlin.jvm.functions.Function1, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final com.jackcaow.smoothmarkdown.ast.Markup convert(com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode);
-}
-public final class com.jackcaow.smoothmarkdown.NativeMarkdownMarkupConverter$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
 }
 public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser {
   public static final com.jackcaow.smoothmarkdown.NativeMarkdownParser$Companion Companion;
@@ -1736,8 +1692,6 @@ public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser {
   public final com.jackcaow.smoothmarkdown.ast.Markup parse(java.lang.String);
   public com.jackcaow.smoothmarkdown.NativeMarkdownParser();
   public static final com.jackcaow.smoothmarkdown.NativeMarkdownParser$Builder builder();
-  public static final com.jackcaow.smoothmarkdown.nativeparser.NativeCustomInlineMatch access$inlinePlugin(com.jackcaow.smoothmarkdown.NativeMarkdownParser, java.lang.String, int, int);
-  public static final com.jackcaow.smoothmarkdown.nativeparser.NativeCustomBlockMatch access$blockPlugin(com.jackcaow.smoothmarkdown.NativeMarkdownParser, java.util.List, int, int);
 }
 public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser$Builder {
   public static final int $stable;
@@ -1747,9 +1701,6 @@ public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser$Builder {
 public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser$Companion {
   public final com.jackcaow.smoothmarkdown.NativeMarkdownParser$Builder builder();
   public com.jackcaow.smoothmarkdown.NativeMarkdownParser$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
-}
-public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
 }
 public final class com.jackcaow.smoothmarkdown.NativeMathExtent {
   public static final int $stable;
@@ -1766,10 +1717,6 @@ public final class com.jackcaow.smoothmarkdown.NativeMathExtent {
 }
 public final class com.jackcaow.smoothmarkdown.NativeMathViewKt {
   public static final void SystemMath(java.lang.String, boolean, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int, int);
-  public static final android.webkit.WebView access$SystemMath$lambda$12(androidx.compose.runtime.MutableState);
-  public static final void access$SystemMath$lambda$13(androidx.compose.runtime.MutableState, android.webkit.WebView);
-  public static final void access$SystemMath$lambda$9(androidx.compose.runtime.MutableFloatState, float);
-  public static final float access$SystemMath$lambda$8(androidx.compose.runtime.MutableFloatState);
 }
 final class com.jackcaow.smoothmarkdown.NativeSVGWebView extends android.webkit.WebView {
   public com.jackcaow.smoothmarkdown.NativeSVGWebView(android.content.Context);
@@ -1989,13 +1936,6 @@ public final class com.jackcaow.smoothmarkdown.NativeTeXParser {
   public static final int $stable;
   public final com.jackcaow.smoothmarkdown.NativeTeXNode parse(java.lang.String);
   public final java.util.List<java.lang.String> splitTopLevel$smoothmarkdown(java.lang.String, boolean);
-  public static final boolean access$validColor(com.jackcaow.smoothmarkdown.NativeTeXParser, java.lang.String);
-  public static final java.util.Map access$getAccents$p();
-  public static final java.util.Set access$getAlphabets$p();
-  public static final java.util.Map access$getAliases$p();
-  public static final java.util.Set access$getMatrices$p();
-  public static final java.util.Set access$getEnvironments$p();
-  public static final java.util.Map access$getDelimiters$p();
 }
 final class com.jackcaow.smoothmarkdown.NativeTeXParser$Parser {
   public com.jackcaow.smoothmarkdown.NativeTeXParser$Parser(java.lang.String);
@@ -2042,7 +1982,6 @@ public interface com.jackcaow.smoothmarkdown.ParserPlugin {
   public abstract java.lang.String getId();
   public abstract java.lang.String getName();
   public default int getPriority();
-  public static int access$getPriority$jd(com.jackcaow.smoothmarkdown.ParserPlugin);
 }
 public final class com.jackcaow.smoothmarkdown.ParserPlugin$DefaultImpls {
   public static int getPriority(com.jackcaow.smoothmarkdown.ParserPlugin);
@@ -2090,21 +2029,6 @@ public class com.jackcaow.smoothmarkdown.PluginInlineNode extends com.jackcaow.s
 }
 public final class com.jackcaow.smoothmarkdown.R {
 }
-public final class com.jackcaow.smoothmarkdown.ReaderCopyMenuProvider implements androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider {
-  public static final int $stable;
-  public com.jackcaow.smoothmarkdown.ReaderCopyMenuProvider(androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider, kotlin.jvm.functions.Function0<com.jackcaow.smoothmarkdown.VisibleSelection>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>);
-  public java.lang.Object showTextContextMenu(androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider, kotlin.coroutines.Continuation<? super kotlin.Unit>);
-  public static final kotlin.jvm.functions.Function0 access$getSelection$p(com.jackcaow.smoothmarkdown.ReaderCopyMenuProvider);
-  public static final kotlin.jvm.functions.Function1 access$getCopyVisibleSelection$p(com.jackcaow.smoothmarkdown.ReaderCopyMenuProvider);
-}
-public final class com.jackcaow.smoothmarkdown.ReaderCopyTextToolbar implements androidx.compose.ui.platform.TextToolbar {
-  public static final int $stable;
-  public com.jackcaow.smoothmarkdown.ReaderCopyTextToolbar(androidx.compose.ui.platform.TextToolbar, kotlin.jvm.functions.Function0<com.jackcaow.smoothmarkdown.VisibleSelection>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean);
-  public androidx.compose.ui.platform.TextToolbarStatus getStatus();
-  public void hide();
-  public void showMenu(androidx.compose.ui.geometry.Rect, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>);
-  public void showMenu(androidx.compose.ui.geometry.Rect, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function0<kotlin.Unit>);
-}
 public final class com.jackcaow.smoothmarkdown.ReaderDocumentText {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.ReaderDocumentText(java.lang.String, java.util.List<com.jackcaow.smoothmarkdown.ReaderTextBlock>, boolean);
@@ -2123,7 +2047,6 @@ public final class com.jackcaow.smoothmarkdown.ReaderDocumentText {
 }
 public final class com.jackcaow.smoothmarkdown.ReaderDocumentTextKt {
   public static final com.jackcaow.smoothmarkdown.ReaderDocumentText readerDocumentText(com.jackcaow.smoothmarkdown.ast.Markup, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, java.util.Map<com.jackcaow.smoothmarkdown.DetailsNode, java.lang.Boolean>);
-  public static final java.lang.String access$readerDocumentText$inline(com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, com.jackcaow.smoothmarkdown.ParserPluginRegistry, kotlin.jvm.internal.Ref$BooleanRef, boolean, com.jackcaow.smoothmarkdown.ast.Markup);
 }
 public final class com.jackcaow.smoothmarkdown.ReaderSelectionGranularity extends java.lang.Enum<com.jackcaow.smoothmarkdown.ReaderSelectionGranularity> {
   public static final com.jackcaow.smoothmarkdown.ReaderSelectionGranularity WORD;
@@ -2152,11 +2075,6 @@ public final class com.jackcaow.smoothmarkdown.ReaderSelectionOptions {
   public int hashCode();
   public boolean equals(java.lang.Object);
   public com.jackcaow.smoothmarkdown.ReaderSelectionOptions();
-}
-final class com.jackcaow.smoothmarkdown.ReaderSelectionStateHolder {
-  public com.jackcaow.smoothmarkdown.ReaderSelectionStateHolder();
-  public final androidx.compose.foundation.text.selection.SelectionState getState();
-  public final void setState(androidx.compose.foundation.text.selection.SelectionState);
 }
 public final class com.jackcaow.smoothmarkdown.ReaderTextBlock {
   public static final int $stable;
@@ -2281,8 +2199,6 @@ public final class com.jackcaow.smoothmarkdown.SmoothMarkdownKt {
   public static com.jackcaow.smoothmarkdown.ast.Markup parseMarkdown$default(java.lang.String, com.jackcaow.smoothmarkdown.ParserPluginRegistry, boolean, boolean, int, java.lang.Object);
   public static final void dispatchImageClick(com.jackcaow.smoothmarkdown.SafeHtml$ImageSpec, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function3<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, kotlin.Unit>);
   public static final void SmoothMarkdown(java.lang.String, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.CodeBlockOptions, kotlin.jvm.functions.Function4<? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, com.jackcaow.smoothmarkdown.MarkdownStyleSheet, com.jackcaow.smoothmarkdown.ParserPluginRegistry, kotlin.jvm.functions.Function3<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function5<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, boolean, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.MarkdownSelectionTarget, kotlin.Unit>, boolean, boolean, com.jackcaow.smoothmarkdown.SmoothSelectionController, java.util.List<com.jackcaow.smoothmarkdown.SmoothSelectionMenuAction>, boolean, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, boolean, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, com.jackcaow.smoothmarkdown.MarkdownStrings, kotlin.jvm.functions.Function2<? super java.lang.String, ? super java.lang.String, kotlin.Unit>, androidx.compose.runtime.Composer, int, int, int, int);
-  public static final androidx.compose.ui.platform.ClipEntry readerCopyClipEntry(androidx.compose.ui.platform.ClipEntry, java.util.List<androidx.compose.ui.text.AnnotatedString>, java.util.Set<java.lang.String>, java.lang.String);
-  public static androidx.compose.ui.platform.ClipEntry readerCopyClipEntry$default(androidx.compose.ui.platform.ClipEntry, java.util.List, java.util.Set, java.lang.String, int, java.lang.Object);
   public static final com.jackcaow.smoothmarkdown.VisibleSelection visibleSelectedText(java.util.List<androidx.compose.ui.text.AnnotatedString>, java.util.Set<java.lang.String>);
   public static final com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode readerBlockSelectionMode(com.jackcaow.smoothmarkdown.ast.Markup, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, com.jackcaow.smoothmarkdown.ParserPluginRegistry);
   public static final java.util.List<java.util.List<com.jackcaow.smoothmarkdown.ast.Markup>> groupSelectableBlocks(java.util.List<? extends com.jackcaow.smoothmarkdown.ast.Markup>, boolean, boolean, boolean, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.ast.Markup, ? extends com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode>);
@@ -2299,7 +2215,10 @@ public final class com.jackcaow.smoothmarkdown.SmoothMarkdownKt {
   public static void dispatchTextTap$default(androidx.compose.ui.text.AnnotatedString, int, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function0, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, int, java.lang.Object);
   public static final boolean isSafeImage(java.lang.String);
   public static final kotlin.sequences.Sequence<com.jackcaow.smoothmarkdown.ast.Markup> children(com.jackcaow.smoothmarkdown.ast.Markup);
-  public static final void access$MarkdownSelectionGroup(java.util.List, kotlin.jvm.functions.Function1, kotlin.jvm.functions.Function1, boolean, boolean, androidx.compose.runtime.Composer, int);
+}
+public final class com.jackcaow.smoothmarkdown.SmoothSelectableTextKt {
+  public static final void SmoothSelectableText(java.lang.String, androidx.compose.ui.Modifier, androidx.compose.ui.text.TextStyle, androidx.compose.runtime.Composer, int, int);
+  public static final void SmoothSelectableText(androidx.compose.ui.text.AnnotatedString, androidx.compose.ui.Modifier, androidx.compose.ui.text.TextStyle, androidx.compose.runtime.Composer, int, int);
 }
 public final class com.jackcaow.smoothmarkdown.SmoothSelectionController {
   public static final int $stable;
@@ -2325,8 +2244,6 @@ public final class com.jackcaow.smoothmarkdown.SmoothSelectionController {
   public final void unbindDocument$smoothmarkdown(com.jackcaow.smoothmarkdown.ast.Markup);
   public final void setDetailsExpanded$smoothmarkdown(com.jackcaow.smoothmarkdown.DetailsNode, boolean);
   public final java.lang.Boolean detailsExpanded$smoothmarkdown(com.jackcaow.smoothmarkdown.DetailsNode);
-  public final void attach$smoothmarkdown(androidx.compose.foundation.text.selection.SelectionState, com.jackcaow.smoothmarkdown.NonTextAnchorRegistry, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>);
-  public final void detach$smoothmarkdown(androidx.compose.foundation.text.selection.SelectionState);
   public final void onFullDocumentLaidOut$smoothmarkdown();
   public final void markFullDocumentSelected$smoothmarkdown(int, java.util.List<androidx.compose.ui.text.AnnotatedString>);
   public final java.lang.String fullDocumentSemanticText$smoothmarkdown(java.util.List<androidx.compose.ui.text.AnnotatedString>);
@@ -2371,7 +2288,6 @@ public final class com.jackcaow.smoothmarkdown.SourceBlockParseResult {
 public interface com.jackcaow.smoothmarkdown.SourceBlockParserPlugin extends com.jackcaow.smoothmarkdown.ParserPlugin {
   public abstract boolean canParse(java.lang.String, java.util.List<java.lang.String>, int);
   public abstract com.jackcaow.smoothmarkdown.SourceBlockParseResult parse(java.util.List<java.lang.String>, int);
-  public static int access$getPriority$jd(com.jackcaow.smoothmarkdown.SourceBlockParserPlugin);
 }
 public final class com.jackcaow.smoothmarkdown.SourceBlockParserPlugin$DefaultImpls {
   public static int getPriority(com.jackcaow.smoothmarkdown.SourceBlockParserPlugin);
@@ -2392,10 +2308,6 @@ public final class com.jackcaow.smoothmarkdown.StreamMarkdownBuffer {
 public final class com.jackcaow.smoothmarkdown.StreamMarkdownKt {
   public static final void StreamMarkdown(kotlinx.coroutines.flow.Flow<java.lang.String>, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.Throwable, kotlin.Unit>, long, boolean, com.jackcaow.smoothmarkdown.MarkdownStyleSheet, com.jackcaow.smoothmarkdown.ParserPluginRegistry, kotlin.jvm.functions.Function3<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function5<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.CodeBlockOptions, kotlin.jvm.functions.Function4<? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.SmoothSelectionController, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function3<? super java.lang.Throwable, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, java.util.List<com.jackcaow.smoothmarkdown.SmoothSelectionMenuAction>, boolean, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, boolean, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, com.jackcaow.smoothmarkdown.MarkdownStrings, boolean, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.MarkdownSelectionTarget, kotlin.Unit>, kotlin.jvm.functions.Function2<? super java.lang.String, ? super java.lang.String, kotlin.Unit>, androidx.compose.runtime.Composer, int, int, int, int, int, int);
   public static final void StreamMarkdown(kotlinx.coroutines.flow.StateFlow<java.lang.String>, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.Throwable, kotlin.Unit>, long, boolean, com.jackcaow.smoothmarkdown.MarkdownStyleSheet, com.jackcaow.smoothmarkdown.ParserPluginRegistry, kotlin.jvm.functions.Function3<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function5<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.CodeBlockOptions, kotlin.jvm.functions.Function4<? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.SmoothSelectionController, kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function3<? super java.lang.Throwable, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, java.util.List<com.jackcaow.smoothmarkdown.SmoothSelectionMenuAction>, boolean, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, boolean, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, com.jackcaow.smoothmarkdown.MarkdownStrings, boolean, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.MarkdownSelectionTarget, kotlin.Unit>, kotlin.jvm.functions.Function2<? super java.lang.String, ? super java.lang.String, kotlin.Unit>, androidx.compose.runtime.Composer, int, int, int, int, int, int);
-  public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$4(androidx.compose.runtime.State);
-  public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$3(androidx.compose.runtime.State);
-  public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$12(androidx.compose.runtime.State);
-  public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$11(androidx.compose.runtime.State);
 }
 public final class com.jackcaow.smoothmarkdown.StreamSnapshot {
   public static final int $stable;
@@ -2444,9 +2356,6 @@ public final class com.jackcaow.smoothmarkdown.ThinkingPlugin implements com.jac
   public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
   public void complete(com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List<java.lang.String>);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
-  public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
 }
 public final class com.jackcaow.smoothmarkdown.ToolCallNode extends com.jackcaow.smoothmarkdown.PluginBlockNode {
   public static final int $stable;
@@ -2477,13 +2386,6 @@ public final class com.jackcaow.smoothmarkdown.ToolCallPlugin implements com.jac
   public boolean isClosingLine(java.lang.String);
   public void complete(com.jackcaow.smoothmarkdown.PluginBlockNode, java.util.List<java.lang.String>);
   public void RenderBlock(com.jackcaow.smoothmarkdown.PluginBlockNode, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.ast.Markup, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, androidx.compose.runtime.Composer, int);
-  public boolean isClosingLine(com.jackcaow.smoothmarkdown.PluginBlockNode, java.lang.String);
-  public com.jackcaow.smoothmarkdown.PluginBlockNode parseFencedCodeBlock(com.jackcaow.smoothmarkdown.ast.FencedCodeBlock);
-  public java.lang.String documentText(com.jackcaow.smoothmarkdown.PluginBlockNode);
-  public com.jackcaow.smoothmarkdown.MarkdownBlockSelectionMode selectionMode(com.jackcaow.smoothmarkdown.PluginBlockNode);
-}
-public final class com.jackcaow.smoothmarkdown.ToolCallPlugin$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
 }
 public final class com.jackcaow.smoothmarkdown.ToolCallStatus extends java.lang.Enum<com.jackcaow.smoothmarkdown.ToolCallStatus> {
   public static final com.jackcaow.smoothmarkdown.ToolCallStatus RUNNING;
@@ -2776,9 +2678,6 @@ public final class com.jackcaow.smoothmarkdown.editor.FormattedBlockTransforms {
   public static final int $stable;
   public final java.lang.String replacement(java.lang.String, java.util.List<com.jackcaow.smoothmarkdown.editor.MarkdownDocumentBlock>, com.jackcaow.smoothmarkdown.editor.MarkdownEditorCommand);
 }
-public final class com.jackcaow.smoothmarkdown.editor.FormattedBlockTransforms$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-}
 public final class com.jackcaow.smoothmarkdown.editor.FormattedDragSelection {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.editor.FormattedDragSelection(com.jackcaow.smoothmarkdown.editor.MarkdownEditorController);
@@ -2837,7 +2736,6 @@ public final class com.jackcaow.smoothmarkdown.editor.FormattedSearch {
   public static final int $stable;
   public final java.util.List<com.jackcaow.smoothmarkdown.editor.FormattedSearchMatch> getMatches();
   public final java.util.List<androidx.compose.ui.text.TextRange> ranges(com.jackcaow.smoothmarkdown.editor.FormattedSearchTarget);
-  public static final com.jackcaow.smoothmarkdown.editor.FormattedSearch access$getEmpty$cp();
   public com.jackcaow.smoothmarkdown.editor.FormattedSearch(java.util.List, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.FormattedSearch$Companion {
@@ -3006,9 +2904,6 @@ public final class com.jackcaow.smoothmarkdown.editor.FormattedTextGesture {
   public static com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints move-38CYSgM$default(com.jackcaow.smoothmarkdown.editor.FormattedTextGesture, com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints, com.jackcaow.smoothmarkdown.editor.FormattedTextHandle, long, java.lang.String, float, int, java.lang.Object);
   public final com.jackcaow.smoothmarkdown.editor.FormattedTextHandle hitHandle-ubNVwUQ(com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints, long, java.lang.String, float);
 }
-public final class com.jackcaow.smoothmarkdown.editor.FormattedTextGesture$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-}
 public final class com.jackcaow.smoothmarkdown.editor.FormattedTextHandle extends java.lang.Enum<com.jackcaow.smoothmarkdown.editor.FormattedTextHandle> {
   public static final com.jackcaow.smoothmarkdown.editor.FormattedTextHandle ANCHOR;
   public static final com.jackcaow.smoothmarkdown.editor.FormattedTextHandle FOCUS;
@@ -3098,7 +2993,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection 
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection$Companion {
   public final com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection resolve(java.lang.String, com.jackcaow.smoothmarkdown.editor.MarkdownDocument, com.jackcaow.smoothmarkdown.editor.MarkdownFormattedTextSelection, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry);
-  public static final boolean access$wellFormedUtf16(com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection$Companion, java.lang.String);
   public com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownCodeTextSelection$Edit {
@@ -3222,7 +3116,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities
   public int hashCode();
   public boolean equals(java.lang.Object);
   public com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities();
-  public static final com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities access$getAll$cp();
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities$Companion {
   public final com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities getAll();
@@ -3529,10 +3422,6 @@ final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorController$SourceTe
   public int hashCode();
   public boolean equals(java.lang.Object);
 }
-public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorController$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-  public static final int[] $EnumSwitchMapping$1;
-}
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorCustomBlockContext {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.editor.MarkdownEditorCustomBlockContext(java.lang.String, com.jackcaow.smoothmarkdown.editor.MarkdownBlockKind, java.lang.String, java.lang.String, kotlin.jvm.functions.Function0<kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, java.lang.Boolean>, kotlin.jvm.functions.Function0<java.lang.Boolean>);
@@ -3727,6 +3616,7 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme {
   public final androidx.compose.ui.unit.Dp getPreviewPadding-lTKBWiU();
   public final androidx.compose.ui.unit.Dp getBlockPadding-lTKBWiU();
   public final androidx.compose.ui.unit.Dp getTablePadding-lTKBWiU();
+  public com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme();
   public final com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme merge(com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme);
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color component2-QN2ZGVo();
@@ -3763,7 +3653,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme {
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme();
   public com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.text.TextStyle, androidx.compose.ui.unit.Dp, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownEditorThemeKt {
@@ -3792,9 +3681,6 @@ final class com.jackcaow.smoothmarkdown.editor.MarkdownFormattedBlock$FencedPart
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-}
-public final class com.jackcaow.smoothmarkdown.editor.MarkdownFormattedBlock$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownFormattedTextPosition {
   public static final int $stable;
@@ -3856,7 +3742,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$Comp
   public final java.lang.String escapedPlainText$smoothmarkdown(java.lang.String);
   public final com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing parse(java.lang.String, boolean);
   public static com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing parse$default(com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$Companion, java.lang.String, boolean, int, java.lang.Object);
-  public static final java.lang.String access$escapeMarkdown(com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$Companion, java.lang.String, boolean);
   public com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
 final class com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$InlineBoundary {
@@ -3913,9 +3798,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$Spli
   public int hashCode();
   public boolean equals(java.lang.Object);
 }
-public final class com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-}
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownListItemSelection {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.editor.MarkdownListItemSelection(java.lang.String, java.lang.String, java.util.List<java.lang.Integer>, java.util.List<java.lang.Integer>);
@@ -3945,7 +3827,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection$Companion {
   public final com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection resolve(java.lang.String, com.jackcaow.smoothmarkdown.editor.MarkdownDocument, com.jackcaow.smoothmarkdown.editor.MarkdownFormattedTextSelection, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry);
-  public static final boolean access$wellFormedUtf16(com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection$Companion, java.lang.String);
   public com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownQuoteTextSelection$Edit {
@@ -4087,7 +3968,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceList {
   public final java.lang.String deleteSiblingItems(java.util.List<java.lang.Integer>, int, int);
   public final java.lang.String applyInlineToSiblingItems(java.util.List<java.lang.Integer>, int, int, com.jackcaow.smoothmarkdown.editor.InlineMarkKind, java.lang.String, boolean);
   public com.jackcaow.smoothmarkdown.editor.MarkdownSourceList(java.lang.String, com.jackcaow.smoothmarkdown.editor.MarkdownBlockKind, java.util.List, kotlin.jvm.internal.DefaultConstructorMarker);
-  public static final kotlin.text.Regex access$getMarker$cp();
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceList$BlockPasteEdit {
   public static final int $stable;
@@ -4275,12 +4155,10 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote {
   public final java.util.List<com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote$Line> getLines();
   public final java.lang.String replaceVisibleLine(int, java.lang.String, boolean);
   public final java.lang.String replaceLineContent(int, java.lang.String);
-  public static final kotlin.text.Regex access$getMarker$cp();
   public com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote(com.jackcaow.smoothmarkdown.editor.MarkdownDocumentBlock, java.util.List, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote$Companion {
   public final com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote parse(com.jackcaow.smoothmarkdown.editor.MarkdownDocumentBlock);
-  public static final boolean access$wellFormedUtf16(com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote$Companion, java.lang.String);
   public com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceQuote$Line {
@@ -4343,9 +4221,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceTable$Compan
   public final com.jackcaow.smoothmarkdown.editor.MarkdownSourceTable parse(java.lang.String);
   public com.jackcaow.smoothmarkdown.editor.MarkdownSourceTable$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
-public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceTable$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-}
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceTableAtRange {
   public static final int $stable;
   public final long getRange-d9O1mEE();
@@ -4362,7 +4237,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceTableAtRange
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownSourceTableKt {
   public static final com.jackcaow.smoothmarkdown.editor.MarkdownSourceTableAtRange findSourceTable(java.lang.String, int);
   public static final androidx.compose.ui.text.TextRange sourceTableCellContentRange(java.lang.String, int, int);
-  public static final java.util.List access$sourceCellRanges(java.lang.String);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownTableAlignment extends java.lang.Enum<com.jackcaow.smoothmarkdown.editor.MarkdownTableAlignment> {
   public static final com.jackcaow.smoothmarkdown.editor.MarkdownTableAlignment LEFT;
@@ -4415,8 +4289,6 @@ public final class com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Companion {
   public final com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection resolve(java.lang.String, com.jackcaow.smoothmarkdown.editor.MarkdownDocument, com.jackcaow.smoothmarkdown.editor.MarkdownFormattedTextSelection, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry);
-  public static final boolean access$wellFormedUtf16(com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Companion, java.lang.String);
-  public static final java.lang.String access$escapeUnescapedPipes(com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Companion, java.lang.String);
   public com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Companion(kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Edit {
@@ -4457,26 +4329,6 @@ final class com.jackcaow.smoothmarkdown.editor.MarkdownTableTextSelection$Endpoi
 public final class com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt {
   public static final void SmoothMarkdownEditor(com.jackcaow.smoothmarkdown.editor.MarkdownEditorController, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, kotlin.jvm.functions.Function1<? super kotlin.coroutines.Continuation<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorImageSelection>, ? extends java.lang.Object>, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorImagePickEvent, kotlin.Unit>, kotlin.jvm.functions.Function1<? super kotlin.coroutines.Continuation<? super java.lang.String>, ? extends java.lang.Object>, kotlin.jvm.functions.Function2<? super java.lang.String, ? super kotlin.coroutines.Continuation<? super kotlin.Unit>, ? extends java.lang.Object>, kotlin.jvm.functions.Function3<? super java.lang.String, ? super java.lang.String, ? super kotlin.coroutines.Continuation<? super kotlin.Unit>, ? extends java.lang.Object>, kotlin.jvm.functions.Function2<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorHostAction, ? super java.lang.Throwable, kotlin.Unit>, boolean, java.util.List<java.lang.String>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, boolean, java.util.List<com.jackcaow.smoothmarkdown.editor.MarkdownEditorSlashCommand>, com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities, java.util.List<? extends com.jackcaow.smoothmarkdown.editor.MarkdownEditorCommand>, boolean, java.util.List<? extends kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>>, java.util.List<? extends kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>>, kotlin.jvm.functions.Function3<? super kotlin.jvm.functions.Function2<? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.editor.MarkdownDocumentBlock, java.lang.Boolean>, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorCustomBlockContext, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, kotlin.jvm.functions.Function3<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorCustomBlockEditorContext, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, boolean, kotlin.jvm.functions.Function2<? super androidx.compose.ui.input.key.KeyEvent, ? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorController, java.lang.Boolean>, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorCommand, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorMode, kotlin.Unit>, kotlin.jvm.functions.Function1<? super androidx.compose.ui.text.TextRange, kotlin.Unit>, kotlin.jvm.functions.Function1<? super java.lang.Boolean, kotlin.Unit>, kotlin.jvm.functions.Function1<? super com.jackcaow.smoothmarkdown.editor.MarkdownEditorPerformanceSnapshot, kotlin.Unit>, boolean, kotlin.jvm.functions.Function1<? super java.lang.Boolean, kotlin.Unit>, com.jackcaow.smoothmarkdown.editor.MarkdownEditorTheme, com.jackcaow.smoothmarkdown.MarkdownBuilderRegistry, kotlin.jvm.functions.Function5<? super java.lang.String, ? super java.lang.String, ? super java.lang.String, ? super androidx.compose.runtime.Composer, ? super java.lang.Integer, kotlin.Unit>, boolean, com.jackcaow.smoothmarkdown.MarkdownStyleSheet, com.jackcaow.smoothmarkdown.MarkdownResourceOptions, com.jackcaow.smoothmarkdown.MarkdownStrings, androidx.compose.runtime.Composer, int, int, int, int, int, int, int);
   public static final com.jackcaow.smoothmarkdown.editor.MarkdownEditorCommand formatShortcutCommand-1BqyeyM(long, boolean, boolean);
-  public static final boolean access$SmoothMarkdownEditor$lambda$14(androidx.compose.runtime.MutableState);
-  public static final void access$SmoothMarkdownEditor$lambda$21(androidx.compose.runtime.MutableIntState, int);
-  public static final void access$SmoothMarkdownEditor$lambda$24(androidx.compose.runtime.MutableIntState, int);
-  public static final java.lang.String access$SmoothMarkdownEditor$lambda$17(androidx.compose.runtime.MutableState);
-  public static final com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints access$FormattedBlockPane$lambda$8(androidx.compose.runtime.MutableState);
-  public static final void access$FormattedBlockPane$lambda$9(androidx.compose.runtime.MutableState, com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints);
-  public static final void access$FormattedBlockPane$lambda$12(androidx.compose.runtime.MutableState, boolean);
-  public static final androidx.compose.ui.text.input.TextFieldValue access$FormattedQuote$lambda$3$2(androidx.compose.runtime.MutableState);
-  public static final void access$FormattedQuote$lambda$3$3(androidx.compose.runtime.MutableState, androidx.compose.ui.text.input.TextFieldValue);
-  public static final void access$SmoothMarkdownEditor$lambda$12(androidx.compose.runtime.MutableState, java.lang.String);
-  public static final void access$SmoothMarkdownEditor$lambda$9(androidx.compose.runtime.MutableState, boolean);
-  public static final void access$FormattedTable$lambda$0$cell$3(androidx.compose.runtime.MutableState, long);
-  public static final boolean access$SmoothMarkdownEditor$applyEditorCommand(com.jackcaow.smoothmarkdown.editor.MarkdownEditorCapabilities, boolean, kotlin.jvm.functions.Function1, com.jackcaow.smoothmarkdown.editor.MarkdownEditorController, com.jackcaow.smoothmarkdown.editor.MarkdownEditorCommand);
-  public static final void access$SmoothMarkdownEditor$lambda$15(androidx.compose.runtime.MutableState, boolean);
-  public static final int access$SmoothMarkdownEditor$lambda$29(androidx.compose.runtime.MutableIntState);
-  public static final void access$SmoothMarkdownEditor$lambda$30(androidx.compose.runtime.MutableIntState, int);
-  public static final void access$SmoothMarkdownEditor$toggleFocusMode(kotlin.jvm.functions.Function1, androidx.compose.runtime.MutableState);
-  public static final void access$FormattedBlockPane$lambda$31$0$0$9$0$11(androidx.compose.runtime.MutableIntState, int);
-  public static final int access$FormattedBlockPane$lambda$31$0$0$9$0$10(androidx.compose.runtime.MutableIntState);
-  public static final void access$FormattedBlockPane$lambda$31$0$0$9$0$14(androidx.compose.runtime.MutableState, java.lang.String);
 }
 public final class com.jackcaow.smoothmarkdown.editor.TableCellTextSpan {
   public static final int $stable;
@@ -4561,7 +4413,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram {
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDiagramViewKt {
   public static final void MermaidDiagramView(java.lang.String, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, java.lang.String, com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, androidx.compose.runtime.Composer, int, int);
-  public static final int access$MermaidDiagramContent$depth(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, java.util.Map, com.jackcaow.smoothmarkdown.mermaid.MermaidSubgraph);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDirection extends java.lang.Enum<com.jackcaow.smoothmarkdown.mermaid.MermaidDirection> {
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidDirection TB;
@@ -4616,7 +4467,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidERParser {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.mermaid.MermaidERParser();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram parse(java.util.List<java.lang.String>);
-  public static final kotlin.text.Regex access$getOperatorRegex$cp();
 }
 final class com.jackcaow.smoothmarkdown.mermaid.MermaidERParser$Companion {
   public final kotlin.text.Regex getOperatorRegex();
@@ -4716,9 +4566,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidFlowchartParser {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.mermaid.MermaidFlowchartParser();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram parse(java.util.List<java.lang.String>);
-  public static final kotlin.text.Regex access$getArrowPattern$cp();
-  public static final java.util.List access$getShapePatterns$cp();
-  public static final java.util.Map access$getNamedColors$cp();
 }
 final class com.jackcaow.smoothmarkdown.mermaid.MermaidFlowchartParser$Companion {
   public final kotlin.text.Regex getArrowPattern();
@@ -4999,11 +4846,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayout {
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidLayout INSTANCE;
   public static final int $stable;
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult compute(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram);
-}
-public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayout$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
-  public static final int[] $EnumSwitchMapping$1;
-  public static final int[] $EnumSwitchMapping$2;
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutKt {
   public static final java.lang.Float todayMarkerX(com.jackcaow.smoothmarkdown.mermaid.MermaidGanttPlacement, long, boolean);
@@ -5306,8 +5148,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarPlacement {
   public boolean equals(java.lang.Object);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarXYParserKt {
-  public static final java.util.List access$splitQuoted(java.lang.String);
-  public static final java.lang.String access$unquote(java.lang.String);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarXYViewKt {
   public static final void MermaidRadarView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
@@ -5336,7 +5176,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidSequenceParser {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.mermaid.MermaidSequenceParser();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram parse(java.util.List<java.lang.String>);
-  public static final kotlin.text.Regex access$getMessagePattern$cp();
 }
 final class com.jackcaow.smoothmarkdown.mermaid.MermaidSequenceParser$Companion {
   public final kotlin.text.Regex getMessagePattern();
@@ -5367,13 +5206,6 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidStructuredParser {
   public static final java.lang.String ID;
   public com.jackcaow.smoothmarkdown.mermaid.MermaidStructuredParser(com.jackcaow.smoothmarkdown.mermaid.MermaidKind);
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram parse(java.util.List<java.lang.String>);
-  public static final kotlin.text.Regex access$getIDENTIFIER$cp();
-  public static final kotlin.text.Regex access$getSTATE_TRANSITION$cp();
-  public static final kotlin.text.Regex access$getSTATE_ALIAS$cp();
-  public static final kotlin.text.Regex access$getSTATE_DECLARATION$cp();
-  public static final kotlin.text.Regex access$getMEMBER$cp();
-  public static final kotlin.text.Regex access$getCLASS_DECLARATION$cp();
-  public static final kotlin.text.Regex access$getCLASS_RELATION$cp();
 }
 final class com.jackcaow.smoothmarkdown.mermaid.MermaidStructuredParser$Companion {
   public final kotlin.text.Regex getIDENTIFIER();
@@ -5852,9 +5684,6 @@ public final class com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode$K
   public static com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode$Kind[] values();
   public static com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode$Kind valueOf(java.lang.String);
   public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode$Kind> getEntries();
-}
-public final class com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode$WhenMappings {
-  public static final int[] $EnumSwitchMapping$0;
 }
 public final class com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownReference {
   public com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownReference(java.lang.String, java.lang.String);

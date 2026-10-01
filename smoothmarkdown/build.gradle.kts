@@ -4,20 +4,26 @@ import org.gradle.jvm.tasks.Jar
 
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.android")
     `maven-publish`
     signing
 }
 
 android {
     namespace = "com.jackcaow.smoothmarkdown"
-    compileSdk = 37
+    compileSdk = 35
     defaultConfig {
         minSdk = 24
+        aarMetadata { minCompileSdk = 35; minAgpVersion = "8.6.0" }
         consumerProguardFiles("consumer-rules.pro")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
+    // The Compose 1.6 test manifest uses a legacy ActionBar Activity: target 34 avoids
+    // both the old-app dialog and API 35 enforced edge-to-edge hiding its test content.
+    // This is only the test APK; the Demo targets API 35 and AAR consumers choose their own target.
+    testOptions { targetSdk = 34 }
     publishing {
         singleVariant("release") {
             withSourcesJar()
@@ -100,27 +106,22 @@ if (signingKey.isPresent && signingPassword.isPresent) {
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        // The reader and Core are owned modules; keep their transport SPI internal.
-        val coreProject = project(":smoothmarkdown-core")
-        val coreClasses = coreProject.layout.buildDirectory.dir("classes/kotlin/main").get().asFile.absolutePath
-        freeCompilerArgs.add(providers.provider {
-            val coreJar = coreProject.tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath
-            "-Xfriend-paths=$coreClasses,$coreJar"
-        })
-    }
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions.jvmTarget = "17"
+    kotlinOptions.moduleName = "smoothmarkdown"
+    kotlinOptions.freeCompilerArgs += "-Xjvm-default=all-compatibility"
+    // Core publishes one unversioned source-build JAR; these are compiler inputs, not runtime dependencies.
+    val core = rootProject.layout.projectDirectory.dir("smoothmarkdown-core/build")
+    kotlinOptions.freeCompilerArgs += "-Xfriend-paths=${core.dir("classes/kotlin/main").asFile},${core.file("libs/smoothmarkdown-core.jar").asFile}"
 }
 
 dependencies {
     api(project(":smoothmarkdown-core"))
-    api(platform("androidx.compose:compose-bom:2026.09.00"))
-    api("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    api("androidx.compose.foundation:foundation:1.6.8")
+    implementation("androidx.compose.material3:material3:1.2.1")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     testImplementation("junit:junit:4.13.2")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.06.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")

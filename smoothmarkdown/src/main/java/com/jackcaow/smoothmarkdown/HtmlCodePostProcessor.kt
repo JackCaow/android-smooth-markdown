@@ -14,9 +14,10 @@ internal class HtmlCodePostProcessor(private val source: String) {
         var child = parent.firstChild
         while (child != null) {
             val next = child.next
-            if (child is DetailsNode) {
-                child.summary.forEach { HtmlCodePostProcessor(child.summarySource).process(it) }
-                child.body.forEach { HtmlCodePostProcessor(child.bodySource).process(it) }
+            val details = child as? DetailsNode
+            if (details != null) {
+                details.summary.forEach { HtmlCodePostProcessor(details.summarySource).process(it) }
+                details.body.forEach { HtmlCodePostProcessor(details.bodySource).process(it) }
             }
             val replacement = if (child is HtmlInline && isOpeningCode(child)) replaceCode(child, parent) else null
             if (replacement != null) {

@@ -48,7 +48,10 @@ data class MarkdownPluginPanelTokens(
     val iconStyle: TextStyle? = null,
     val dividerThickness: Dp = 1.dp,
     val iconSpacing: Dp = 8.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(borderColor = null)
+}
 
 /**
  * Admonition tokens. [accentColors] maps each semantic type to its stripe/title color;
@@ -77,4 +80,7 @@ data class MarkdownAdmonitionTokens(
     val accentHeight: Dp = 64.dp,
     val titleColor: Color? = null,
     val titleStyle: TextStyle? = null,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(borderColor = null)
+}

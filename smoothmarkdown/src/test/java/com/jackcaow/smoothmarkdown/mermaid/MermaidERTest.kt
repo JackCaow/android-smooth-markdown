@@ -37,7 +37,7 @@ class MermaidERTest {
         assertEquals(3, boxes.size)
         assertTrue(boxes[0].y + boxes[0].height < boxes[1].y)
         assertTrue(boxes[1].y + boxes[1].height < boxes[2].y)
-        assertEquals(2, layout.er.relationships.size)
+        assertEquals(2, layout.er!!.relationships.size)
     }
 
     @Test fun allSourceAndTargetCardinalitiesPreservedForDottedRelations() {

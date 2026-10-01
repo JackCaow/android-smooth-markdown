@@ -16,6 +16,8 @@ data class MarkdownSelectionTarget(
     val text: AnnotatedString,
     val offsetAtWindowPosition: ((Offset) -> Int)? = null,
 ) {
+    internal var sourceOrder: List<Int>? = null
+    internal var layoutResult: TextLayoutResult? = null
     internal var wordBoundaryAtWindowPosition: ((Offset) -> TextRange)? = null
     internal var containsTextAtWindowPosition: ((Offset) -> Boolean)? = null
 }

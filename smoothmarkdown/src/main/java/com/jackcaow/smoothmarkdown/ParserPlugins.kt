@@ -147,9 +147,10 @@ class ParserPluginRegistry {
             var child = parent.firstChild
             while (child != null) {
                 val next = child.next
-                if (child is FencedCodeBlock) {
+                val fenced = child as? FencedCodeBlock
+                if (fenced != null) {
                     val replacement = blocks.firstNotNullOfOrNull { plugin ->
-                        plugin.parseFencedCodeBlock(child)?.also { it.pluginId = plugin.id }
+                        plugin.parseFencedCodeBlock(fenced)?.also { it.pluginId = plugin.id }
                     }
                     if (replacement != null) {
                         child.insertBefore(replacement)

@@ -19,4 +19,7 @@ data class MarkdownDocumentTokens(
     val tableBorderColor: Color? = null,
     val ruleColor: Color? = null,
     val tableHeaderBackgroundColor: Color? = null,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(backgroundColor = null)
+}

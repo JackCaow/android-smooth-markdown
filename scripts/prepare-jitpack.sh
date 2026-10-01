@@ -40,7 +40,7 @@ task_sdkmanager="$task_sdk_root/cmdline-tools/12.0/bin/sdkmanager"
 # still exits the script; a pipe with pipefail would reject successful acceptance.
 "$task_sdkmanager" --sdk_root="$task_sdk_root" --licenses < <(yes)
 "$task_sdkmanager" --sdk_root="$task_sdk_root" \
-    'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+    'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.2.13676358'
 test -f "$ANDROID_NDK_HOME/source.properties"
 grep '^Pkg.Revision' "$ANDROID_NDK_HOME/source.properties"
 

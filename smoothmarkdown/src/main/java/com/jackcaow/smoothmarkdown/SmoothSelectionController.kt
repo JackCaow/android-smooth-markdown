@@ -1,6 +1,5 @@
 package com.jackcaow.smoothmarkdown
 
-import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,7 +16,7 @@ import com.jackcaow.smoothmarkdown.ast.IndentedCodeBlock
 
 /** Programmatic control of the reader's selectable text region. */
 class SmoothSelectionController {
-    private var region: SelectionState? = null
+    private var region by mutableStateOf<ReaderSelectionState?>(null)
     private var anchors: NonTextAnchorRegistry? = null
     private val targets = mutableMapOf<Any, MarkdownSelectionTarget>()
     private var document: Node? = null
@@ -38,6 +37,8 @@ class SmoothSelectionController {
         private set
     internal var fullDocumentSelectionEstablished by mutableStateOf(false)
         private set
+
+    internal val selectionStateForTesting: ReaderSelectionState? get() = region
 
     /** The currently selected native text, omitting non-text selection anchors. */
     val selectedText: String
@@ -130,9 +131,15 @@ class SmoothSelectionController {
         if (range == null || range.collapsed) state.clear() else state.select(range)
     }
 
-    internal fun track(target: MarkdownSelectionTarget) { targets[target.key] = target }
+    internal fun track(target: MarkdownSelectionTarget) {
+        targets[target.key] = target
+        region?.track(target)
+    }
 
-    internal fun removeTarget(key: Any) { targets.remove(key) }
+    internal fun removeTarget(key: Any) {
+        targets.remove(key)
+        region?.remove(key)
+    }
 
     internal fun bindDocument(
         node: Node,
@@ -173,13 +180,14 @@ class SmoothSelectionController {
 
     internal fun detailsExpanded(node: DetailsNode): Boolean? = detailsExpanded[node]
 
-    internal fun attach(state: SelectionState, anchorRegistry: NonTextAnchorRegistry, copyAll: (String) -> Unit) {
+    internal fun attach(state: ReaderSelectionState, anchorRegistry: NonTextAnchorRegistry, copyAll: (String) -> Unit) {
         region = state
+        targets.values.forEach(state::track)
         anchors = anchorRegistry
         copyDocumentText = copyAll
     }
 
-    internal fun detach(state: SelectionState) {
+    internal fun detach(state: ReaderSelectionState) {
         if (region === state) {
             region = null
             anchors = null
@@ -203,7 +211,19 @@ class SmoothSelectionController {
     /** Semantic copy is valid only while native handles still span the original full selection. */
     internal fun fullDocumentSemanticText(selectedTexts: List<AnnotatedString>): String? {
         if (!fullDocumentSelectionMode || !fullDocumentSelectionEstablished) return null
-        return exactWholeDocumentCopyText(fullDocumentNativeSnapshot, selectedTexts, fullDocumentProjection)
+        val state = region ?: return null
+        if (!state.selectsAllRegisteredText) return null
+        val projection = fullDocumentProjection ?: return null
+        val snapshot = fullDocumentNativeSnapshot ?: return null
+        val registeredAnchors = anchors?.snapshot().orEmpty()
+        // Image measurements can change the invisible anchor's row count after full layout.
+        // Require the complete owned range and unchanged visible text, rather than treating
+        // an anchor geometry update as if the user had moved a selection handle.
+        return projection.text.takeIf {
+            projection.complete && snapshot.isNotEmpty() &&
+                visibleSelectedText(snapshot, registeredAnchors).text ==
+                visibleSelectedText(selectedTexts, registeredAnchors).text
+        }
     }
 
     internal fun exitFullDocumentSelection() {
@@ -310,8 +330,7 @@ internal fun readerSelectionRangeAt(
             it.containsTextAtWindowPosition?.invoke(position) != false }
         .minByOrNull { it.boundsInWindow.width * it.boundsInWindow.height }
         ?: return null
-    val matches = targets.filter { it.text.text == target.text.text }
-        .sortedWith(compareBy({ it.boundsInWindow.top }, { it.boundsInWindow.left }))
+    val matches = orderedReaderSelectionTargets(targets).filter { it.text.text == target.text.text }
     val ordinal = matches.indexOfFirst { it.key === target.key }
     if (ordinal < 0) return null
     val index = selectableTexts.withIndex().filter { it.value.text == target.text.text }

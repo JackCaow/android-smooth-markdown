@@ -2,6 +2,8 @@
 
 Existing flat entry points remain available. The grouped entry point is selected by supplying `renderOptions`; ordinary calls without this argument keep their old meaning.
 
+For the lower Android/Kotlin/Compose baseline and selection migration for custom builders, see [Android compatibility](android-compatibility.md). These changes do not alter the existing `0.3.1` artifact.
+
 ## Reader
 
 ```kotlin

@@ -19,7 +19,10 @@ data class MarkdownMermaidTokens(
     val typography: MarkdownMermaidTypography? = null,
     val outerPadding: PaddingValues = PaddingValues(vertical = 8.dp),
     val maxHeight: Dp = 420.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(colors = null)
+}
 
 /** Platform text roles; unspecified roles inherit the host theme. */
 data class MarkdownMermaidTypography(

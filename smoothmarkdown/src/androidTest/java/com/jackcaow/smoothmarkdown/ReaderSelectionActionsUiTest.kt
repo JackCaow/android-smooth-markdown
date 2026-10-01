@@ -1,12 +1,5 @@
 package com.jackcaow.smoothmarkdown
 
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuData
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuItem
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuSession
-import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
-import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider
-import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -14,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createComposeRule
-import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -60,7 +52,7 @@ class ReaderSelectionActionsUiTest {
         val provider = RecordingTextContextMenuProvider()
         var customCopied: String? = null
         compose.setContent {
-            CompositionLocalProvider(LocalTextContextMenuToolbarProvider provides provider) {
+            CompositionLocalProvider(LocalReaderSelectionMenuObserver provides provider::record) {
                 MaterialTheme {
                     SmoothMarkdown(
                         markdown = "alpha beta gamma",
@@ -80,11 +72,11 @@ class ReaderSelectionActionsUiTest {
         val first = targets.values.first { it.text.text == "alpha beta gamma" }
         compose.runOnIdle { controller.selectWordAt(pointForOffset(first, 7)) }
         compose.waitUntil(timeoutMillis = 5_000) { provider.data != null }
-        val components = provider.data!!.components.filterIsInstance<TextContextMenuItem>()
-        assertFalse("default Copy should be hidden", components.any { it.key == TextContextMenuKeys.CopyKey })
+        val components = provider.data!!.actions
+        assertFalse("default Copy should be hidden", provider.data!!.defaultCopyVisible)
         val custom = components.firstOrNull { it.label == "Copy visible" }
         assertNotNull("custom native menu action missing", custom)
-        compose.runOnIdle { custom!!.onClick(RecordingSession()) }
+        compose.runOnIdle { provider.data!!.invokeAction(custom!!.key) }
         assertEquals("beta", customCopied)
     }
 
@@ -119,7 +111,7 @@ class ReaderSelectionActionsUiTest {
         val provider = RecordingTextContextMenuProvider()
         var customCopied: String? = null
         compose.setContent {
-            CompositionLocalProvider(LocalTextContextMenuToolbarProvider provides provider) {
+            CompositionLocalProvider(LocalReaderSelectionMenuObserver provides provider::record) {
                 MaterialTheme {
                     SmoothMarkdown(
                         markdown = "Before.\n\n---\n\nAfter.",
@@ -135,9 +127,8 @@ class ReaderSelectionActionsUiTest {
         }
         compose.runOnIdle { controller.selectAll() }
         compose.waitUntil(timeoutMillis = 5_000) { provider.data != null }
-        val custom = provider.data!!.components.filterIsInstance<TextContextMenuItem>()
-            .first { it.label == "Copy visible" }
-        compose.runOnIdle { custom.onClick(RecordingSession()) }
+        val custom = provider.data!!.actions.first { it.label == "Copy visible" }
+        compose.runOnIdle { provider.data!!.invokeAction(custom.key) }
         assertEquals("Before.\nAfter.", customCopied)
     }
 
@@ -150,15 +141,8 @@ class ReaderSelectionActionsUiTest {
         throw AssertionError("no point maps to rendered offset $desired")
     }
 
-    private class RecordingTextContextMenuProvider : TextContextMenuProvider {
-        @Volatile var data: TextContextMenuData? = null
-        override suspend fun showTextContextMenu(dataProvider: TextContextMenuDataProvider) {
-            data = dataProvider.data()
-            awaitCancellation()
-        }
-    }
-
-    private class RecordingSession : TextContextMenuSession {
-        override fun close() = Unit
+    private class RecordingTextContextMenuProvider {
+        @Volatile var data: ReaderSelectionMenuSnapshot? = null
+        fun record(snapshot: ReaderSelectionMenuSnapshot?) { data = snapshot }
     }
 }

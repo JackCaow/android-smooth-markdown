@@ -1,11 +1,12 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -18,6 +19,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class ReaderDetailsSelectionTest {
     @get:Rule val compose = createComposeRule()
 
@@ -69,15 +71,15 @@ class ReaderDetailsSelectionTest {
         val controller = SmoothSelectionController()
         val clipboard = RecordingClipboard()
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 MaterialTheme { SmoothMarkdown(source, selectable = true, selectionController = controller) }
             }
         }
         compose.onNodeWithText("Details summary", useUnmergedTree = true).performTouchInput { click() }
         val start = compose.onNodeWithText("Details body.", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot()
         val end = compose.onNodeWithText("After details.", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot("After details.".lastIndex)
         compose.onRoot().performTouchInput {
             down(start)
             advanceEventTime(750)
@@ -94,7 +96,7 @@ class ReaderDetailsSelectionTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+        val copied = clipboard.copiedText?.text.orEmpty()
         assertOrdered(copied, "body", "After details")
         assertFalse("Copy included details arrow: $copied", copied.contains("⌄") || copied.contains("›"))
     }
@@ -108,9 +110,9 @@ class ReaderDetailsSelectionTest {
         }
     }
 
-    private class RecordingClipboard : Clipboard {
-        var entry: ClipEntry? = null
-        override suspend fun getClipEntry(): ClipEntry? = entry
-        override suspend fun setClipEntry(clipEntry: ClipEntry?) { entry = clipEntry }
+    private class RecordingClipboard : ClipboardManager {
+        var copiedText: AnnotatedString? = null
+        override fun getText(): AnnotatedString? = copiedText
+        override fun setText(annotatedString: AnnotatedString) { copiedText = annotatedString }
     }
 }

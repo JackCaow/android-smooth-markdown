@@ -23,8 +23,8 @@ class MermaidPieTimelineTest {
         assertEquals(33.5, pie.percentage(pie.slices.first()), 0.001)
         val placement = MermaidLayout.compute(diagram)
         assertEquals(3, placement.pie!!.slices.size)
-        assertEquals(-90f, placement.pie.slices.first().startAngle, 0.001f)
-        assertEquals(360f, placement.pie.slices.sumOf { it.sweepAngle.toDouble() }.toFloat(), 0.01f)
+        assertEquals(-90f, placement.pie!!.slices.first().startAngle, 0.001f)
+        assertEquals(360f, placement.pie!!.slices.sumOf { it.sweepAngle.toDouble() }.toFloat(), 0.01f)
         assertTrue(placement.height > 300f)
     }
 
@@ -41,7 +41,7 @@ class MermaidPieTimelineTest {
               "Also Valid": 50
         """.trimIndent())!!
         assertEquals(listOf("Valid", "Also Valid"), diagram.pie!!.slices.map { it.label })
-        assertTrue(!diagram.pie.showValuesInLegend)
+        assertTrue(!diagram.pie!!.showValuesInLegend)
         assertNull(MermaidParser.parse("pie\n title Empty"))
     }
 
@@ -64,7 +64,7 @@ class MermaidPieTimelineTest {
         assertEquals("First video sharing", data.sections.last().events.single().description)
         val placement = MermaidLayout.compute(diagram)
         assertEquals(3, placement.timeline!!.sections.size)
-        assertTrue(placement.timeline.sections[0].marker.x < placement.timeline.sections[1].marker.x)
+        assertTrue(placement.timeline!!.sections[0].marker.x < placement.timeline!!.sections[1].marker.x)
         assertTrue(placement.width > 500f)
     }
 

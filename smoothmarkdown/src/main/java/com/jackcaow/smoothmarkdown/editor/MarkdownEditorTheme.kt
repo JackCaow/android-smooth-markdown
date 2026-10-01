@@ -38,6 +38,9 @@ data class MarkdownEditorTheme(
     val blockPadding: Dp? = null,
     val tablePadding: Dp? = null,
 ) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(editorColor = null)
+
     /** Local values override inherited values, matching Flutter's editorTheme precedence. */
     fun merge(local: MarkdownEditorTheme?): MarkdownEditorTheme = if (local == null) this else copy(
         editorColor = local.editorColor ?: editorColor,

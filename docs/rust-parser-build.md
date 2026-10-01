@@ -19,12 +19,12 @@ not a separate path selected because plugins or editing are enabled.
 
 ## Source build prerequisites
 
-- JDK 17 or newer, Python 3.5+, Android SDK API 37, and Android NDK 28 or newer.
+- JDK 17 or newer, Python 3.5+, Android SDK API 35, and Android NDK 28 or newer.
 - Stable Rust and the four Android targets:
 
 ```sh
 rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358'
+sdkmanager 'platforms;android-35' 'ndk;28.2.13676358'
 ```
 
 Install Rust through its official instructions at <https://www.rust-lang.org/tools/install>.
@@ -79,7 +79,7 @@ are IDE/debugging archives, not standalone Gradle projects.
 
 JitPack runs `scripts/prepare-jitpack.sh` before Gradle. It installs Google's
 command-line tools 12.0 for Java 17, verifies the official archive checksum, and
-installs API 37/build-tools 36/NDK 28.2 plus stable Rust and all four Android
+installs API 35/build-tools 35/NDK 28.2 plus stable Rust and all four Android
 Rust targets. It does not call the image's obsolete `sdkmanager`.
 The build script supports Python 3.5 or newer; the bootstrap prints the actual
 Python, Java, SDK manager, Rust and Cargo versions and fails on setup errors.
