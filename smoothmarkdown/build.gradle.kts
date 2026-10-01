@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.Test
 import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.jvm.tasks.Jar
 
@@ -13,6 +14,7 @@ android {
     compileSdk = 37
     defaultConfig {
         minSdk = 24
+        consumerProguardFiles("consumer-rules.pro")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
@@ -99,7 +101,16 @@ if (signingKey.isPresent && signingPassword.isPresent) {
 }
 
 kotlin {
-    compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 }
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        // The reader and Core are owned modules; keep their transport SPI internal.
+        val coreProject = project(":smoothmarkdown-core")
+        val coreClasses = coreProject.layout.buildDirectory.dir("classes/kotlin/main").get().asFile.absolutePath
+        freeCompilerArgs.add(providers.provider {
+            val coreJar = coreProject.tasks.named<Jar>("jar").get().archiveFile.get().asFile.absolutePath
+            "-Xfriend-paths=$coreClasses,$coreJar"
+        })
+    }
 }
 
 dependencies {
@@ -114,4 +125,25 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Build from owned sources before the Android plugin merges native libraries.
+tasks.named("preBuild") { dependsOn(rootProject.tasks.named("buildAndroidRustParser")) }
+tasks.withType<Test>().configureEach {
+    dependsOn(rootProject.tasks.named("buildHostRustParser"))
+    val nativeName = if (System.getProperty("os.name").startsWith("Mac")) "libsmooth_markdown_rust_jni.dylib" else "libsmooth_markdown_rust_jni.so"
+    systemProperty("smoothmarkdown.rust.library", rootProject.file("smoothmarkdown/build/generated/rust/host/$nativeName").absolutePath)
+    systemProperty("smoothmarkdown.rust.required", "true")
+    doFirst {
+        // Gradle's isolated worker loader is not necessarily a URLClassLoader.
+        systemProperty("smoothmarkdown.test.classpath", classpath.asPath)
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(rootProject.tasks.named("buildAndroidRustParser")) {
+            objects.directoryProperty().apply { set(layout.buildDirectory.dir("generated/rust/jniLibs")) }
+        }
+    }
 }

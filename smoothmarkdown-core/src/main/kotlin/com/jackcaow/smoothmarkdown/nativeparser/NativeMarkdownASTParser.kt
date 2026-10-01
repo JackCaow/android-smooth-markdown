@@ -7,7 +7,7 @@ class NativeMarkdownASTParser(
     private val enableGFM: Boolean = true,
     private val customInline: ((source: String, index: Int, absoluteOffset: Int) -> NativeCustomInlineMatch?)? = null,
     private val customBlock: ((lines: List<String>, startIndex: Int, sourceOffset: Int) -> NativeCustomBlockMatch?)? = null,
-    private val enableNativeExtensions: Boolean = true
+    private val enableNativeExtensions: Boolean = true,
 ) {
     private data class Line(val text: String, val raw: String, val start: Int, val sourceEnd: Int? = null,
                             val projected: Boolean = false, val lazyContinuation: Boolean = false, val virtualIndent: Int = 0) {
@@ -17,6 +17,9 @@ class NativeMarkdownASTParser(
     private data class Fence(val marker: Char, val count: Int, val info: String)
     private data class Marker(val indent: Int, val prefix: String, val ordered: Boolean, val number: Int, val style: Char, val overflowSpaces: Int)
     fun parse(source: String): NativeMarkdownNode {
+        if (customInline == null && customBlock == null) {
+            RustMarkdownBridge.parse(source, enableGFM, enableNativeExtensions)?.let { return filterHTML(it) }
+        }
         val lines = sourceLines(source)
         val references = linkedMapOf<String, NativeMarkdownReference>()
         fun collect(node: NativeMarkdownNode) {

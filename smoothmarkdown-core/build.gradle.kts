@@ -1,3 +1,6 @@
+import org.gradle.jvm.tasks.Jar
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("org.jetbrains.kotlin.jvm")
     `maven-publish`
@@ -32,4 +35,16 @@ val signingKey = providers.environmentVariable("SIGNING_KEY").orElse(providers.g
 val signingPassword = providers.environmentVariable("SIGNING_PASSWORD").orElse(providers.gradleProperty("signingPassword"))
 if (signingKey.isPresent && signingPassword.isPresent) {
     signing { useInMemoryPgpKeys(signingKey.get(), signingPassword.get()); sign(publishing.publications["release"]) }
+}
+
+dependencies { testImplementation("junit:junit:4.13.2") }
+tasks.withType<Test>().configureEach {
+    dependsOn(rootProject.tasks.named("buildHostRustParser"))
+    val nativeName = if (System.getProperty("os.name").startsWith("Mac")) "libsmooth_markdown_rust_jni.dylib" else "libsmooth_markdown_rust_jni.so"
+    systemProperty("smoothmarkdown.rust.library", rootProject.file("smoothmarkdown/build/generated/rust/host/$nativeName").absolutePath)
+    systemProperty("smoothmarkdown.rust.required", "true")
+}
+tasks.named<Jar>("sourcesJar") {
+    from(rootProject.file("rust-core")) { exclude("target/**", ".git/**"); into("rust-core") }
+    from("src/main/cpp") { into("native") }
 }
