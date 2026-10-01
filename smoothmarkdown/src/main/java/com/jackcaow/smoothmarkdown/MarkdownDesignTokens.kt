@@ -72,6 +72,14 @@ data class MarkdownQuoteTokens(
 
 /** Syntax colors may be overridden per theme without replacing the code renderer. */
 data class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: Color, val number: Color) {
+    // Optional accents leave the existing four-color constructor and data-class ABI intact.
+    var type: Color? = null
+    var function: Color? = null
+    var property: Color? = null
+    var operator: Color? = null
+    var punctuation: Color? = null
+    var diffAdd: Color? = null
+    var diffRemove: Color? = null
     companion object {
         fun light() = MarkdownSyntaxColors(Color(0xFFCF222E), Color(0xFF0A3069), Color(0xFF6E7781), Color(0xFF0550AE))
         fun dark() = MarkdownSyntaxColors(Color(0xFFFF7B72), Color(0xFFA5D6FF), Color(0xFF8B949E), Color(0xFF79C0FF))

@@ -128,6 +128,10 @@ public final class com.jackcaow.smoothmarkdown.CodeBlocksKt {
   public static final com.jackcaow.smoothmarkdown.ResolvedCodeBlockDecoration resolveCodeBlockDecoration-4WTKRHQ(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, long);
   public static final void EnhancedCodeBlock(java.lang.String, java.lang.String, androidx.compose.runtime.Composer, int);
 }
+public final class com.jackcaow.smoothmarkdown.CodeSyntaxLexerKt {
+  public static final java.lang.String normalizedCodeLanguage(java.lang.String);
+  public static final java.util.List<com.jackcaow.smoothmarkdown.CodeToken> tokenizeCode(java.lang.String, java.lang.String);
+}
 public final class com.jackcaow.smoothmarkdown.CodeToken {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.CodeToken(int, int, com.jackcaow.smoothmarkdown.CodeTokenKind);
@@ -148,6 +152,13 @@ public final class com.jackcaow.smoothmarkdown.CodeTokenKind extends java.lang.E
   public static final com.jackcaow.smoothmarkdown.CodeTokenKind STRING;
   public static final com.jackcaow.smoothmarkdown.CodeTokenKind COMMENT;
   public static final com.jackcaow.smoothmarkdown.CodeTokenKind NUMBER;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind TYPE;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind FUNCTION;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind PROPERTY;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind OPERATOR;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind PUNCTUATION;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind DIFF_ADD;
+  public static final com.jackcaow.smoothmarkdown.CodeTokenKind DIFF_REMOVE;
   public static com.jackcaow.smoothmarkdown.CodeTokenKind[] values();
   public static com.jackcaow.smoothmarkdown.CodeTokenKind valueOf(java.lang.String);
   public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.CodeTokenKind> getEntries();
@@ -1470,6 +1481,20 @@ public final class com.jackcaow.smoothmarkdown.MarkdownSyntaxColors {
   public final long getString-0d7_KjU();
   public final long getComment-0d7_KjU();
   public final long getNumber-0d7_KjU();
+  public final androidx.compose.ui.graphics.Color getType-QN2ZGVo();
+  public final void setType-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getFunction-QN2ZGVo();
+  public final void setFunction-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getProperty-QN2ZGVo();
+  public final void setProperty-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getOperator-QN2ZGVo();
+  public final void setOperator-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getPunctuation-QN2ZGVo();
+  public final void setPunctuation-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getDiffAdd-QN2ZGVo();
+  public final void setDiffAdd-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getDiffRemove-QN2ZGVo();
+  public final void setDiffRemove-Y2TPw74(androidx.compose.ui.graphics.Color);
   public final long component1-0d7_KjU();
   public final long component2-0d7_KjU();
   public final long component3-0d7_KjU();
