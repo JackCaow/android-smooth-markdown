@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown.editor
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
@@ -18,6 +19,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class FormattedTextEndpointsUiTest {
     @get:Rule val compose = createComposeRule()
 

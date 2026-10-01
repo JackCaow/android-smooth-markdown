@@ -1,17 +1,18 @@
 package com.jackcaow.smoothmarkdown
 
-import android.content.ClipData
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTouchInput
@@ -23,10 +24,11 @@ import org.junit.Rule
 import org.junit.Test
 
 /** Run on a physical Android device to verify native handles and offscreen Copy. */
+@OptIn(ExperimentalTestApi::class)
 class ReaderWholeDocumentSelectionUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun explicitWholeDocumentSelectionMountsOffscreenTextAndCopiesThroughNativeRegion() {
+    @Test fun explicitWholeDocumentSelectionMountsOffscreenTextAndCopiesThroughReaderRegion() {
         val controller = SmoothSelectionController()
         val clipboard = RecordingClipboard()
         val markdown = buildString {
@@ -36,7 +38,7 @@ class ReaderWholeDocumentSelectionUiTest {
             }
         }
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 MaterialTheme {
                     SmoothMarkdown(markdown, modifier = Modifier.fillMaxSize(),
                         selectable = true, selectionController = controller)
@@ -60,7 +62,7 @@ class ReaderWholeDocumentSelectionUiTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+        val copied = clipboard.copiedText?.text.orEmpty()
         assertTrue(copied.contains("Paragraph 0 unique text."))
         assertTrue(copied.contains("Paragraph 79 unique text."))
         assertFalse(copied.contains("smd"))
@@ -89,7 +91,7 @@ class ReaderWholeDocumentSelectionUiTest {
         compose.onNodeWithText("Visible body").assertExists()
     }
 
-    @Test fun builtInMixedRenderersCopySemanticTextFromUnchangedNativeFullSelection() {
+    @Test fun builtInMixedRenderersCopySemanticTextFromUnchangedFullSelection() {
         val controller = SmoothSelectionController()
         val clipboard = RecordingClipboard()
         val markdown = """
@@ -115,7 +117,7 @@ class ReaderWholeDocumentSelectionUiTest {
             End.
         """.trimIndent().replace("MONEY", "$")
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 MaterialTheme {
                     SmoothMarkdown(markdown, modifier = Modifier.fillMaxSize(),
                         selectable = true, selectionController = controller)
@@ -139,7 +141,7 @@ class ReaderWholeDocumentSelectionUiTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+        val copied = clipboard.copiedText?.text.orEmpty()
         assertTrue(copied.contains("Picture alt"))
         assertTrue(copied.contains("val count = 1\n"))
         assertTrue(copied.contains("Name\tValue\nOne\tTwo"))
@@ -151,20 +153,61 @@ class ReaderWholeDocumentSelectionUiTest {
         compose.runOnIdle { assertFalse(controller.fullDocumentSelectionMode) }
     }
 
-    @Test fun platformClipboardRewriteOnlyChangesTheCurrentFullSelectionPayload() {
-        val selected = listOf(AnnotatedString("Before"), AnnotatedString("After"))
-        val native = ClipEntry(ClipData.newPlainText("selection", "Before\nAfter"))
-        val replaced = readerCopyClipEntry(native, selected, emptySet(), "Before\nImage alt\nAfter")
-        assertEquals("Before\nImage alt\nAfter", replaced?.clipData?.getItemAt(0)?.text?.toString())
-
-        val unrelated = ClipEntry(ClipData.newPlainText("external", "not this selection"))
-        val untouched = readerCopyClipEntry(unrelated, selected, emptySet(), "Before\nImage alt\nAfter")
-        assertEquals("not this selection", untouched?.clipData?.getItemAt(0)?.text?.toString())
+    @Test fun draggingReaderHandleDisablesWholeDocumentSemanticCopy() {
+        val controller = SmoothSelectionController()
+        val clipboard = RecordingClipboard()
+        compose.setContent {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                MaterialTheme {
+                    SmoothMarkdown("Intro text.\n\n![Picture alt](picture.png)\n\nAfter paragraph.",
+                        modifier = Modifier.fillMaxSize(), selectable = true,
+                        selectionController = controller)
+                }
+            }
+        }
+        compose.runOnIdle { assertTrue(controller.selectAllDocument()) }
+        compose.waitUntil(timeoutMillis = 10_000) { controller.fullDocumentSelectionEstablished }
+        val handle = compose.onNodeWithTag("reader-selection-start-handle", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot.center
+        val after = compose.onNodeWithText("After paragraph.", useUnmergedTree = true)
+            .glyphCenterInRoot(4)
+        compose.onRoot().performTouchInput {
+            down(handle)
+            repeat(16) { step -> moveTo(handle + (after - handle) * ((step + 1) / 16f)) }
+            up()
+        }
+        val selected = compose.runOnIdle { controller.selectedText }
+        assertTrue("handle drag did not narrow selection: $selected", selected.isNotEmpty())
+        assertFalse("handle drag retained original range: $selected", selected.contains("Intro text."))
+        compose.runOnIdle {
+            assertEquals(null, controller.fullDocumentSemanticText(
+                requireNotNull(controller.selectionStateForTesting).selectedTexts))
+        }
+        compose.onAllNodes(isRoot())[0].performKeyInput {
+            keyDown(Key.CtrlLeft)
+            keyDown(Key.C)
+            keyUp(Key.C)
+            keyUp(Key.CtrlLeft)
+        }
+        compose.waitForIdle()
+        assertEquals(selected, clipboard.copiedText?.text)
+        assertFalse(clipboard.copiedText?.text.orEmpty().contains("Picture alt"))
     }
 
-    private class RecordingClipboard : Clipboard {
-        var entry: ClipEntry? = null
-        override suspend fun getClipEntry(): ClipEntry? = entry
-        override suspend fun setClipEntry(clipEntry: ClipEntry?) { entry = clipEntry }
+    @Test fun platformClipboardRewriteOnlyChangesTheCurrentFullSelectionPayload() {
+        val selected = listOf(AnnotatedString("Before"), AnnotatedString("After"))
+        val native = AnnotatedString("Before\nAfter")
+        val replaced = readerCopyText(native, selected, emptySet(), "Before\nImage alt\nAfter")
+        assertEquals("Before\nImage alt\nAfter", replaced?.text)
+
+        val unrelated = AnnotatedString("not this selection")
+        val untouched = readerCopyText(unrelated, selected, emptySet(), "Before\nImage alt\nAfter")
+        assertEquals("not this selection", untouched?.text)
+    }
+
+    private class RecordingClipboard : ClipboardManager {
+        var copiedText: AnnotatedString? = null
+        override fun getText(): AnnotatedString? = copiedText
+        override fun setText(annotatedString: AnnotatedString) { copiedText = annotatedString }
     }
 }

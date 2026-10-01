@@ -13,9 +13,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.invisibleToUser
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.buildAnnotatedString
@@ -43,6 +48,7 @@ internal class NonTextAnchorRegistry {
 internal val LocalNonTextAnchorRegistry = compositionLocalOf<NonTextAnchorRegistry?> { null }
 
 /** Matches Flutter's invisible selectable geometry over a nontext block. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 internal fun SelectableNonTextBlock(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     if (!LocalMarkdownSelectionOptions.current.nonTextSelectionAnchor) {
@@ -64,15 +70,38 @@ internal fun SelectableNonTextBlock(onClick: (() -> Unit)? = null, content: @Com
             addStringAnnotation(nonTextAnchorAnnotationTag, row, 0, length)
         }
     }
+    val options = LocalMarkdownSelectionOptions.current
+    val key = remember { Any() }
+    val sourceOrder = rememberReaderSelectionOrder()
+    RetainReaderSelectionTarget(key)
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    DisposableEffect(key, options.onTextDisposed) {
+        onDispose { options.onTextDisposed?.invoke(key) }
+    }
     Box(Modifier.onSizeChanged { heightPx = it.height }) {
         content()
         Text(
             anchor,
-            modifier = Modifier.matchParentSize().testTag("nontext-selection-anchor").semantics {
-                hideFromAccessibility()
+            modifier = Modifier.matchParentSize().onGloballyPositioned { coordinates ->
+                val bounds = androidx.compose.ui.geometry.Rect(
+                coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero),
+                androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()),
+            )
+                options.onTextPositioned?.invoke(MarkdownSelectionTarget(key, bounds, anchor,
+                    offsetAtWindowPosition = { layout?.getOffsetForPosition(it - bounds.topLeft) ?: 0 },
+                ).apply {
+                    this.sourceOrder = sourceOrder
+                    layoutResult = layout
+                    wordBoundaryAtWindowPosition = { point -> layout?.let {
+                        it.getWordBoundary(it.getOffsetForPosition(point - bounds.topLeft))
+                    } ?: TextRange.Zero }
+                })
+            }.then(readerSelectionHighlight(key)).testTag("nontext-selection-anchor").semantics {
+                invisibleToUser()
             }.then(
                 if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
             ),
+            onTextLayout = { layout = it },
             color = Color.Transparent,
             fontSize = 14.sp,
             lineHeight = 14.sp,

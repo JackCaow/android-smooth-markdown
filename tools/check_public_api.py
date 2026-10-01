@@ -12,6 +12,13 @@ jars = [p for p in jars if not p.name.endswith(('-sources.jar', '-javadoc.jar'))
 if len(jars) != 2:
     raise SystemExit('Build :smoothmarkdown:assembleDebug and :smoothmarkdown-core:jar first')
 classes = set()
+# These Kotlin-internal selection implementations are JVM-public for Compose and
+# Kotlin linkage. The supported API is SmoothSelectionController/SmoothSelectableText.
+internal_selection_class = re.compile(
+    r'^com\.jackcaow\.smoothmarkdown\.(?:ReaderCopyMenuProvider|ReaderCopyTextToolbar|ReaderBackHandler33|'
+    r'ReaderSelectionStateHolder|ReaderSelectionState|ReaderSelectionSegment|'
+    r'ReaderSelectionOrder|ReaderSelectionRegionKt|ReaderSelectionMenuSnapshot)'
+    r'(?:Kt|\$.*)?$')
 for jar in jars:
     with zipfile.ZipFile(jar) as archive:
         for name in archive.namelist():
@@ -25,6 +32,8 @@ for jar in jars:
             if re.match(r'^com\.jackcaow\.smoothmarkdown\.nativeparser\.(RustMarkdownBridge|RustMarkdownWire)(\$|$)', cls):
                 continue
             if re.match(r'^com\.jackcaow\.smoothmarkdown\.StreamingMarkdown(Session|Document|SessionKt|Worker|WorkerKt|Request|Requests|Result|Backend|Publisher|Completion|Emission)(\$|$)', cls):
+                continue
+            if internal_selection_class.match(cls):
                 continue
             classes.add(cls)
 result = subprocess.check_output(['javap', '-public', '-classpath', ':'.join(map(str, jars)), *sorted(classes)], text=True)
@@ -87,7 +96,32 @@ historical_synthetic_accessors = {
      'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$4(androidx.compose.runtime.State);'),
     ('com.jackcaow.smoothmarkdown.StreamMarkdownKt',
      'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$11(androidx.compose.runtime.State);'),
+    # Verified ACC_SYNTHETIC in the pre-compatibility Kotlin 2.4 producer JAR.
+    ('com.jackcaow.smoothmarkdown.CodeBlocksKt', 'public static final int access$EnhancedCodeBlock$lambda$5(androidx.compose.runtime.MutableIntState);'),
+    ('com.jackcaow.smoothmarkdown.CodeBlocksKt', 'public static final void access$EnhancedCodeBlock$lambda$3(androidx.compose.runtime.MutableState, boolean);'),
+    ('com.jackcaow.smoothmarkdown.EnhancedLinkDecorationKt', 'public static final void access$enhancedLinkDecoration_Bx497Mc$lambda$3(androidx.compose.runtime.MutableIntState, int);'),
+    ('com.jackcaow.smoothmarkdown.NativeMarkdownImageKt', 'public static final com.jackcaow.smoothmarkdown.MarkdownResourceOptions access$NativeSVGView$lambda$0(androidx.compose.runtime.State);'),
+    ('com.jackcaow.smoothmarkdown.StreamMarkdownKt', 'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$3(androidx.compose.runtime.State);'),
+    ('com.jackcaow.smoothmarkdown.StreamMarkdownKt', 'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$12(androidx.compose.runtime.State);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints access$FormattedBlockPane$lambda$8(androidx.compose.runtime.MutableState);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedBlockPane$lambda$9(androidx.compose.runtime.MutableState, com.jackcaow.smoothmarkdown.editor.FormattedTextEndpoints);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedBlockPane$lambda$12(androidx.compose.runtime.MutableState, boolean);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final androidx.compose.ui.text.input.TextFieldValue access$FormattedQuote$lambda$3$2(androidx.compose.runtime.MutableState);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedQuote$lambda$3$3(androidx.compose.runtime.MutableState, androidx.compose.ui.text.input.TextFieldValue);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedTable$lambda$0$cell$3(androidx.compose.runtime.MutableState, long);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedBlockPane$lambda$31$0$0$9$0$11(androidx.compose.runtime.MutableIntState, int);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final int access$FormattedBlockPane$lambda$31$0$0$9$0$10(androidx.compose.runtime.MutableIntState);'),
+    ('com.jackcaow.smoothmarkdown.editor.SmoothMarkdownEditorKt', 'public static final void access$FormattedBlockPane$lambda$31$0$0$9$0$14(androidx.compose.runtime.MutableState, java.lang.String);'),
 }
+
+def internal_selection_method(owner, line):
+    if owner == 'com.jackcaow.smoothmarkdown.SmoothMarkdownKt':
+        return bool(re.search(r'\breaderCopy(?:Text|ClipEntry)(?:\$default)?\(', line))
+    if owner == 'com.jackcaow.smoothmarkdown.SmoothSelectionController':
+        return bool(re.search(r'\b(?:attach|detach|getSelectionStateForTesting)\$smoothmarkdown\(', line))
+    if owner == 'com.jackcaow.smoothmarkdown.MarkdownSelectionTarget':
+        return bool(re.search(r'\b(?:get|set)(?:SourceOrder|LayoutResult)\$smoothmarkdown\(', line))
+    return False
 
 def normalize_signatures(source, historical=False):
     normalized = []
@@ -97,9 +131,9 @@ def normalize_signatures(source, historical=False):
         match = header.match(line)
         if match:
             current_class = match.group(1)
-            skip_class = current_class in synthetic_classes
+            skip_class = current_class in synthetic_classes or bool(internal_selection_class.match(current_class))
         if skip_class or (current_class, line.strip()) in synthetic_accessors or (
-                historical and (current_class, line.strip()) in historical_synthetic_accessors):
+                historical and (current_class, line.strip()) in historical_synthetic_accessors) or internal_selection_method(current_class, line):
             continue
         normalized.append(line)
     return '\n'.join(normalized) + '\n'

@@ -1,5 +1,10 @@
 package com.jackcaow.smoothmarkdown
 
+import android.view.View
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.SemanticsNode
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
@@ -26,6 +31,7 @@ import java.io.File
 /** Pixel checks include actual Android WebViews through UiAutomation's window screenshot. */
 class NativeSystemRenderingTest {
     @get:Rule val compose = createComposeRule()
+    private lateinit var hostView: View
 
     @Test fun smallAndScaledSvgKeepTheirFullViewportAndMathRenders() {
         render(dark = false)
@@ -49,6 +55,8 @@ class NativeSystemRenderingTest {
         val small = NativeImageLoader.decode("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"77\" height=\"20\"><rect width=\"77\" height=\"20\" fill=\"red\"/></svg>".toByteArray()) as NativeImageData.SvgImage
         val scaled = NativeImageLoader.decode("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"200\"><rect width=\"300\" height=\"200\" fill=\"red\"/><rect x=\"300\" width=\"300\" height=\"200\" fill=\"blue\"/></svg>".toByteArray()) as NativeImageData.SvgImage
         compose.setContent {
+            val view = LocalView.current
+            SideEffect { hostView = view }
             MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
                 Column(Modifier.fillMaxSize().background(if (dark) Color.Black else Color.White).padding(16.dp)) {
                     Text("Native Android SVG + MathML", color = if (dark) Color.White else Color.Black)
@@ -89,7 +97,7 @@ class NativeSystemRenderingTest {
 
     private fun sample(image: Bitmap, tag: String, x: Float, y: Float): Int {
         val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-        val origin = node.positionOnScreen
+        val origin = positionOnScreen(node)
         val bounds = node.boundsInRoot
         return image.getPixel((origin.x + bounds.width * x).toInt().coerceIn(0, image.width-1),
             (origin.y + bounds.height * y).toInt().coerceIn(0, image.height-1))
@@ -110,7 +118,7 @@ class NativeSystemRenderingTest {
 
     private fun mathInkCount(image: Bitmap, tag: String, dark: Boolean): Int {
         val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-        val origin = node.positionOnScreen
+        val origin = positionOnScreen(node)
         val bounds = node.boundsInRoot
         var count = 0
         for (y in origin.y.toInt().coerceAtLeast(0) until (origin.y + bounds.height).toInt().coerceAtMost(image.height)) {
@@ -121,6 +129,14 @@ class NativeSystemRenderingTest {
             }
         }
         return count
+    }
+
+    private fun positionOnScreen(node: SemanticsNode): Offset = compose.runOnIdle {
+        val screen = IntArray(2)
+        val window = IntArray(2)
+        hostView.getLocationOnScreen(screen)
+        hostView.getLocationInWindow(window)
+        node.positionInWindow + Offset((screen[0] - window[0]).toFloat(), (screen[1] - window[1]).toFloat())
     }
 
     private fun isRed(pixel: Int) = AndroidColor.red(pixel) > 200 && AndroidColor.green(pixel) < 50 && AndroidColor.blue(pixel) < 50

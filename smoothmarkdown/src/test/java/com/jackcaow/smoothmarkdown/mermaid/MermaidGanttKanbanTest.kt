@@ -42,7 +42,7 @@ class MermaidGanttKanbanTest {
 
     @Test fun ganttSupportsAlternateDatesAndRejectsInvalidOrEmptyCharts() {
         val diagram = MermaidParser.parse("gantt\nTask A :a, 01/01/2024, 2w\nTask B :b, 01-15-2024, 3d")!!
-        assertEquals(14, diagram.gantt!!.task("a")!!.endDay - diagram.gantt.task("a")!!.startDay + 1)
+        assertEquals(14, diagram.gantt!!.task("a")!!.endDay - diagram.gantt!!.task("a")!!.startDay + 1)
         assertNull(MermaidParser.parse("gantt\n title Empty"))
         assertNull(MermaidParser.parse("gantt\n Task :x, 2024-02-30, 3d"))
         assertNull(MermaidParser.parse("gantt\n Task :x, after missing, 3d"))

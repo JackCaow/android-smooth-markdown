@@ -30,9 +30,9 @@ jobs:
           java-version: '17'
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
-      - name: Install Android API 37
+      - name: Install Android API 35
         run: |
-          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358'
+          sdkmanager 'platforms;android-35' 'ndk;28.2.13676358'
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Set up owned Rust parser toolchain
@@ -58,7 +58,15 @@ jobs:
         working-directory: android-smooth-markdown
         run: |
           ./gradlew :smoothmarkdown-core:publishReleasePublicationToCentralBundleRepository :smoothmarkdown:publishReleasePublicationToCentralBundleRepository --no-daemon
-          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.3.1 --no-daemon
+          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.4.0 --no-daemon
+      - name: Verify independently compiled old and modern consumers
+        working-directory: android-smooth-markdown
+        run: |
+          ./gradlew -p compatibility-consumer assembleDebug -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0 --no-daemon
+          ./gradlew -p compatibility-consumer clean assembleDebug -PmodernKotlin=true -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0 --no-daemon
+      - name: Check consumer requirements in AAR and POM
+        working-directory: android-smooth-markdown
+        run: python3 tools/check_consumer_requirements.py
       - name: Verify four packaged native ABIs and 16KB ELF alignment
         working-directory: android-smooth-markdown
         run: python3 scripts/build-rust-parser.py --check-aar smoothmarkdown/build/outputs/aar/smoothmarkdown-release.aar
@@ -79,7 +87,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Install build SDK and emulator
         run: |
-          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358' 'system-images;android-35;google_apis;x86_64' 'emulator'
+          sdkmanager 'platforms;android-35' 'ndk;28.2.13676358' 'system-images;android-35;google_apis;x86_64' 'emulator'
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Set up owned Rust parser toolchain
@@ -97,4 +105,6 @@ jobs:
           timeout 300 adb wait-for-device
           timeout 300 bash -c 'until [ "$(adb shell getprop sys.boot_completed | tr -d "\r")" = "1" ]; do sleep 2; done'
       - name: Verify public API runtime behavior
-        run: ./gradlew :smoothmarkdown:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.jackcaow.smoothmarkdown.PublicLibraryUiSuite --no-daemon
+        run: ./gradlew :smoothmarkdown:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.jackcaow.smoothmarkdown.PublicLibraryUiSuite,com.jackcaow.smoothmarkdown.SelectionCompatibilityUiSuite --no-daemon
+      - name: Verify Demo paragraph selection
+        run: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.jackcaow.smoothmarkdown.demo.ConversationLongPressUiTest --no-daemon

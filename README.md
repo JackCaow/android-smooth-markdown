@@ -4,7 +4,7 @@ A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor
 
 ## Runtime dependencies
 
-Version `0.3.1` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
+Version `0.4.0` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
 
 The reader uses a library-owned Markdown AST and Rust parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
 
@@ -14,7 +14,15 @@ Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other libr
 
 ## Install
 
-The reader requires Android API 24+, **compileSdk 37 or newer**, Jetpack Compose, and Java 17. Kotlin `2.4.20` and its matching Compose compiler plugin are the tested compiler setup. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
+### Compatibility baseline
+
+Source builds now use Kotlin **1.9.24**, Compose Foundation **1.6.8**, Compose compiler **1.5.14**, compileSdk **35**, AGP **8.9.1** and Gradle **8.11.1**. The reader AAR declares compileSdk **35** and AGP **8.6.0** as consumer minimums. Android API 24 and Java 17 are unchanged. The reader does not export a Compose BOM; your application chooses its own Compose versions at or above the Foundation baseline.
+
+Version `0.4.0` lowers the consumer baseline and includes background streaming improvements. The older `0.3.1` artifact remains unchanged and still requires compileSdk 37. See [Android compatibility](docs/android-compatibility.md) for verified consumers and custom-builder migration.
+
+### Install 0.4.0
+
+The `0.4.0` reader requires Android API 24+, **compileSdk 35 or newer**, AGP 8.6.0+, Jetpack Compose Foundation 1.6.8+, and Java 17. Kotlin 1.9.22 and 2.1.20 consumers have been verified. Match the Compose compiler to your application's Kotlin version. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
 
 ```kotlin
 dependencyResolutionManagement {
@@ -33,7 +41,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.3.1")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.4.0")
 }
 ```
 
@@ -45,7 +53,7 @@ For a JVM application without Android or Compose, use the same JitPack repositor
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.1")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.0")
 }
 ```
 
@@ -60,15 +68,17 @@ Core needs Java 17 and Kotlin's standard library. Its JVM fallback works without
 
 `0.3.0` remains a failed JitPack build tag; `0.3.1` fixes the build environment without replacing that tag.
 
-These are the individual-module coordinates for the `0.3.1` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+These are the individual-module coordinates for the `0.4.0` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
 
-**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.3.1` and `io.github.jackcaow:smoothmarkdown-core:0.3.1`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
+**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.4.0` and `io.github.jackcaow:smoothmarkdown-core:0.4.0`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
 
 For source integration, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. Building these source modules also requires the [Rust/NDK toolchain](docs/rust-parser-build.md). The `app` module is only the Demo.
 
-See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md) for the structured APIs in `0.3.1`.
+See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md) for the structured APIs in `0.4.0`.
 
 ## Quick start
+
+[中文接入手册](docs/integration-guide.zh-CN.md)：安装、样式、流式回复、图片、插件、编辑器及最新固定提交接入。
 
 ### Read Markdown
 
@@ -104,7 +114,7 @@ val style = base.copy(
 SmoothMarkdown(markdown = content, styleSheet = style)
 ```
 
-Import `com.jackcaow.smoothmarkdown.MarkdownStyleSheet` and `androidx.compose.ui.unit.dp`. The `0.3.1` release includes component tokens. See the [styling guide](docs/styling.md) for presets, nested overrides, precedence, streaming, plugin panels, Mermaid palettes, and editor preview styling. `SmoothMarkdownEditor(styleSheet = style)` uses reader styling in Preview/Split; editor controls use `MarkdownEditorTheme`.
+Import `com.jackcaow.smoothmarkdown.MarkdownStyleSheet` and `androidx.compose.ui.unit.dp`. The `0.4.0` release includes component tokens. See the [styling guide](docs/styling.md) for presets, nested overrides, precedence, streaming, plugin panels, Mermaid palettes, and editor preview styling. `SmoothMarkdownEditor(styleSheet = style)` uses reader styling in Preview/Split; editor controls use `MarkdownEditorTheme`.
 
 ### Render a stream
 
@@ -168,7 +178,7 @@ The Demo contains reader, streaming, editor, conversation, AI chat, and Mermaid 
 
 ## Compatibility and limits
 
-- Android API 24+, compileSdk 37+, and Java 17; the Compose and Kotlin versions in this repository's Gradle files are the tested setup.
+- Source builds use Android API 24+, compileSdk 35 and Java 17; the existing `0.3.1` artifact still needs compileSdk 37. See the [compatibility baseline](docs/android-compatibility.md) for compiler and custom-builder migration.
 - HTML rendering is off by default; supported math is parsed by default.
 - Complete Mermaid and HTML syntax coverage and fully rich formatted editing are still in progress. Review [known limits](docs/reference.md#status) before depending on advanced behavior.
 - A local Demo API key is a debug-only convenience. Never ship or commit a key; the library does not require one.

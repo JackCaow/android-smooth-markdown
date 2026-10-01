@@ -6,7 +6,10 @@ plugins {
     `maven-publish`
     signing
 }
-kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions.jvmTarget = "17"
+    kotlinOptions.freeCompilerArgs += "-Xjvm-default=all-compatibility"
+}
 java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 java { withSourcesJar(); withJavadocJar() }
 val isJitPack = providers.environmentVariable("JITPACK").orNull == "true"
@@ -17,8 +20,8 @@ publishing {
             groupId = if (isJitPack) providers.environmentVariable("GROUP").orElse("com.github.JackCaow.android-smooth-markdown").get()
                 else providers.gradleProperty("publicationGroup").orElse("io.github.jackcaow").get()
             artifactId = "smoothmarkdown-core"
-            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.3.1").get()
-                else providers.gradleProperty("publicationVersion").orElse("0.3.1").get()
+            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.4.0").get()
+                else providers.gradleProperty("publicationVersion").orElse("0.4.0").get()
             pom {
                 name.set("Smooth Markdown Core")
                 description.set("Pure JVM source-preserving CommonMark and GFM parser")

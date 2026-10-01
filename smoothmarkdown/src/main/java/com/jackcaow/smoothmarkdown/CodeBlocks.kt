@@ -238,19 +238,26 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
         Row(Modifier.fillMaxWidth().horizontalScroll(horizontalState).padding(decoration.padding)) {
             val selectionOptions = LocalMarkdownSelectionOptions.current
             val selectionKey = androidx.compose.runtime.remember { Any() }
+            val sourceOrder = rememberReaderSelectionOrder()
+            RetainReaderSelectionTarget(selectionKey)
             DisposableEffect(selectionKey, selectionOptions.onTextDisposed) {
                 onDispose { selectionOptions.onTextDisposed?.invoke(selectionKey) }
             }
             val codeLayout = androidx.compose.runtime.remember(codeText) { mutableStateOf<TextLayoutResult?>(null) }
             val tracking = selectionOptions.onTextPositioned?.let { callback ->
                 Modifier.onGloballyPositioned { coordinates ->
-                    val bounds = coordinates.boundsInWindow()
+                    val bounds = androidx.compose.ui.geometry.Rect(
+                coordinates.localToWindow(androidx.compose.ui.geometry.Offset.Zero),
+                androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()),
+            )
                     callback(MarkdownSelectionTarget(
                         selectionKey, bounds, codeText,
                         offsetAtWindowPosition = { windowPoint ->
                             codeLayout.value?.getOffsetForPosition(windowPoint - bounds.topLeft) ?: 0
                         },
                     ).apply {
+                        this.sourceOrder = sourceOrder
+                        layoutResult = codeLayout.value
                         wordBoundaryAtWindowPosition = { windowPoint ->
                             codeLayout.value?.let { result ->
                                 result.getWordBoundary(result.getOffsetForPosition(windowPoint - bounds.topLeft))
@@ -265,7 +272,7 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             val content: @Composable () -> Unit = {
                 Text(
                     codeText,
-                    modifier = tracking,
+                    modifier = tracking.then(readerSelectionHighlight(selectionKey)),
                     onTextLayout = { codeLayout.value = it },
                     softWrap = false,
                     style = (sheet.codeStyle ?: MaterialTheme.typography.bodyMedium).copy(
@@ -274,7 +281,8 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
                     ),
                 )
             }
-            if (LocalMarkdownSelectionOptions.current.outerRegion || !LocalMarkdownSelectionOptions.current.selectable) content()
+            if (LocalReaderSelectionState.current != null) DisableSelection { content() }
+            else if (LocalMarkdownSelectionOptions.current.outerRegion || !LocalMarkdownSelectionOptions.current.selectable) content()
             else SelectionContainer { content() }
         }
         if (tokens.showScrollbar && horizontalState.maxValue > 0) {

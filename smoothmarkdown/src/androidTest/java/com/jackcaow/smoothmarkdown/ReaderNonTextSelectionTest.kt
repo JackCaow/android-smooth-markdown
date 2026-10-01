@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -9,10 +10,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertHasClickAction
@@ -32,6 +33,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalTestApi::class)
 class ReaderNonTextSelectionTest {
     @get:Rule val compose = createComposeRule()
 
@@ -85,16 +87,16 @@ class ReaderNonTextSelectionTest {
         val clipboard = RecordingClipboard()
         val source = "Before code.\n\n```kotlin\nfirst()\nsecond()\n```\n\nAfter code."
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 MaterialTheme {
                     SmoothMarkdown(source, selectable = true, selectionController = controller)
                 }
             }
         }
         val start = compose.onNodeWithText("first()", substring = true, useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot()
         val end = compose.onNodeWithText("After code.", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot("After code.".lastIndex)
         compose.onRoot().performTouchInput {
             down(start)
             advanceEventTime(750)
@@ -116,7 +118,7 @@ class ReaderNonTextSelectionTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+        val copied = clipboard.copiedText?.text.orEmpty()
         val first = copied.indexOf("first()")
         val second = copied.indexOf("second()")
         val after = copied.indexOf("After code")
@@ -208,7 +210,7 @@ class ReaderNonTextSelectionTest {
             After the table.
         """.trimIndent()
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                 MaterialTheme {
                     SmoothMarkdown(source, selectable = true, scrollable = false,
                         selectionController = controller)
@@ -216,9 +218,9 @@ class ReaderNonTextSelectionTest {
             }
         }
         val start = compose.onNodeWithText("One", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot()
         val end = compose.onNodeWithText("After the table.", useUnmergedTree = true)
-            .fetchSemanticsNode().boundsInRoot.center
+            .glyphCenterInRoot("After the table.".lastIndex)
         compose.onRoot().performTouchInput {
             down(start)
             advanceEventTime(750)
@@ -240,15 +242,15 @@ class ReaderNonTextSelectionTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+        val copied = clipboard.copiedText?.text.orEmpty()
         assertTrue("copy missed first table cell: $copied", copied.contains("One"))
         assertTrue("copy missed next table cell: $copied", copied.contains("Two"))
         assertTrue("copy missed following paragraph: $copied", copied.contains("After the table"))
     }
 
-    private class RecordingClipboard : Clipboard {
-        var entry: ClipEntry? = null
-        override suspend fun getClipEntry(): ClipEntry? = entry
-        override suspend fun setClipEntry(clipEntry: ClipEntry?) { entry = clipEntry }
+    private class RecordingClipboard : ClipboardManager {
+        var copiedText: AnnotatedString? = null
+        override fun getText(): AnnotatedString? = copiedText
+        override fun setText(annotatedString: AnnotatedString) { copiedText = annotatedString }
     }
 }

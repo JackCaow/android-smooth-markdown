@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -68,7 +66,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,7 +74,7 @@ import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.MermaidPlugin
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SmoothMarkdown
-import com.jackcaow.smoothmarkdown.MarkdownSelectionTarget
+import com.jackcaow.smoothmarkdown.SmoothSelectionController
 import org.json.JSONObject
 import java.time.Instant
 import java.time.ZoneId
@@ -284,20 +281,18 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
     val plugins = remember { ParserPluginRegistry().also { it.register(MermaidPlugin()) } }
     val menuGapPx = with(LocalDensity.current) { 28.dp.roundToPx() }
     val menuEdgePx = with(LocalDensity.current) { 8.dp.roundToPx() }
-    val selectionState = rememberSelectionState()
-    val selectedText = selectionState.selectedTexts.joinToString("") { it.text }
-    val textTargets = remember(message.content) { mutableMapOf<Any, MarkdownSelectionTarget>() }
+    val selectionController = remember(message.content) { SmoothSelectionController() }
+    val selectedText = selectionController.selectedText
     val bubbleCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
     var menuPress by remember { mutableStateOf<Offset?>(null) }
-    var menuSelectionRange by remember { mutableStateOf<TextRange?>(null) }
-    var pendingSelection by remember { mutableStateOf<TextRange?>(null) }
+    var pendingSelection by remember { mutableStateOf<Offset?>(null) }
     LaunchedEffect(pendingSelection) {
-        val range = pendingSelection ?: return@LaunchedEffect
-        // withFrameNanos resumes at the start of a frame. Let the newly
-        // mounted SelectionContainer finish its layout before selecting.
+        val press = pendingSelection ?: return@LaunchedEffect
+        // Let the reader restore its selectable text layout after the menu closes.
+        // The controller maps the window position to the rendered paragraph.
         withFrameNanos { }
         withFrameNanos { }
-        selectionState.select(range)
+        selectionController.selectParagraphAt(press)
         pendingSelection = null
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -331,9 +326,7 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                         } ?: true
                         if (keptPressed) {
                             bubbleCoordinates.value?.localToWindow(start)?.let { press ->
-                                menuSelectionRange = paragraphSelectionRange(press, textTargets.values,
-                                    selectionState.getSelectableTexts())
-                                selectionState.clear()
+                                selectionController.clear()
                                 menuPress = press
                             }
                             awaitPointerEventScope {
@@ -347,17 +340,12 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                 }
                 .testTag("conversation-bubble-${conversation.id}-${conversation.messages.indexOf(message)}")) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                val content: @Composable () -> Unit = {
-                    SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
-                        enableHtml = true, plugins = plugins, onLinkClick = onLinkClick,
-                        useEnhancedComponents = true,
-                        selectableAsSingleRegion = true,
-                        onTextPositioned = { textTargets[it.key] = it })
-                }
-                // Remove the native recognizer while the 350ms menu is open, so its
-                // later long-press deadline cannot replace the custom first step.
-                if (menuPress == null) SelectionContainer(state = selectionState) { content() }
-                else content()
+                // Pause the reader recognizer while the 350ms menu is open so its
+                // long-press deadline cannot replace the custom first step.
+                SmoothMarkdown(markdown = message.content, scrollable = false, styleSheet = style,
+                    enableHtml = true, plugins = plugins, onLinkClick = onLinkClick,
+                    useEnhancedComponents = true, selectable = menuPress == null,
+                    selectionController = selectionController)
                 Text(formatClockTime(message.secondsAgo, openedAt), fontSize = 11.sp,
                     color = if (own) Color.White.copy(alpha = .6f) else Color.Gray,
                     modifier = Modifier.padding(top = 4.dp))
@@ -375,9 +363,7 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                 ConversationMenuPosition(press, menuGapPx, menuEdgePx)
             },
             onDismissRequest = {
-                textTargets.clear()
                 menuPress = null
-                menuSelectionRange = null
             },
             properties = PopupProperties(focusable = true),
         ) {
@@ -386,17 +372,12 @@ private fun ConversationBubble(conversation: ConversationSample, message: Conver
                 Row(Modifier.padding(horizontal = 4.dp)) {
                     TextButton(onClick = {
                         onCopy(message.content)
-                        textTargets.clear()
                         menuPress = null
-                        menuSelectionRange = null
                     },
                         modifier = Modifier.testTag("conversation-longpress-copy")) { Text("复制") }
                     TextButton(onClick = {
-                        val range = menuSelectionRange
-                        textTargets.clear()
                         menuPress = null
-                        menuSelectionRange = null
-                        pendingSelection = range
+                        pendingSelection = press
                     }, modifier = Modifier.testTag("conversation-longpress-select")) { Text("选择文字") }
                 }
             }

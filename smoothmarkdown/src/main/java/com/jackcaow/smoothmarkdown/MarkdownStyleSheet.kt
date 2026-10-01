@@ -15,7 +15,10 @@ data class MarkdownBlockquoteDecoration(
     val backgroundColor: Color? = null,
     val borderColor: Color? = null,
     val borderWidth: Dp = 4.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(backgroundColor = null)
+}
 
 /** Fill, outline, and corner radius of a fenced or indented code block. */
 data class MarkdownCodeBlockDecoration(
@@ -23,7 +26,10 @@ data class MarkdownCodeBlockDecoration(
     val borderColor: Color? = null,
     val borderWidth: Dp = 0.dp,
     val cornerRadius: Dp = 6.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(backgroundColor = null)
+}
 
 /** One edge of a table border. A null edge in [MarkdownTableBorder] is not drawn. */
 data class MarkdownTableBorderSide(
@@ -114,6 +120,9 @@ data class MarkdownStyleSheet(
     /** Additional component decoration tokens; existing typography and decoration fields remain supported. */
     val designTokens: MarkdownDesignTokens = MarkdownDesignTokens(),
 ) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(backgroundColor = null)
+
 
 
     /** Canonical precedence: explicit design tokens > legacy decoration/style > legacy scalar > host theme.

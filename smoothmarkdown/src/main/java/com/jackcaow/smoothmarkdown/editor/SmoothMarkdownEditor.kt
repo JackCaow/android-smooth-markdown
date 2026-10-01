@@ -589,6 +589,7 @@ private fun SourcePane(controller: MarkdownEditorController, modifier: Modifier,
 }
 
 /** Paragraphs, ATX headings, fenced code, and GFM tables expose source-backed content. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun FormattedBlockPane(
     controller: MarkdownEditorController,

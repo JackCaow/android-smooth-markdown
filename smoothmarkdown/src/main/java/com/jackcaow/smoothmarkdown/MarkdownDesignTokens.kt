@@ -24,6 +24,9 @@ data class MarkdownDesignTokens(
     val typography: MarkdownTypographyTokens = MarkdownTypographyTokens(),
     val document: MarkdownDocumentTokens = MarkdownDocumentTokens(),
 ) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(heading = MarkdownHeadingTokens())
+
 
 
 }
@@ -40,7 +43,10 @@ data class MarkdownHeadingTokens(
     val ruleThickness: Dp = 2.dp,
     val ruleStartAlpha: Float = .3f,
     val ruleEndAlpha: Float = 0f,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(accentColor = null)
+}
 
 /** Quote fill/ornament. Explicit token overrides take precedence over legacy quote decoration. */
 data class MarkdownQuoteTokens(
@@ -59,7 +65,10 @@ data class MarkdownQuoteTokens(
     val borderColor: Color? = null,
     val borderWidth: Dp? = null,
     val padding: PaddingValues? = null,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(gradientStartColor = null)
+}
 
 /** Syntax colors may be overridden per theme without replacing the code renderer. */
 data class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: Color, val number: Color) {
@@ -94,7 +103,10 @@ data class MarkdownCodeTokens(
     val borderWidth: Dp? = null,
     val cornerRadius: Dp? = null,
     val padding: PaddingValues? = null,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(languageStyle = null)
+}
 
 /** Pointer-hover underline and external-link glyph. */
 data class MarkdownLinkTokens(
@@ -111,7 +123,10 @@ data class MarkdownLinkTokens(
     val iconGap: Dp = 2.dp,
     val iconTopOffset: Dp = 1.dp,
     val iconStrokeWidth: Dp = 1.2.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(hoverDurationMillis = 200)
+}
 
 data class MarkdownDetailsTokens(
     val cornerRadius: Dp = 6.dp,
@@ -125,7 +140,10 @@ data class MarkdownDetailsTokens(
     val iconStyle: TextStyle? = null,
     val iconColor: Color? = null,
     val dividerThickness: Dp = 1.dp,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(borderColor = null)
+}
 
 data class MarkdownKeyboardTokens(
     val backgroundColor: Color? = null,
@@ -137,7 +155,10 @@ data class MarkdownKeyboardTokens(
     val extraHeight: Dp = 2.dp,
     val textStyle: TextStyle = TextStyle(fontSize = 13.sp),
     val backgroundAlpha: Float = .12f,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(backgroundColor = null)
+}
 
 data class MarkdownMathTokens(
     val textStyle: TextStyle? = null,
@@ -145,4 +166,7 @@ data class MarkdownMathTokens(
     val blockPadding: PaddingValues = PaddingValues(vertical = 12.dp),
     val fontFamily: String = "serif",
     val color: Color? = null,
-)
+) {
+    /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
+    constructor() : this(textStyle = null)
+}

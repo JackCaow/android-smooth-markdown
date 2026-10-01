@@ -1,29 +1,21 @@
 package com.jackcaow.smoothmarkdown
 
+import androidx.compose.ui.test.ExperimentalTestApi
 import android.content.ClipData
-import android.content.ClipboardManager
+import android.content.ClipboardManager as AndroidClipboardManager
 import android.content.Context
 import android.os.SystemClock
-import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.text.selection.SelectionState
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuData
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuItem
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuKeys
-import androidx.compose.foundation.text.contextmenu.data.TextContextMenuSession
-import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
-import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider
-import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.platform.ClipEntry
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
@@ -38,14 +30,15 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import androidx.test.platform.app.InstrumentationRegistry
 
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 class NonTextSelectionInstrumentedTest {
     @get:Rule val compose = createComposeRule()
 
@@ -56,14 +49,13 @@ class NonTextSelectionInstrumentedTest {
             addStringAnnotation(nonTextAnchorAnnotationTag, anchor, 0, length)
         }
         val selected = listOf(tagged.subSequence(249, 250), AnnotatedString("A"))
-        val nativeCopy = ClipEntry(ClipData.newPlainText("plain text", "a\nA"))
-        val filtered = readerCopyClipEntry(nativeCopy, selected, setOf(anchor))
-        assertEquals("A", filtered?.clipData?.getItemAt(0)?.text?.toString())
-        assertEquals("plain text", filtered?.clipData?.description?.label?.toString())
+        val nativeCopy = AnnotatedString("a\nA")
+        val filtered = readerCopyText(nativeCopy, selected, setOf(anchor))
+        assertEquals("A", filtered?.text)
 
-        val unrelated = ClipEntry(ClipData.newPlainText("plain text", "A"))
-        assertSame(unrelated, readerCopyClipEntry(unrelated, selected, setOf(anchor)))
-        assertSame(nativeCopy, readerCopyClipEntry(nativeCopy, selected, emptySet()))
+        val unrelated = AnnotatedString("A")
+        assertSame(unrelated, readerCopyText(unrelated, selected, setOf(anchor)))
+        assertSame(nativeCopy, readerCopyText(nativeCopy, selected, emptySet()))
     }
 
     @Test fun longPressStartsOnRuleAndImageAndImageTapStillOpens() {
@@ -83,8 +75,8 @@ class NonTextSelectionInstrumentedTest {
         }
         val anchors = compose.onAllNodesWithTag("nontext-selection-anchor", useUnmergedTree = true)
         anchors.assertCountEquals(2)
-        assertTrue("overlay must be hidden from accessibility", anchors[0].fetchSemanticsNode().config.contains(SemanticsProperties.HideFromAccessibility))
-        assertTrue("overlay must be hidden from accessibility", anchors[1].fetchSemanticsNode().config.contains(SemanticsProperties.HideFromAccessibility))
+        assertTrue("overlay must be hidden from accessibility", anchors[0].fetchSemanticsNode().config.contains(SemanticsProperties.InvisibleToUser))
+        assertTrue("overlay must be hidden from accessibility", anchors[1].fetchSemanticsNode().config.contains(SemanticsProperties.InvisibleToUser))
         compose.runOnIdle { controller.selectAll() }
         compose.runOnIdle {
             assertTrue("anchors absent from selection registrar",
@@ -115,8 +107,8 @@ class NonTextSelectionInstrumentedTest {
         val clipboard = RecordingClipboard()
         val provider = RecordingMenuProvider()
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard,
-                LocalTextContextMenuToolbarProvider provides provider) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard,
+                LocalReaderSelectionMenuObserver provides provider::record) {
                 MaterialTheme {
                     SmoothMarkdown(
                         markdown = "Before.\n\n---\n\n![Diagram](diagram.png)\n\nAfter.",
@@ -132,14 +124,14 @@ class NonTextSelectionInstrumentedTest {
         compose.runOnIdle { controller.selectAll() }
         clickMenuCopy(provider)
         compose.waitForIdle()
-        val copied = clipboard.entry?.clipData?.getItemAt(0)?.text?.toString()
+        val copied = clipboard.copiedText?.text
         assertEquals("Before.\nAfter.", copied)
         compose.runOnIdle { controller.clear() }
         provider.data = null
         compose.onAllNodesWithTag("nontext-selection-anchor", useUnmergedTree = true)[1].performTouchInput { longClick() }
         clickMenuCopy(provider)
         compose.waitForIdle()
-        assertEquals("", clipboard.entry?.clipData?.getItemAt(0)?.text?.toString())
+        assertEquals("", clipboard.copiedText?.text)
     }
 
     @Test fun composeCopyFromMiddleOfRuleAnchorPreservesEveryVisibleCharacter() {
@@ -148,8 +140,8 @@ class NonTextSelectionInstrumentedTest {
         val provider = RecordingMenuProvider()
         var customCopied: String? = null
         compose.setContent {
-            CompositionLocalProvider(LocalClipboard provides clipboard,
-                LocalTextContextMenuToolbarProvider provides provider) {
+            CompositionLocalProvider(LocalClipboardManager provides clipboard,
+                LocalReaderSelectionMenuObserver provides provider::record) {
                 MaterialTheme {
                     SmoothMarkdown("Before.\n\n---\n\nAfter.", selectable = true,
                         scrollable = false, selectionController = controller,
@@ -177,23 +169,22 @@ class NonTextSelectionInstrumentedTest {
         }
         clickMenuCopy(provider)
         compose.waitForIdle()
-        assertEquals("", clipboard.entry?.clipData?.getItemAt(0)?.text?.toString())
+        assertEquals("", clipboard.copiedText?.text)
 
         provider.data = null
         compose.runOnIdle { controller.select(TextRange(anchorBase + 249, afterBase + 5)) }
         clickMenuCopy(provider)
         compose.waitForIdle()
-        assertEquals("After", clipboard.entry?.clipData?.getItemAt(0)?.text?.toString())
+        assertEquals("After", clipboard.copiedText?.text)
 
         provider.data = null
         compose.runOnIdle { controller.select(TextRange(anchorBase + 249, afterBase + 5)) }
         compose.waitUntil(timeoutMillis = 5_000) { provider.data != null }
-        val action = provider.data!!.components.filterIsInstance<TextContextMenuItem>()
-            .first { it.label == "Copy visible" }
-        compose.runOnIdle { action.onClick(RecordingMenuSession()) }
+        val action = provider.data!!.actions.first { it.label == "Copy visible" }
+        compose.runOnIdle { provider.data!!.invokeAction(action.key) }
         assertEquals("After", customCopied)
 
-        clipboard.entry = null
+        clipboard.copiedText = null
         compose.runOnIdle { controller.select(TextRange(anchorBase + 249, afterBase + 5)) }
         compose.onAllNodes(isRoot())[0].performKeyInput {
             keyDown(Key.CtrlLeft)
@@ -202,13 +193,13 @@ class NonTextSelectionInstrumentedTest {
             keyUp(Key.CtrlLeft)
         }
         compose.waitForIdle()
-        assertEquals("After", clipboard.entry?.clipData?.getItemAt(0)?.text?.toString())
+        assertEquals("After", clipboard.copiedText?.text)
     }
 
-    @Test fun platformFloatingCopyTapFromRuleWritesCleanClipboardWhenAvailable() {
+    @Test fun platformFloatingCopyTapFromRuleWritesCleanClipboard() {
         val controller = SmoothSelectionController()
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as AndroidClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("selection", "clipboard-before-copy"))
         compose.setContent {
             MaterialTheme {
@@ -218,24 +209,38 @@ class NonTextSelectionInstrumentedTest {
         }
         compose.onAllNodesWithTag("nontext-selection-anchor", useUnmergedTree = true)[0]
             .performTouchInput { longClick() }
+        compose.waitForIdle()
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = SystemClock.uptimeMillis() + 6_000
-        var copy: AccessibilityNodeInfo? = null
-        while (copy == null && SystemClock.uptimeMillis() < deadline) {
-            copy = findCopyNode(automation.rootInActiveWindow)
-            if (copy == null) SystemClock.sleep(200)
+        val previousFlags = automation.serviceInfo.flags
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         }
-        if (copy == null) {
-            Log.w("NonTextSelectionTest", "System floating Copy was not accessible; platform tap remains unverified")
-            return
+        try {
+            val deadline = SystemClock.uptimeMillis() + 6_000
+            var copy: AccessibilityNodeInfo? = null
+            while (copy == null && SystemClock.uptimeMillis() < deadline) {
+                // Floating ActionMode lives in a non-focusable popup, not necessarily the
+                // active Activity window. Query all accessible native windows.
+                copy = automation.windows.firstNotNullOfOrNull { findCopyNode(it.root) }
+                    ?: findCopyNode(automation.rootInActiveWindow)
+                if (copy == null) SystemClock.sleep(200)
+            }
+            if (copy == null) {
+                context.openFileOutput("native-menu-missing.png", Context.MODE_PRIVATE).use { output ->
+                    automation.takeScreenshot()?.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)
+                }
+            }
+            assertNotNull("System floating Copy must be visible", copy)
+            val clickable = generateSequence(copy) { it.parent }.firstOrNull { it.isClickable }
+            assertTrue("System floating Copy did not accept tap",
+                clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
+            compose.waitUntil(timeoutMillis = 5_000) {
+                clipboard.primaryClip?.getItemAt(0)?.text?.toString() != "clipboard-before-copy"
+            }
+            assertEquals("", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
+        } finally {
+            automation.serviceInfo = automation.serviceInfo.apply { flags = previousFlags }
         }
-        val clickable = generateSequence(copy) { it.parent }.firstOrNull { it.isClickable }
-        assertTrue("System floating Copy did not accept tap",
-            clickable?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true)
-        compose.waitUntil(timeoutMillis = 5_000) {
-            clipboard.primaryClip?.getItemAt(0)?.text?.toString() != "clipboard-before-copy"
-        }
-        assertEquals("", clipboard.primaryClip?.getItemAt(0)?.text?.toString())
     }
 
     private fun findCopyNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
@@ -248,33 +253,25 @@ class NonTextSelectionInstrumentedTest {
         return null
     }
 
-    private fun selectionState(controller: SmoothSelectionController): SelectionState {
-        val field = SmoothSelectionController::class.java.getDeclaredField("region").apply { isAccessible = true }
-        return field.get(controller) as SelectionState
-    }
+    private fun selectionState(controller: SmoothSelectionController): ReaderSelectionState =
+        requireNotNull(controller.selectionStateForTesting)
 
     private fun clickMenuCopy(provider: RecordingMenuProvider) {
         compose.waitUntil(timeoutMillis = 5_000) { provider.data != null }
-        val copy = provider.data!!.components.filterIsInstance<TextContextMenuItem>()
-            .first { it.key == TextContextMenuKeys.CopyKey }
-        compose.runOnIdle { copy.onClick(RecordingMenuSession()) }
-    }
-
-    private class RecordingClipboard : Clipboard {
-        var entry: ClipEntry? = null
-        override suspend fun getClipEntry(): ClipEntry? = entry
-        override suspend fun setClipEntry(clipEntry: ClipEntry?) { entry = clipEntry }
-    }
-
-    private class RecordingMenuProvider : TextContextMenuProvider {
-        @Volatile var data: TextContextMenuData? = null
-        override suspend fun showTextContextMenu(dataProvider: TextContextMenuDataProvider) {
-            data = dataProvider.data()
-            awaitCancellation()
+        compose.runOnIdle {
+            assertTrue("default native Copy is missing", provider.data!!.defaultCopyVisible)
+            provider.data!!.invokeAction("copy")
         }
     }
 
-    private class RecordingMenuSession : TextContextMenuSession {
-        override fun close() = Unit
+    private class RecordingClipboard : ClipboardManager {
+        var copiedText: AnnotatedString? = null
+        override fun getText(): AnnotatedString? = copiedText
+        override fun setText(annotatedString: AnnotatedString) { copiedText = annotatedString }
+    }
+
+    private class RecordingMenuProvider {
+        @Volatile var data: ReaderSelectionMenuSnapshot? = null
+        fun record(snapshot: ReaderSelectionMenuSnapshot?) { data = snapshot }
     }
 }

@@ -44,7 +44,7 @@ open class DelimitedBlockPlugin(val type: String, override val priority: Int = 0
 
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
-        Text((node as DelimitedBlockNode).contentLines.joinToString("\n"))
+        SmoothSelectableText((node as DelimitedBlockNode).contentLines.joinToString("\n"))
     }
 }
 
