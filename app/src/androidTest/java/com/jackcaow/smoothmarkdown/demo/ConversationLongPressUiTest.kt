@@ -2,13 +2,14 @@ package com.jackcaow.smoothmarkdown.demo
 
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -20,7 +21,7 @@ class ConversationLongPressUiTest {
 
     @Test fun longPressShowsFlutterCopyAndSelectMenu() {
         rule.onNodeWithTag("conversation-row-1").performClick()
-        rule.onNodeWithText("@alice", substring = true).performTouchInput { longClick() }
+        holdUntilMenuAppears("@alice")
         rule.onNodeWithTag("conversation-longpress-copy").assertExists()
         rule.onNodeWithTag("conversation-longpress-select").performClick()
         rule.onNodeWithTag("conversation-longpress-select").assertDoesNotExist()
@@ -29,9 +30,24 @@ class ConversationLongPressUiTest {
                 "已选择：@alice SmoothMarkdown 缓存策略更新了吗？性能提升了 32倍 🚀"))
     }
 
+    private fun holdUntilMenuAppears(text: String) {
+        val paragraph = rule.onNodeWithText(text, substring = true)
+        paragraph.performScrollTo()
+        paragraph.performTouchInput { down(center) }
+        try {
+            // The Demo timer uses coroutine time; a batched longClick only advances
+            // input timestamps. Hold the actual pointer until its menu is displayed.
+            rule.waitUntil(timeoutMillis = 5_000) {
+                rule.onAllNodesWithTag("conversation-longpress-select").fetchSemanticsNodes().size == 1
+            }
+        } finally {
+            paragraph.performTouchInput { up() }
+        }
+    }
+
     @Test fun selectsPressedParagraphInsteadOfEntireMessage() {
         rule.onNodeWithTag("conversation-row-3").performClick()
-        rule.onNodeWithText("不过我建议", substring = true).performTouchInput { longClick() }
+        holdUntilMenuAppears("不过我建议")
         rule.onNodeWithTag("conversation-longpress-select").performClick()
         rule.onNodeWithTag("conversation-bubble-3-1").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.StateDescription,
