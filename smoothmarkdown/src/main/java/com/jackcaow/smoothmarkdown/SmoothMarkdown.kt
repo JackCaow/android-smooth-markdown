@@ -950,7 +950,7 @@ private fun MarkdownTextContent(text: AnnotatedString, style: androidx.compose.u
         .then(enhancedLinkDecoration(text, layout)).then(tracking).then(selectionHighlight)
     Text(
         text = text,
-        style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+        style = style.copy(color = foreground, textAlign = textAlign ?: style.textAlign),
         modifier = if (actions.isEmpty() && onPlainTextTap == null) base else base
             .then(if (actions.isEmpty()) Modifier else Modifier.semantics { customActions = actions })
             .pointerInput(text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
@@ -1053,7 +1053,7 @@ private fun MarkdownInlineTextContent(
         if (interactive) MarkdownText(render.text, style, onLinkClick, textAlign, bottomPadding, modifier, onPlainTextTap)
         else Text(
             render.text,
-            style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+            style = style.copy(color = foreground, textAlign = textAlign ?: style.textAlign),
             modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
                 .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight),
         )
@@ -1149,7 +1149,7 @@ private fun MarkdownInlineTextContent(
             Text(
                 text = render.text,
                 inlineContent = inline,
-                style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+                style = style.copy(color = foreground, textAlign = textAlign ?: style.textAlign),
                 modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
                     .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight),
             )
@@ -1169,7 +1169,7 @@ private fun MarkdownInlineTextContent(
             Text(
                 text = render.text,
                 inlineContent = inline,
-                style = style.copy(color = foreground, textAlign = textAlign ?: TextAlign.Unspecified),
+                style = style.copy(color = foreground, textAlign = textAlign ?: style.textAlign),
                 modifier = Modifier.fillMaxWidth().padding(bottom = bottomPadding ?: sheet.blockSpacing).then(modifier)
                     .then(enhancedLinkDecoration(render.text, layout)).then(tracking).then(selectionHighlight)
                     .semantics { customActions = actions }.pointerInput(render.text, onPlainTextTap, onLinkClick, onMentionClick, onHashtagClick, onWikilinkClick) {
