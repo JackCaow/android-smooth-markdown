@@ -16,6 +16,19 @@ import java.util.concurrent.atomic.AtomicLong
 /** Proves the packaged NDK library actually loads in Android, with no silent Kotlin fallback. */
 @RunWith(AndroidJUnit4::class)
 class RustParserRuntimeTest {
+    @Test fun packagedStreamSessionRetainsBlocksAndInvalidatesLateReferences() {
+        StreamingMarkdownSession().use { session ->
+            val source = "# 中文🙂\n\nFirst [target][x]\n\nSecond\n\nTail"
+            val first = session.parse(source).document.children().toList()
+            val next = session.parse(source + " grows\n\nMore")
+            assertTrue("New packaged streaming JNI entry points must execute", session.retainedBlockCount > 0)
+            assertSame(first.first(), next.document.firstChild)
+            assertSame(next.document, next.document.firstChild?.parent)
+            val resolved = session.parse(next.source + "\n\n[x]: /resolved\n")
+            assertEquals(0, session.retainedBlockCount)
+            assertEquals("/resolved", resolved.document.descendants().filterIsInstance<com.jackcaow.smoothmarkdown.ast.Link>().single().destination)
+        }
+    }
     @Test fun packagedNativeParserRunsForCoreAndReaderUnicodeExtensions() {
         val bridge = Class.forName("com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge")
         val instance = bridge.getField("INSTANCE").get(null)

@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -247,8 +248,12 @@ fun SmoothMarkdown(
     val pluginVersion = plugins?.version
     val builderVersion = builderRegistry?.version
     val resolvedStyleSheet = styleSheet.resolved()
-    val document = if (enableCache) remember(markdown, plugins, pluginVersion, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
-        else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
+    val streamingDocument = LocalStreamingMarkdownDocument.current?.takeIf {
+        it.source == markdown && it.plugins === plugins && it.enableHtml == enableHtml
+    }
+    val document = streamingDocument?.document ?: if (enableCache)
+        remember(markdown, plugins, pluginVersion, enableHtml) { parseMarkdown(markdown, plugins, enableHtml = enableHtml) }
+    else parseMarkdown(markdown, plugins, enableCache = false, enableHtml = enableHtml)
     val blocks = remember(document) { document.children().toList() }
     val selectionGroups = remember(blocks, selectable, selectableAsSingleRegion, codeBlockBuilder, builderRegistry, builderVersion, plugins, pluginVersion) {
         groupSelectableBlocks(
@@ -319,7 +324,11 @@ fun SmoothMarkdown(
                     state = lazyListState,
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(resolvedStyleSheet.contentPadding),
                 ) {
-                    itemsIndexed(selectionGroups) { _, group ->
+                    // Lazy saved-state keys must be Bundle-compatible; retained stream blocks
+                    // receive monotonic Long IDs, while ordinary readers preserve index keys.
+                    itemsIndexed(selectionGroups, key = if (streamingDocument == null) null else { _, group ->
+                        streamingDocument.blockKeys.getValue(group.first())
+                    }) { _, group ->
                         MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
                     }
                 }
@@ -330,7 +339,11 @@ fun SmoothMarkdown(
                     if (fullDocumentSelectionMode) activeController?.onFullDocumentLaidOut()
                 }) {
                     selectionGroups.forEach { group ->
-                        MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
+                        if (streamingDocument == null) {
+                            MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
+                        } else key(streamingDocument.blockKeys.getValue(group.first())) {
+                            MarkdownSelectionGroup(group, onLinkClick, onImageClick, enableHtml, selectable)
+                        }
                     }
                 }
             }
@@ -522,14 +535,21 @@ private fun MarkdownSelectionGroup(
     selectable: Boolean,
 ) {
     val outerRegion = LocalMarkdownSelectionOptions.current.outerRegion
+    val streamKeys = LocalStreamingMarkdownDocument.current?.blockKeys
     if (group.size == 1 && (group.single() is FencedCodeBlock || group.single() is IndentedCodeBlock)) {
         MarkdownBlock(group.single(), onLinkClick, onImageClick, enableHtml)
     } else if (outerRegion || !selectable) {
-        Column { group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) } }
+        Column { group.forEach { node ->
+            if (streamKeys == null) MarkdownBlock(node, onLinkClick, onImageClick, enableHtml)
+            else key(streamKeys[node] ?: node) { MarkdownBlock(node, onLinkClick, onImageClick, enableHtml) }
+        } }
     } else {
         SelectionContainer {
             Column {
-                group.forEach { MarkdownBlock(it, onLinkClick, onImageClick, enableHtml) }
+                group.forEach { node ->
+                    if (streamKeys == null) MarkdownBlock(node, onLinkClick, onImageClick, enableHtml)
+                    else key(streamKeys[node] ?: node) { MarkdownBlock(node, onLinkClick, onImageClick, enableHtml) }
+                }
             }
         }
     }
