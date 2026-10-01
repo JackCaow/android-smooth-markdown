@@ -54,4 +54,29 @@ class MainstreamCodeHighlightTest {
         val json = highlightedCode("{\"count\": 2}", "json", false, colors)
         assertTrue(json.spanStyles.any { it.item.color == Color.Magenta })
     }
+    @Test fun copyAndThemeEqualityIncludeEveryOptionalAccent() {
+        val original = MarkdownSyntaxColors.light().apply {
+            type = Color.Yellow; function = Color.Green; property = Color.Magenta
+            operator = Color.Gray; punctuation = Color.Cyan; diffAdd = Color.Green; diffRemove = Color.Red
+        }
+        val copy = original.copy()
+        assertEquals(original, copy)
+        assertEquals(original.hashCode(), copy.hashCode())
+        assertEquals(original.type, copy.type); assertEquals(original.function, copy.function)
+        assertEquals(original.property, copy.property); assertEquals(original.operator, copy.operator)
+        assertEquals(original.punctuation, copy.punctuation); assertEquals(original.diffAdd, copy.diffAdd)
+        assertEquals(original.diffRemove, copy.diffRemove)
+        val changed = copy.copy().apply { function = Color.Blue }
+        assertNotEquals(original, changed)
+        val before = MarkdownCodeTokens(syntaxColors = original)
+        val after = before.copy(syntaxColors = changed)
+        assertNotEquals(before, after)
+        val code = "run()"
+        assertEquals(Color.Green, highlightedCode(code, "typescript", false, before.syntaxColors).spanStyles.first().item.color)
+        assertEquals(Color.Blue, highlightedCode(code, "typescript", false, after.syntaxColors).spanStyles.first().item.color)
+        val (keyword, string, comment, number) = original
+        assertEquals(original.keyword, keyword); assertEquals(original.string, string)
+        assertEquals(original.comment, comment); assertEquals(original.number, number)
+    }
+
 }
