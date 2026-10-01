@@ -172,8 +172,8 @@ private fun ConversationListScreen(
                     Modifier.fillMaxWidth().background(chrome).padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = { if (selected == null) onBack() else selectedId = null },
-                        modifier = Modifier.testTag("conversation-back")) { Text("‹") }
+                    DemoBackButton(onClick = { if (selected == null) onBack() else selectedId = null },
+                        modifier = Modifier.testTag("conversation-back"))
                     selected?.let { Avatar(it.avatar, it.avatarColor, 32) }
                     if (selected != null) Spacer(Modifier.width(10.dp))
                     Text(selected?.name ?: "会话列表", modifier = Modifier.weight(1f),

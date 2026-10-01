@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
-internal object NativeMarkdownHTMLBlock {
+object NativeMarkdownHTMLBlock {
     data class End(val pattern: Regex? = null) { fun matches(line: String) = pattern?.containsMatchIn(line) ?: line.all { it == ' ' || it == '\t' } }
     fun end(line: String, interruptingParagraph: Boolean = false): End? {
         val body = line.dropWhile { it == ' ' }

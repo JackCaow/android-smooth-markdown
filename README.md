@@ -8,7 +8,7 @@ Version `0.2.0` uses the owned parser and system rendering described below. Vers
 
 The reader uses a library-owned Markdown AST/parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
 
-Jetpack Compose and Kotlin coroutines remain framework dependencies. The library currently requires Compose; it is not a standalone Android View library.
+Jetpack Compose and Kotlin coroutines remain framework dependencies. The reader requires Compose. The independent `smoothmarkdown-core` module provides CommonMark/GFM parsing and HTML export on the JVM without Android, Compose, or coroutines. The existing `smoothmarkdown` module includes the core transitively and retains the original AST package names.
 
 Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other library-owned AST types. Applications upgrading from 0.1.0 must update their former `org.commonmark` imports.
 
@@ -34,7 +34,9 @@ dependencies {
 }
 ```
 
-The library is also available as a source module. To use source instead, pin this repository to a reviewed commit, include `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. The `app` module is only the Demo.
+The library is also available as source modules. To use source instead, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. The reader exposes Core transitively. The `app` module is only the Demo.
+
+The current source introduces grouped options, resource loading, localized labels, and a pure JVM core. These additions are not included in the published `0.2.0` artifact. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
 
 ## Quick start
 
@@ -55,6 +57,24 @@ fun Article(markdown: String, openLink: (String) -> Unit) {
 ```
 
 The reader scrolls vertically by default. In a parent scroll container or chat item, pass `scrollable = false`. Set `useEnhancedComponents = true` for the Demo's decorated headers, quotes, links, and code controls.
+
+### Customize appearance
+
+Document styles and component tokens are exposed through `MarkdownStyleSheet`:
+
+```kotlin
+val base = MarkdownStyleSheet.light()
+val style = base.copy(
+    blockSpacing = 12.dp,
+    designTokens = base.designTokens.copy(
+        heading = base.designTokens.heading.copy(decoratedThroughLevel = 0),
+        details = base.designTokens.details.copy(cornerRadius = 12.dp),
+    ),
+)
+SmoothMarkdown(markdown = content, styleSheet = style)
+```
+
+Import `com.jackcaow.smoothmarkdown.MarkdownStyleSheet` and `androidx.compose.ui.unit.dp`. Component tokens are currently available in source and are not included in the published `0.2.0` artifact. See the [styling guide](docs/styling.md) for presets, nested overrides, precedence, streaming, plugin panels, Mermaid palettes, and editor preview styling. `SmoothMarkdownEditor(styleSheet = style)` uses reader styling in Preview/Split; editor controls use `MarkdownEditorTheme`.
 
 ### Render a stream
 
@@ -101,7 +121,7 @@ The controller defaults to **Source** mode; the example selects **Formatted** ex
 | Render incoming text | `StreamMarkdown(chunks = flow)` or `StreamMarkdown(prefixes = stateFlow)` |
 | Edit source or formatted blocks | `MarkdownEditorController` + `SmoothMarkdownEditor` |
 | Handle links and images | `onLinkClick`, `onImageClickWithMetadata` |
-| Style rendered content | `styleSheet`, `useEnhancedComponents` |
+| Style rendered content | `styleSheet`, `styleSheet.designTokens`, `useEnhancedComponents` |
 | Replace built-in rendering | `imageBuilder`, `codeBlockBuilder`, `builderRegistry`, `plugins` |
 
 The reader covers common Markdown, GFM tables and task lists, images, footnotes, code, math, and opt-in safe HTML. Parser and renderer plugins add mentions, hashtags, Mermaid diagrams, and AI-specific blocks. See the [implementation reference](docs/reference.md) for exact supported constructs, selection behavior, customization, and current limits.

@@ -2,9 +2,10 @@ package com.jackcaow.smoothmarkdown
 
 import androidx.compose.ui.graphics.Color
 
-/** Resolves the newer six-edge API before falling back to the legacy color alias. */
+/** Applies semantic colors and safe widths to six-edge overrides before the legacy color fallback. */
 internal fun resolveTableBorder(sheet: MarkdownStyleSheet, defaultColor: Color): MarkdownTableBorder =
-    sheet.tableBorder ?: MarkdownTableBorder.all(sheet.tableBorderColor ?: defaultColor)
+    sheet.tableBorder?.normalized(sheet.designTokens.document.tableBorderColor)
+        ?: MarkdownTableBorder.all(sheet.designTokens.document.tableBorderColor ?: sheet.tableBorderColor ?: defaultColor)
 
 /** Assign each shared rule to exactly one cell, so adjacent cells never double its width. */
 internal fun tableCellBorderEdges(

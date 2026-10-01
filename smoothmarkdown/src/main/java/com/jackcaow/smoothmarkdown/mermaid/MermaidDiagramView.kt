@@ -31,6 +31,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlin.math.hypot
+import com.jackcaow.smoothmarkdown.LocalMarkdownStyleSheet
+import com.jackcaow.smoothmarkdown.MarkdownMermaidTokens
+import com.jackcaow.smoothmarkdown.normalized
 
 /** Native Mermaid diagram. [onNodeTap] receives the source node ID, never its display label. */
 @Composable
@@ -40,14 +43,36 @@ fun MermaidDiagramView(
     onNodeTap: ((String) -> Unit)? = null,
     /** Flutter-compatible fenced `theme=dark|forest|neutral|default` override. */
     theme: String? = null,
+    /** Host colors take precedence over [theme]; null fields inherit the surrounding MaterialTheme. */
+    style: MarkdownMermaidTokens = LocalMarkdownStyleSheet.current.designTokens.mermaid,
 ) {
-    if (theme == null) {
-        MermaidDiagramContent(source, modifier, onNodeTap, explicitTheme = false)
-    } else {
-        val colors = mermaidThemeColors(theme)
-        MaterialTheme(colorScheme = MaterialTheme.colorScheme.withMermaidTheme(colors)) {
-            MermaidDiagramContent(source, modifier.background(colors.background), onNodeTap, explicitTheme = true)
-        }
+    val resolvedStyle = style.normalized()
+    val colors = resolvedStyle.colors ?: theme?.let(::mermaidThemeColors)
+    MaterialTheme(
+        colorScheme = colors?.let { MaterialTheme.colorScheme.withMermaidTheme(it) } ?: MaterialTheme.colorScheme,
+        typography = resolvedStyle.typography?.let { roles ->
+            val inherited = MaterialTheme.typography
+            inherited.copy(
+                bodySmall = roles.bodySmall ?: inherited.bodySmall,
+                bodyMedium = roles.bodyMedium ?: inherited.bodyMedium,
+                bodyLarge = roles.bodyLarge ?: inherited.bodyLarge,
+                labelSmall = roles.labelSmall ?: inherited.labelSmall,
+                labelMedium = roles.labelMedium ?: inherited.labelMedium,
+                labelLarge = roles.labelLarge ?: inherited.labelLarge,
+                titleSmall = roles.titleSmall ?: inherited.titleSmall,
+                titleMedium = roles.titleMedium ?: inherited.titleMedium,
+                titleLarge = roles.titleLarge ?: inherited.titleLarge,
+                headlineSmall = roles.headlineSmall ?: inherited.headlineSmall,
+                headlineMedium = roles.headlineMedium ?: inherited.headlineMedium,
+                headlineLarge = roles.headlineLarge ?: inherited.headlineLarge,
+                displaySmall = roles.displaySmall ?: inherited.displaySmall,
+                displayMedium = roles.displayMedium ?: inherited.displayMedium,
+                displayLarge = roles.displayLarge ?: inherited.displayLarge
+            )
+        } ?: MaterialTheme.typography,
+    ) {
+        MermaidDiagramContent(source, colors?.let { modifier.background(it.background) } ?: modifier,
+            onNodeTap, explicitTheme = colors != null)
     }
 }
 

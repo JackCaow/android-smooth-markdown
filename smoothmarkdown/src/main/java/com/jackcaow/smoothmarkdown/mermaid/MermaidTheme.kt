@@ -3,14 +3,22 @@ package com.jackcaow.smoothmarkdown.mermaid
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 
-/** Colors used by Flutter's four MermaidStyle presets for fenced diagrams. */
-internal data class MermaidThemeColors(
+/**
+ * Public base Mermaid palette. Background, node fill/stroke, text, and edges are applied through
+ * MaterialTheme; source node style/classDef directives retain precedence over these defaults.
+ */
+data class MermaidThemeColors(
     val background: Color,
     val nodeFill: Color,
     val nodeStroke: Color,
     val text: Color,
     val edge: Color,
-)
+) {
+    companion object {
+        /** Named default, dark, forest, or neutral palette; unknown names use default. */
+        fun preset(name: String = "default"): MermaidThemeColors = mermaidThemeColors(name)
+    }
+}
 
 internal fun mermaidThemeColors(name: String): MermaidThemeColors = when (name.lowercase()) {
     "dark" -> MermaidThemeColors(

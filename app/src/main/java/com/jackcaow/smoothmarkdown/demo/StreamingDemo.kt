@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jackcaow.smoothmarkdown.MarkdownStyleSheet
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.StreamMarkdown
@@ -78,8 +79,8 @@ fun StreamingDemo(
 
     Column(modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
                 onClick = { chunkCount = 0; generation++; phase = StreamPhase.Streaming },
@@ -100,7 +101,7 @@ fun StreamingDemo(
         }
         when (phase) {
             StreamPhase.Streaming -> LinearProgressIndicator(Modifier.fillMaxWidth().testTag("stream-progress"))
-            StreamPhase.Complete -> Box(Modifier.fillMaxWidth().height(4.dp).background(Color(0xFF4CAF50))
+            StreamPhase.Complete -> Box(Modifier.fillMaxWidth().height(2.dp).background(Color(0xFF4CAF50))
                 .testTag("stream-complete-bar"))
             StreamPhase.Idle -> Unit
         }
@@ -130,7 +131,16 @@ fun StreamingDemo(
                 chunks = chunks,
                 modifier = Modifier.weight(1f).testTag("stream-markdown"),
                 onLinkClick = onLinkClick,
-                styleSheet = styleSheet,
+                styleSheet = styleSheet.copy(
+                    blockSpacing = 10.dp,
+                    listSpacing = 4.dp,
+                    headingStyles = listOf(26, 23, 20, 18, 16, 16).map {
+                        androidx.compose.ui.text.TextStyle(fontSize = it.sp, lineHeight = (it * 1.3).sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    },
+                    codeStyle = (styleSheet.codeStyle ?: androidx.compose.ui.text.TextStyle()).copy(
+                        fontSize = 13.sp, lineHeight = 20.sp),
+                ),
                 plugins = plugins,
                 useEnhancedComponents = true,
             )

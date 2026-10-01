@@ -63,7 +63,21 @@ class TableBordersTest {
         assertNull(cell.left)
         assertNull(cell.right)
         assertEquals(0.dp, cell.bottom?.width)
-        assertThrows(IllegalArgumentException::class.java) { MarkdownTableBorderSide(Color.Red, (-1).dp) }
+        val configured = MarkdownStyleSheet(tableBorder = MarkdownTableBorder(
+            top = MarkdownTableBorderSide(Color.Red, (-1).dp),
+            right = MarkdownTableBorderSide(Color.Green, Float.POSITIVE_INFINITY.dp),
+            bottom = MarkdownTableBorderSide(Color.Blue, Float.NaN.dp),
+            horizontalInside = MarkdownTableBorderSide(Color.Magenta, 3.dp),
+        ))
+        val safe = resolveTableBorder(configured, Color.White)
+        assertEquals(configured.resolved().tableBorder, safe)
+        assertEquals(0.dp, safe.top?.width)
+        assertEquals(0.dp, safe.right?.width)
+        assertEquals(0.dp, safe.bottom?.width)
+        assertEquals(3.dp, safe.horizontalInside?.width)
+        assertEquals(Color.Red, safe.top?.color)
+        assertEquals(0.dp, tableCellBorderEdges(safe, 0, 2, 0, 2).top?.width)
+        assertEquals((-1).dp, configured.tableBorder?.top?.width)
         assertThrows(IllegalArgumentException::class.java) { tableCellBorderEdges(border, 2, 2, 0, 2) }
     }
 }

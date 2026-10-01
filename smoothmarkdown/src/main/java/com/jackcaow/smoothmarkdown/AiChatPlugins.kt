@@ -19,12 +19,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.ast.Node
 
 class ThinkingNode(val isCollapsed: Boolean = true) : PluginBlockNode() {
@@ -55,22 +57,32 @@ class ThinkingPlugin : BlockParserPlugin {
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         val thinking = node as ThinkingNode
         var collapsed by rememberSaveable(thinking) { mutableStateOf(thinking.isCollapsed) }
-        val shape = RoundedCornerShape(6.dp)
-        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
+        val strings = LocalMarkdownStrings.current
+        val tokens = LocalMarkdownStyleSheet.current.designTokens.plugins.thinking
+        val shape = RoundedCornerShape(tokens.cornerRadius)
+        Column(Modifier.fillMaxWidth().padding(tokens.outerPadding).clip(shape)
+            .background(tokens.backgroundColor ?: Color.Transparent)
+            .then(if (tokens.borderWidth.value > 0) Modifier.border(tokens.borderWidth, tokens.borderColor ?: MaterialTheme.colorScheme.outlineVariant, shape) else Modifier)) {
             Row(Modifier.fillMaxWidth()
-                .semantics { stateDescription = if (collapsed) "Collapsed" else "Expanded" }
+                .semantics { stateDescription = if (collapsed) strings.collapsed else strings.expanded }
                 .clickable(
                     role = Role.Button,
-                    onClickLabel = if (collapsed) "Expand thinking" else "Collapse thinking",
-                ) { collapsed = !collapsed }.padding(12.dp)) {
-                Text(if (collapsed) "›" else "⌄", color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Thinking", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    onClickLabel = if (collapsed) strings.expandThinking else strings.collapseThinking,
+                ) { collapsed = !collapsed }
+                .background(tokens.headerBackgroundColor ?: Color.Transparent).padding(tokens.headerPadding)) {
+                Text(if (collapsed) "›" else "⌄", color = tokens.accentColor ?: MaterialTheme.colorScheme.primary,
+                    style = tokens.iconStyle ?: LocalTextStyle.current)
+                Spacer(Modifier.width(tokens.iconSpacing))
+                Text(strings.thinking, color = tokens.titleColor ?: Color.Unspecified,
+                    style = tokens.titleStyle ?: MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
             }
             if (!collapsed) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (tokens.dividerThickness.value > 0) HorizontalDivider(thickness = tokens.dividerThickness,
+                    color = tokens.borderColor ?: MaterialTheme.colorScheme.outlineVariant)
                 SelectableMarkdownContent {
-                    Text(thinking.content, modifier = Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+                    Text(thinking.content, modifier = Modifier.fillMaxWidth().padding(tokens.contentPadding),
+                        color = tokens.contentColor ?: Color.Unspecified,
+                        style = tokens.contentStyle ?: MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -122,22 +134,29 @@ class ArtifactPlugin : BlockParserPlugin {
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         val artifact = node as ArtifactNode
-        val shape = RoundedCornerShape(6.dp)
-        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
-            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp)) {
+        val strings = LocalMarkdownStrings.current
+        val tokens = LocalMarkdownStyleSheet.current.designTokens.plugins.artifact
+        val shape = RoundedCornerShape(tokens.cornerRadius)
+        Column(Modifier.fillMaxWidth().padding(tokens.outerPadding).clip(shape)
+            .background(tokens.backgroundColor ?: Color.Transparent)
+            .then(if (tokens.borderWidth.value > 0) Modifier.border(tokens.borderWidth, tokens.borderColor ?: MaterialTheme.colorScheme.outlineVariant, shape) else Modifier)) {
+            Column(Modifier.fillMaxWidth().background(tokens.headerBackgroundColor ?: MaterialTheme.colorScheme.surfaceVariant)
+                .padding(tokens.headerPadding)) {
                 Text(artifact.title?.takeIf(String::isNotBlank) ?: artifact.identifier,
-                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    color = tokens.titleColor ?: Color.Unspecified,
+                    style = tokens.titleStyle ?: MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
                 Text("${artifact.artifactType.name.lowercase()} · ${artifact.identifier}",
-                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    style = tokens.metadataStyle ?: MaterialTheme.typography.labelSmall,
+                    color = tokens.metadataColor ?: MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (artifact.content.isNotEmpty()) {
                 if (artifact.artifactType == ArtifactType.CODE) {
                     EnhancedCodeBlock(artifact.content, artifact.language)
                 } else {
                     SelectableMarkdownContent {
-                        Text(artifact.content, modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+                        Text(artifact.content, modifier = Modifier.fillMaxWidth().padding(tokens.contentPadding),
+                            color = tokens.contentColor ?: Color.Unspecified,
+                            style = tokens.contentStyle ?: MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                     }
                 }
             }
@@ -180,16 +199,34 @@ class ToolCallPlugin : BlockParserPlugin {
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         val tool = node as ToolCallNode
-        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))) {
-            Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(12.dp)) {
-                Text("Tool: ${tool.toolName}", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                Text(tool.status.name.lowercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+        val strings = LocalMarkdownStrings.current
+        val tokens = LocalMarkdownStyleSheet.current.designTokens.plugins.toolCall
+        val shape = RoundedCornerShape(tokens.cornerRadius)
+        Column(Modifier.fillMaxWidth().padding(tokens.outerPadding).clip(shape)
+            .background(tokens.backgroundColor ?: Color.Transparent)
+            .then(if (tokens.borderWidth.value > 0) Modifier.border(tokens.borderWidth, tokens.borderColor ?: MaterialTheme.colorScheme.outlineVariant, shape) else Modifier)) {
+            Row(Modifier.fillMaxWidth().background(tokens.headerBackgroundColor ?: MaterialTheme.colorScheme.surfaceVariant)
+                .padding(tokens.headerPadding)) {
+                Text("${strings.tool}: ${tool.toolName}", modifier = Modifier.weight(1f),
+                    color = tokens.titleColor ?: Color.Unspecified,
+                    style = tokens.titleStyle ?: LocalTextStyle.current.copy(fontWeight = FontWeight.SemiBold))
+                Text(when (tool.status) {
+                    ToolCallStatus.RUNNING -> strings.running
+                    ToolCallStatus.COMPLETED -> strings.completed
+                    ToolCallStatus.FAILED -> strings.failed
+                    ToolCallStatus.CANCELLED -> strings.cancelled
+                    ToolCallStatus.PENDING -> strings.pending
+                }, color = tokens.accentColor ?: MaterialTheme.colorScheme.primary,
+                    style = tokens.statusStyle ?: MaterialTheme.typography.labelMedium)
             }
-            tool.toolId?.let { Text("ID: $it", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall) }
+            tool.toolId?.let { Text("${strings.identifier}: $it", modifier = Modifier.padding(tokens.metadataPadding),
+                color = tokens.metadataColor ?: Color.Unspecified,
+                style = tokens.metadataStyle ?: MaterialTheme.typography.labelSmall) }
             tool.parameters?.let {
                 SelectableMarkdownContent {
-                    Text(it, modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
+                    Text(it, modifier = Modifier.fillMaxWidth().padding(tokens.contentPadding),
+                        color = tokens.contentColor ?: Color.Unspecified,
+                        style = tokens.contentStyle ?: MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                 }
             }
         }

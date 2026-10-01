@@ -28,6 +28,27 @@ class ParserPluginsTest {
         assertTrue(copy.blockPlugins.isEmpty())
     }
 
+    @Test fun failedBatchRegistrationLeavesPluginsAndObservableVersionUnchanged() {
+        val registry = ParserPluginRegistry().also { it.register(MentionPlugin()) }
+        val version = registry.version
+        assertThrows(IllegalArgumentException::class.java) {
+            registry.registerAll(listOf(EmojiPlugin(), MentionPlugin()))
+        }
+        assertEquals(listOf("mention"), registry.inlinePlugins.map { it.id })
+        assertEquals(version, registry.version)
+        assertThrows(IllegalArgumentException::class.java) {
+            registry.registerAll(listOf(AdmonitionPlugin(), object : ParserPlugin {
+                override val id = "unsupported"
+                override val name = "Unsupported"
+            }))
+        }
+        assertTrue(registry.blockPlugins.isEmpty())
+        assertEquals(version, registry.version)
+        registry.registerAll(listOf(EmojiPlugin(), HashtagPlugin()))
+        assertEquals(version + 1, registry.version)
+        assertEquals(3, registry.inlinePlugins.size)
+    }
+
     @Test fun builtInInlinePluginsAreOptInAndPreserveCode() {
         val markdown = "Hello @john_doe-test, #flutter_dev :SMILE: :missing:"
         val plain = parseMarkdown(markdown).firstChild as Paragraph

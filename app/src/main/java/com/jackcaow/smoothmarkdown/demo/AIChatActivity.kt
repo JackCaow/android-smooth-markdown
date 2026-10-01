@@ -313,8 +313,7 @@ private fun AIChatScreen(
                     Modifier.fillMaxWidth().background(chrome).padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag("ai-back")
-                        .semantics { contentDescription = "返回" }) { Text("‹") }
+                    DemoBackButton(onClick = onBack, modifier = Modifier.testTag("ai-back"))
                     Column(Modifier.weight(1f)) {
                         Text("AI Chat", style = MaterialTheme.typography.titleMedium,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)

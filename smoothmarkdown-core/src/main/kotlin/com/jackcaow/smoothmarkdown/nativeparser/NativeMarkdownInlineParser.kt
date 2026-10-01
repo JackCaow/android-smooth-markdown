@@ -5,7 +5,7 @@ import java.util.Locale
 data class NativeCustomInlineMatch(val node: NativeMarkdownNode, val consumed: Int)
 
 /** Own CommonMark tokenizer; emphasis uses a delimiter stack after links/code are isolated. */
-internal object NativeMarkdownInlineParser {
+object NativeMarkdownInlineParser {
     fun normalizeReference(label: String): String = label.trim().split(Regex("[\\s\\p{Z}]+"))
         .joinToString(" ").replace('ẞ', 'ß').uppercase(Locale.ROOT).lowercase(Locale.ROOT)
 

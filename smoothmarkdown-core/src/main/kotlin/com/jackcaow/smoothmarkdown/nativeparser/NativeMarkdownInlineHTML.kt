@@ -1,6 +1,6 @@
 package com.jackcaow.smoothmarkdown.nativeparser
 
-internal object NativeMarkdownInlineHTML {
+object NativeMarkdownInlineHTML {
     private const val whitespace = "[ \\t\\r\\n]"
     private const val name = "[A-Za-z_:][A-Za-z0-9_.:-]*"
     private const val value = "(?:\"[^\"]*\"|'[^']*'|[^ \\t\\r\\n\"'=<>`]+)"

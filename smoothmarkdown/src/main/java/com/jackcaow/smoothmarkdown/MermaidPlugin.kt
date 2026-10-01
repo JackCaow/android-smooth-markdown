@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.mermaid.MermaidDiagramView
 import com.jackcaow.smoothmarkdown.mermaid.MermaidParser
 import com.jackcaow.smoothmarkdown.ast.FencedCodeBlock
@@ -32,9 +31,10 @@ class MermaidPlugin(val onNodeTap: ((String) -> Unit)? = null) : BlockParserPlug
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         val diagram = node as MermaidDiagramNode
+        val tokens = LocalMarkdownStyleSheet.current.designTokens.mermaid
         MermaidDiagramView(diagram.code,
-            Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(vertical = 8.dp), onNodeTap,
-            theme = diagram.theme)
+            Modifier.fillMaxWidth().heightIn(max = tokens.maxHeight).padding(tokens.outerPadding), onNodeTap,
+            theme = diagram.theme, style = tokens)
     }
 }
 

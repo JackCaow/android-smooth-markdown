@@ -1,6 +1,8 @@
 package com.jackcaow.smoothmarkdown
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,10 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.jackcaow.smoothmarkdown.ast.Node
 
 class MentionNode(val username: String) : PluginInlineNode()
@@ -36,7 +37,7 @@ class MentionPlugin : InlineParserPlugin {
         return InlineParseResult(MentionNode(value), value.length + 1)
     }
     override fun render(node: PluginInlineNode): InlinePluginPresentation? =
-        (node as? MentionNode)?.let { InlinePluginPresentation("@${it.username}", SpanStyle(color = Color(0xFF1976D2), fontWeight = FontWeight.SemiBold)) }
+        (node as? MentionNode)?.let { InlinePluginPresentation("@${it.username}", MarkdownPluginTokens().mentionStyle) }
 }
 
 class HashtagPlugin : InlineParserPlugin {
@@ -54,7 +55,7 @@ class HashtagPlugin : InlineParserPlugin {
         return InlineParseResult(HashtagNode(value), value.length + 1)
     }
     override fun render(node: PluginInlineNode): InlinePluginPresentation? =
-        (node as? HashtagNode)?.let { InlinePluginPresentation("#${it.tag}", SpanStyle(color = Color(0xFF1976D2))) }
+        (node as? HashtagNode)?.let { InlinePluginPresentation("#${it.tag}", MarkdownPluginTokens().hashtagStyle) }
 }
 
 class EmojiPlugin(private val customEmojis: Map<String, String> = emptyMap()) : InlineParserPlugin {
@@ -307,19 +308,19 @@ class AdmonitionPlugin : BlockParserPlugin {
     @Composable
     override fun RenderBlock(node: PluginBlockNode, renderChild: @Composable (Node) -> Unit) {
         val admonition = node as AdmonitionNode
-        val accent = when (admonition.admonitionType) {
-            AdmonitionType.NOTE -> Color(0xFF1976D2)
-            AdmonitionType.TIP -> Color(0xFF2E7D32)
-            AdmonitionType.WARNING -> Color(0xFFED6C02)
-            AdmonitionType.DANGER -> Color(0xFFD32F2F)
-            AdmonitionType.IMPORTANT -> Color(0xFF7B1FA2)
-            AdmonitionType.CUSTOM -> MaterialTheme.colorScheme.primary
-        }
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).background(accent.copy(alpha = 0.09f)).padding(12.dp)) {
-            Spacer(Modifier.width(4.dp).height(64.dp).background(accent))
-            Column(Modifier.padding(start = 10.dp)) {
-                Text(admonition.title.ifEmpty { admonition.customType ?: admonition.admonitionType.name.lowercase().replaceFirstChar(Char::uppercase) },
-                    color = accent, fontWeight = FontWeight.Bold)
+        val strings = LocalMarkdownStrings.current
+        val tokens = LocalMarkdownStyleSheet.current.designTokens.plugins.admonition
+        val accent = tokens.accentColors[admonition.admonitionType] ?: MaterialTheme.colorScheme.primary
+        val shape = RoundedCornerShape(tokens.cornerRadius)
+        Row(Modifier.fillMaxWidth().padding(tokens.outerPadding).clip(shape)
+            .background(tokens.backgroundColor ?: accent.copy(alpha = tokens.backgroundAlpha))
+            .then(if (tokens.borderWidth.value > 0) Modifier.border(tokens.borderWidth, tokens.borderColor ?: accent, shape) else Modifier)
+            .padding(tokens.contentPadding)) {
+            Spacer(Modifier.width(tokens.accentWidth).height(tokens.accentHeight).background(accent))
+            Column(Modifier.padding(start = tokens.contentSpacing)) {
+                Text(admonition.title.ifEmpty { admonition.customType ?: strings[admonition.admonitionType.name.lowercase().replaceFirstChar(Char::uppercase)] },
+                    color = tokens.titleColor ?: accent,
+                    style = tokens.titleStyle ?: TextStyle(fontWeight = FontWeight.Bold))
                 admonition.content.forEach { renderChild(it) }
             }
         }

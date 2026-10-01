@@ -167,6 +167,10 @@ fun SmoothMarkdownEditor(
     imageBuilder: (@Composable (String, String?, String?) -> Unit)? = null,
     /** Flutter's editor enables enhanced Preview/Split components by default. */
     useEnhancedComponents: Boolean = true,
+    /** Reader styling shared by Preview and Split; editor chrome uses editorTheme. */
+    styleSheet: com.jackcaow.smoothmarkdown.MarkdownStyleSheet = com.jackcaow.smoothmarkdown.MarkdownStyleSheet.default(),
+    resourceOptions: com.jackcaow.smoothmarkdown.MarkdownResourceOptions = com.jackcaow.smoothmarkdown.LocalMarkdownResources.current,
+    strings: com.jackcaow.smoothmarkdown.MarkdownStrings = com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current,
 ) {
     val effectiveTheme = LocalMarkdownEditorTheme.current.merge(editorTheme)
     val colors = MaterialTheme.colorScheme
@@ -191,7 +195,7 @@ fun SmoothMarkdownEditor(
     DisposableEffect(controller, sourceFocus) {
         onDispose { sourceFocus.setFocused(false, latestOnFocusChanged.value) }
     }
-    val previewPlugins = remember(controller.parserPlugins, enableWikilinks) {
+    val previewPlugins = remember(controller.parserPlugins, controller.parserPlugins?.version, enableWikilinks) {
         controller.parserPlugins?.copy()?.also { registry ->
             if (enableWikilinks && registry.getInlinePlugin("wikilink") == null) registry.register(WikilinkPlugin())
             if (!enableWikilinks) registry.unregisterInline("wikilink")
@@ -211,7 +215,7 @@ fun SmoothMarkdownEditor(
         if (searchOpen) searchFocusRequester.requestFocus()
     }
     val formattedSearch = remember(controller.text, searchQuery, searchOpen, controller.mode,
-        controller.enableWikilinks) {
+        controller.parserPlugins?.version, controller.enableWikilinks) {
         if (searchOpen && controller.mode == MarkdownEditorMode.FORMATTED)
             FormattedSearch.find(controller.semanticDocument(), searchQuery, controller.enableWikilinks)
         else FormattedSearch.Empty
@@ -268,10 +272,10 @@ fun SmoothMarkdownEditor(
         scope.launch {
             try {
                 hostStatus = when (action()) {
-                    MarkdownEditorHostResult.SUCCESS -> "$label complete"
-                    MarkdownEditorHostResult.CANCELLED -> "$label cancelled"
-                    MarkdownEditorHostResult.STALE -> "$label cancelled: document changed"
-                    MarkdownEditorHostResult.FAILED -> "$label failed"
+                    MarkdownEditorHostResult.SUCCESS -> strings.format("{action} complete", mapOf("action" to strings[label]))
+                    MarkdownEditorHostResult.CANCELLED -> strings.format("{action} cancelled", mapOf("action" to strings[label]))
+                    MarkdownEditorHostResult.STALE -> strings.format("{action} cancelled: document changed", mapOf("action" to strings[label]))
+                    MarkdownEditorHostResult.FAILED -> strings.format("{action} failed", mapOf("action" to strings[label]))
                 }
             } finally { hostActionBusy = false }
         }
@@ -284,7 +288,9 @@ fun SmoothMarkdownEditor(
         return true
     }
     val editorShape = RoundedCornerShape(effectiveTheme.editorBorderRadius ?: 8.dp)
-    CompositionLocalProvider(LocalMarkdownEditorTheme provides effectiveTheme) {
+    CompositionLocalProvider(LocalMarkdownEditorTheme provides effectiveTheme,
+        com.jackcaow.smoothmarkdown.LocalMarkdownResources provides resourceOptions,
+        com.jackcaow.smoothmarkdown.LocalMarkdownStrings provides strings) {
     Column(modifier.clip(editorShape)
         .background(effectiveTheme.editorColor ?: colors.surface)
         .border(1.dp, effectiveTheme.editorBorderColor ?: effectiveTheme.blockBorderColor ?: colors.outlineVariant, editorShape)
@@ -338,7 +344,7 @@ fun SmoothMarkdownEditor(
                                         contentColor = if (active) effectiveTheme.toolbarActiveIconColor ?: colors.primary
                                             else effectiveTheme.toolbarIconColor ?: colors.primary,
                                     )) {
-                                    Text(mode.name.lowercase().replaceFirstChar(Char::uppercaseChar))
+                                    Text(strings[mode.name.lowercase().replaceFirstChar(Char::uppercaseChar)])
                                 }
                             }
                         }
@@ -346,24 +352,24 @@ fun SmoothMarkdownEditor(
                             Button(onClick = {
                                 onSave(controller.text)
                                 controller.markSaved()
-                            }, enabled = controller.isDirty) { Text("Save") }
+                            }, enabled = controller.isDirty) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Save"]) }
                         }
                     }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-focus-mode")) {
-                            Text("Focus mode")
+                            Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Focus mode"])
                         }
                         TextButton(onClick = {
                             searchOpen = !searchOpen
                             if (!searchOpen) { searchMatchIndex = 0; searchNavigationId = 0 }
                         }, modifier = Modifier.testTag("editor-find")) {
-                            Text(if (searchOpen) "Close find" else "Find")
+                            Text(if (searchOpen) strings["Close find"] else strings["Find"])
                         }
                         toolbarTrailing.forEach { it() }
                     }
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                        TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text("Undo") }
-                        TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text("Redo") }
+                        TextButton(onClick = { controller.undo() }, enabled = controller.canUndo) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Undo"]) }
+                        TextButton(onClick = { controller.redo() }, enabled = controller.canRedo) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Redo"]) }
                         val defaultCommands = listOf(
                             "B" to MarkdownEditorCommand.BOLD,
                             "I" to MarkdownEditorCommand.ITALIC,
@@ -387,7 +393,7 @@ fun SmoothMarkdownEditor(
                                     }
                                 } else applyEditorCommand(command)
                             }, enabled = (command != MarkdownEditorCommand.WIKILINK || enableWikilinks) &&
-                                (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(label) }
+                                (command != MarkdownEditorCommand.IMAGE || !hostActionBusy)) { Text(strings[label]) }
                         }
                         if (onPickImage != null && (toolbarCommands == null || MarkdownEditorCommand.IMAGE !in toolbarCommands) &&
                             capabilities.supports(MarkdownEditorCommand.IMAGE)) {
@@ -396,28 +402,28 @@ fun SmoothMarkdownEditor(
                                 runHostAction("Image") {
                                     MarkdownEditorHostActions.pickAndInsertImage(controller, onPickImage, onImagePickEvent, onHostActionError)
                                 }
-                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-pick-image")) { Text("Image") }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-pick-image")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Image"]) }
                         }
                         if (onImportMarkdown != null) {
                             TextButton(onClick = {
                                 runHostAction("Import") {
                                     MarkdownEditorHostActions.importMarkdown(controller, onImportMarkdown, onHostActionError)
                                 }
-                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-import-markdown")) { Text("Import") }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-import-markdown")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Import"]) }
                         }
                         if (onExportMarkdown != null) {
                             TextButton(onClick = {
                                 runHostAction("Export") {
                                     MarkdownEditorHostActions.exportMarkdown(controller, onExportMarkdown, onHostActionError)
                                 }
-                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text("Export") }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-markdown")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Export"]) }
                         }
                         if (onExportPdf != null) {
                             TextButton(onClick = {
                                 runHostAction("PDF export") {
                                     MarkdownEditorHostActions.exportPdf(controller, onExportPdf, onHostActionError)
                                 }
-                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-pdf")) { Text("Export PDF") }
+                            }, enabled = !hostActionBusy, modifier = Modifier.testTag("editor-export-pdf")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Export PDF"]) }
                         }
                     }
                 }
@@ -429,7 +435,7 @@ fun SmoothMarkdownEditor(
         } else if (showToolbar && focusMode) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = { toggleFocusMode() }, modifier = Modifier.testTag("editor-exit-focus")) {
-                    Text("Exit focus")
+                    Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Exit focus"])
                 }
             }
         }
@@ -439,19 +445,19 @@ fun SmoothMarkdownEditor(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it; searchMatchIndex = 0; searchNavigationId = 0 },
-                    label = { Text("Find in note") },
+                    label = { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Find in note"]) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(searchFocusRequester).testTag("editor-search-query"),
                 )
                 Row {
-                    Text(if (searchMatchCount == 0) "Not found" else "${currentSearchIndex + 1}/$searchMatchCount",
+                    Text(if (searchMatchCount == 0) strings["Not found"] else strings.format("{current}/{total}", mapOf("current" to (currentSearchIndex + 1).toString(), "total" to searchMatchCount.toString())),
                         modifier = Modifier.padding(8.dp).testTag("editor-search-count"))
                     TextButton(onClick = { navigateSearch(-1) }, enabled = searchMatchCount > 0,
-                        modifier = Modifier.testTag("editor-search-previous")) { Text("Previous") }
+                        modifier = Modifier.testTag("editor-search-previous")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Previous"]) }
                     TextButton(onClick = { navigateSearch(1) }, enabled = searchMatchCount > 0,
-                        modifier = Modifier.testTag("editor-search-next")) { Text("Next") }
+                        modifier = Modifier.testTag("editor-search-next")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Next"]) }
                     TextButton(onClick = { searchOpen = false; searchMatchIndex = 0; searchNavigationId = 0 },
-                        modifier = Modifier.testTag("editor-search-close")) { Text("Close") }
+                        modifier = Modifier.testTag("editor-search-close")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Close"]) }
                 }
             }
         }
@@ -472,7 +478,7 @@ fun SmoothMarkdownEditor(
                             }
                         },
                         modifier = Modifier.fillMaxWidth().testTag("editor-slash-suggestion-$index"),
-                    ) { Text(item.title) }
+                    ) { Text(if (item.customCommand == null) strings[item.title] else item.title) }
                 }
             }
         }
@@ -486,9 +492,9 @@ fun SmoothMarkdownEditor(
                 .testTag("editor-preview-scroll")
                 .background(effectiveTheme.previewColor ?: colors.surface)
                 .padding(effectiveTheme.previewPadding ?: 16.dp),
-                plugins = previewPlugins, onWikilinkClick = onTapWikilink,
+                plugins = previewPlugins, onWikilinkClick = onTapWikilink, styleSheet = styleSheet,
                 builderRegistry = builderRegistry, imageBuilder = imageBuilder,
-                useEnhancedComponents = useEnhancedComponents)
+                useEnhancedComponents = useEnhancedComponents, resourceOptions = resourceOptions, strings = strings)
             MarkdownEditorMode.SPLIT -> Row(Modifier.weight(1f)) {
                 SourcePane(controller, Modifier.weight(1f)) { focused ->
                     sourceFocus.setFocused(focused, latestOnFocusChanged.value)
@@ -498,9 +504,9 @@ fun SmoothMarkdownEditor(
                     .testTag("editor-preview-scroll")
                     .background(effectiveTheme.previewColor ?: colors.surface)
                     .padding(effectiveTheme.previewPadding ?: 16.dp),
-                    plugins = previewPlugins, onWikilinkClick = onTapWikilink,
+                    plugins = previewPlugins, onWikilinkClick = onTapWikilink, styleSheet = styleSheet,
                     builderRegistry = builderRegistry, imageBuilder = imageBuilder,
-                    useEnhancedComponents = useEnhancedComponents)
+                    useEnhancedComponents = useEnhancedComponents, resourceOptions = resourceOptions, strings = strings)
             }
             MarkdownEditorMode.FORMATTED -> CompositionLocalProvider(LocalFormattedSearch provides FormattedSearchUi(
                 formattedSearch, formattedSearch.matches.getOrNull(currentSearchIndex), searchNavigationId,
@@ -594,6 +600,7 @@ private fun FormattedBlockPane(
     imageBuilder: (@Composable (String, String?, String?) -> Unit)?,
     onSourcePaste: () -> Unit,
 ) {
+    val strings = com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current
     val editorTheme = LocalMarkdownEditorTheme.current
     val searchUi = LocalFormattedSearch.current
     val searchColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
@@ -739,7 +746,7 @@ private fun FormattedBlockPane(
                     Surface(Modifier.fillMaxWidth().padding(bottom = 10.dp), tonalElevation = 1.dp) {
                         Row(Modifier.padding(12.dp)) {
                             Text(block.source, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace))
-                            TextButton(onClick = edit) { Text("Edit custom") }
+                            TextButton(onClick = edit) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Edit custom"]) }
                         }
                     }
                 }
@@ -764,9 +771,9 @@ private fun FormattedBlockPane(
                         horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(
                             text = when (block.kind) {
-                                MarkdownBlockKind.HEADING -> "Heading ${block.headingLevel}"
-                                MarkdownBlockKind.CODE -> "Code${block.language?.let { " · $it" }.orEmpty()}"
-                                else -> block.kind.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercaseChar)
+                                MarkdownBlockKind.HEADING -> strings.format("Heading {level}", mapOf("level" to block.headingLevel.toString()))
+                                MarkdownBlockKind.CODE -> strings.format("Code{language}", mapOf("language" to block.language?.let { " · $it" }.orEmpty()))
+                                else -> strings[block.kind.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercaseChar)]
                             },
                             style = editorTheme.blockHeaderTextStyle ?: MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -777,12 +784,12 @@ private fun FormattedBlockPane(
                             blockSelectionError = false
                         }, modifier = Modifier.testTag("formatted-block-select-${block.id}").semantics {
                             selected = blockSelection?.let { blocks.indexOf(block) in it.firstIndex..it.lastIndex } == true
-                        }) { Text(if (blockSelection == null) "Select" else "Extend") }
+                        }) { Text(if (blockSelection == null) strings["Select"] else strings["Extend"]) }
                         if (block.kind == MarkdownBlockKind.HEADING && editableText != null) {
                             Row {
                                 (1..3).forEach { level ->
                                     TextButton(onClick = { controller.setSemanticHeadingLevel(block.id, level) }) {
-                                        Text("H$level")
+                                        Text(strings.format("H{level}", mapOf("level" to level.toString())))
                                     }
                                 }
                             }
@@ -934,21 +941,21 @@ private fun FormattedBlockPane(
                                     textEndpoints = FormattedTextEndpoints(controller.text,
                                         MarkdownFormattedTextPosition(block.id, controller.formattedSelection.start))
                                     textSelectionError = false
-                                }, modifier = Modifier.testTag("formatted-text-start-${block.id}")) { Text("Set start") }
+                                }, modifier = Modifier.testTag("formatted-text-start-${block.id}")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set start"]) }
                                 TextButton(onClick = {
                                     textEndpoints = textEndpoints?.withFocus(
                                         MarkdownFormattedTextPosition(block.id, controller.formattedSelection.end))
                                     textSelectionError = false
                                     focusManager.clearFocus()
                                 }, enabled = textEndpoints != null,
-                                    modifier = Modifier.testTag("formatted-text-end-${block.id}")) { Text("Set end") }
+                                    modifier = Modifier.testTag("formatted-text-end-${block.id}")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set end"]) }
                             }
                         }
                         if (showSuggestions) {
                             Column(Modifier.fillMaxWidth()
                                 .background(editorTheme.suggestionPanelColor ?: MaterialTheme.colorScheme.surface)
                                 .testTag("wikilink-suggestions")) {
-                                if (suggestions.isEmpty()) Text("No matching notes", modifier = Modifier.testTag("wikilink-empty"))
+                                if (suggestions.isEmpty()) Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["No matching notes"], modifier = Modifier.testTag("wikilink-empty"))
                                 suggestions.forEachIndexed { index, title ->
                                     TextButton(onClick = { controller.insertWikilinkSuggestion(title) },
                                         modifier = Modifier.fillMaxWidth()
@@ -982,15 +989,15 @@ private fun FormattedBlockPane(
         }
         if (textEndpoints != null) {
             val range = textEndpoints?.selection()
-            Text(if (range == null) "Start set. Place the caret in a text or code field, then tap End."
-                else "Text range selected. Copy Markdown, delete, or replace it below.",
+            Text(if (range == null) strings["Start set. Place the caret in a text or code field, then tap End."]
+                else strings["Text range selected. Copy Markdown, delete, or replace it below."],
                 modifier = Modifier.testTag("formatted-text-selection-status"))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 TextButton(onClick = {
                     val copied = range?.let(controller::copyFormattedTextSelectionAsMarkdown)
                     textSelectionError = copied == null
                     if (copied != null) clipboard.setText(AnnotatedString(copied))
-                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-copy")) { Text("Copy Markdown") }
+                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-copy")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Copy Markdown"]) }
                 listOf(
                     Triple("Bold", MarkdownEditorCommand.BOLD, "bold"),
                     Triple("Italic", MarkdownEditorCommand.ITALIC, "italic"),
@@ -1002,17 +1009,17 @@ private fun FormattedBlockPane(
                             controller.applyInlineCommandToFormattedTextSelection(it, command)
                         } != true
                         if (!textSelectionError) textEndpoints = null
-                    }, enabled = range != null, modifier = Modifier.testTag("formatted-text-$tag")) { Text(label) }
+                    }, enabled = range != null, modifier = Modifier.testTag("formatted-text-$tag")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current[label]) }
                 }
                 TextButton(onClick = {
                     textSelectionError = range?.let(controller::deleteFormattedTextSelection) != true
                     if (!textSelectionError) textEndpoints = null
-                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-delete")) { Text("Delete text") }
+                }, enabled = range != null, modifier = Modifier.testTag("formatted-text-delete")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Delete text"]) }
                 TextButton(onClick = {
                     textSelectionError = range?.let { controller.replaceFormattedTextSelectionWithMarkdown(it, textReplacement) } != true
                     if (!textSelectionError) { textEndpoints = null; textReplacement = "" }
                 }, enabled = range != null && textReplacement.isNotBlank(),
-                    modifier = Modifier.testTag("formatted-text-replace")) { Text("Replace text") }
+                    modifier = Modifier.testTag("formatted-text-replace")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replace text"]) }
                 TextButton(onClick = {
                     val markdown = clipboard.getText()?.text.orEmpty()
                     textSelectionError = range?.let {
@@ -1020,21 +1027,21 @@ private fun FormattedBlockPane(
                     } != true
                     if (!textSelectionError) textEndpoints = null
                 }, enabled = range != null,
-                    modifier = Modifier.testTag("formatted-text-paste-blocks")) { Text("Paste Markdown blocks") }
+                    modifier = Modifier.testTag("formatted-text-paste-blocks")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Paste Markdown blocks"]) }
                 TextButton(onClick = { textEndpoints = null; textSelectionError = false },
-                    modifier = Modifier.testTag("formatted-text-clear")) { Text("Clear") }
+                    modifier = Modifier.testTag("formatted-text-clear")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Clear"]) }
             }
             if (range != null) {
                 OutlinedTextField(value = textReplacement,
                     onValueChange = { textReplacement = it; textSelectionError = false },
-                    label = { Text("Replacement Markdown") },
+                    label = { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replacement Markdown"]) },
                     modifier = Modifier.fillMaxWidth().testTag("formatted-text-replacement"))
             }
-            if (textSelectionError) Text("Cannot preserve this selection's Markdown structure. Use full blocks or Source.",
+            if (textSelectionError) Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Cannot preserve this selection's Markdown structure. Use full blocks or Source."],
                 modifier = Modifier.testTag("formatted-text-edit-error"))
         }
         if (blockSelection != null) {
-            Text("${blockSelection.lastIndex - blockSelection.firstIndex + 1} block(s) selected", modifier = Modifier.testTag("formatted-block-selection-count"))
+            Text(strings.format("{count} block(s) selected", mapOf("count" to (blockSelection.lastIndex - blockSelection.firstIndex + 1).toString())), modifier = Modifier.testTag("formatted-block-selection-count"))
             val transformable = blocks.subList(blockSelection.firstIndex, blockSelection.lastIndex + 1)
                 .all { it.kind == MarkdownBlockKind.PARAGRAPH || it.kind == MarkdownBlockKind.HEADING }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
@@ -1055,92 +1062,92 @@ private fun FormattedBlockPane(
                         blockSelectionError = !controller.applyBlockCommandToFormattedBlockSelection(command)
                     }, enabled = transformable,
                         modifier = Modifier.testTag("formatted-block-transform-${command.name.lowercase()}")) {
-                        Text(label)
+                        Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current[label])
                     }
                 }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 TextButton(onClick = {
                     controller.copyFormattedBlockSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-block-copy")) { Text("Copy Markdown") }
+                }, modifier = Modifier.testTag("formatted-block-copy")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Copy Markdown"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.BOLD)
-                }, modifier = Modifier.testTag("formatted-block-bold")) { Text("Bold") }
+                }, modifier = Modifier.testTag("formatted-block-bold")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Bold"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.ITALIC)
-                }, modifier = Modifier.testTag("formatted-block-italic")) { Text("Italic") }
+                }, modifier = Modifier.testTag("formatted-block-italic")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Italic"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.STRIKETHROUGH)
-                }, modifier = Modifier.testTag("formatted-block-strikethrough")) { Text("Strike") }
+                }, modifier = Modifier.testTag("formatted-block-strikethrough")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Strike"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.applyInlineCommandToFormattedBlockSelection(MarkdownEditorCommand.INLINE_CODE)
-                }, modifier = Modifier.testTag("formatted-block-inline-code")) { Text("Code") }
+                }, modifier = Modifier.testTag("formatted-block-inline-code")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Code"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.deleteFormattedBlockSelection()
-                }, modifier = Modifier.testTag("formatted-block-delete")) { Text("Delete blocks") }
+                }, modifier = Modifier.testTag("formatted-block-delete")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Delete blocks"]) }
                 TextButton(onClick = {
                     blockSelectionError = !controller.replaceFormattedBlockSelectionWithMarkdown(blockReplacement)
                     if (!blockSelectionError) blockReplacement = ""
-                }, modifier = Modifier.testTag("formatted-block-replace")) { Text("Replace blocks") }
+                }, modifier = Modifier.testTag("formatted-block-replace")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replace blocks"]) }
                 TextButton(onClick = {
                     controller.clearFormattedBlockSelection()
                     blockSelectionError = false
-                }, modifier = Modifier.testTag("formatted-block-clear")) { Text("Clear") }
+                }, modifier = Modifier.testTag("formatted-block-clear")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Clear"]) }
             }
             OutlinedTextField(
                 value = blockReplacement,
                 onValueChange = { blockReplacement = it; blockSelectionError = false },
-                label = { Text("Replacement Markdown") },
+                label = { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replacement Markdown"]) },
                 modifier = Modifier.fillMaxWidth().testTag("formatted-block-replacement"),
             )
-            if (blockSelectionError) Text("Cannot preserve this selection's Markdown structure", modifier = Modifier.testTag("formatted-block-edit-error"))
+            if (blockSelectionError) Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Cannot preserve this selection's Markdown structure"], modifier = Modifier.testTag("formatted-block-edit-error"))
         }
         if (listSelection != null) {
-            Text("${listSelection.lastIndex - listSelection.firstIndex + 1} list item(s) selected",
+            Text(strings.format("{count} list item(s) selected", mapOf("count" to (listSelection.lastIndex - listSelection.firstIndex + 1).toString())),
                 modifier = Modifier.testTag("formatted-list-selection-count"))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 TextButton(onClick = {
                     controller.copyFormattedListItemSelectionAsMarkdown()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-list-selection-copy")) { Text("Copy Markdown") }
+                }, modifier = Modifier.testTag("formatted-list-selection-copy")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Copy Markdown"]) }
                 TextButton(onClick = { controller.deleteFormattedListItemSelection() },
-                    modifier = Modifier.testTag("formatted-list-selection-delete")) { Text("Delete items") }
+                    modifier = Modifier.testTag("formatted-list-selection-delete")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Delete items"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.BOLD) },
-                    modifier = Modifier.testTag("formatted-list-selection-bold")) { Text("Bold") }
+                    modifier = Modifier.testTag("formatted-list-selection-bold")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Bold"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.ITALIC) },
-                    modifier = Modifier.testTag("formatted-list-selection-italic")) { Text("Italic") }
+                    modifier = Modifier.testTag("formatted-list-selection-italic")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Italic"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.STRIKETHROUGH) },
-                    modifier = Modifier.testTag("formatted-list-selection-strikethrough")) { Text("Strike") }
+                    modifier = Modifier.testTag("formatted-list-selection-strikethrough")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Strike"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedListItemSelection(MarkdownEditorCommand.INLINE_CODE) },
-                    modifier = Modifier.testTag("formatted-list-selection-inline-code")) { Text("Code") }
+                    modifier = Modifier.testTag("formatted-list-selection-inline-code")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Code"]) }
                 TextButton(onClick = controller::clearFormattedListItemSelection,
-                    modifier = Modifier.testTag("formatted-list-selection-clear")) { Text("Clear") }
+                    modifier = Modifier.testTag("formatted-list-selection-clear")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Clear"]) }
             }
         }
         if (tableSelection != null) {
-            Text("${tableSelection.lastRow - tableSelection.firstRow + 1} × ${tableSelection.lastColumn - tableSelection.firstColumn + 1} cells selected",
+            Text(strings.format("{rows} × {columns} cells selected", mapOf("rows" to (tableSelection.lastRow - tableSelection.firstRow + 1).toString(), "columns" to (tableSelection.lastColumn - tableSelection.firstColumn + 1).toString())),
                 modifier = Modifier.testTag("formatted-table-selection-count"))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 TextButton(onClick = {
                     controller.copyFormattedTableCellSelectionAsTsv()?.let { clipboard.setText(AnnotatedString(it)) }
-                }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text("Copy TSV") }
+                }, modifier = Modifier.testTag("formatted-table-selection-copy")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Copy TSV"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.BOLD) },
-                    modifier = Modifier.testTag("formatted-table-selection-bold")) { Text("Bold") }
+                    modifier = Modifier.testTag("formatted-table-selection-bold")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Bold"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.ITALIC) },
-                    modifier = Modifier.testTag("formatted-table-selection-italic")) { Text("Italic") }
+                    modifier = Modifier.testTag("formatted-table-selection-italic")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Italic"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.STRIKETHROUGH) },
-                    modifier = Modifier.testTag("formatted-table-selection-strikethrough")) { Text("Strike") }
+                    modifier = Modifier.testTag("formatted-table-selection-strikethrough")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Strike"]) }
                 TextButton(onClick = { controller.applyInlineCommandToFormattedTableCellSelection(MarkdownEditorCommand.INLINE_CODE) },
-                    modifier = Modifier.testTag("formatted-table-selection-inline-code")) { Text("Code") }
+                    modifier = Modifier.testTag("formatted-table-selection-inline-code")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Code"]) }
                 TextButton(onClick = { controller.clearFormattedTableCellSelection() },
-                    modifier = Modifier.testTag("formatted-table-selection-delete")) { Text("Clear cells") }
+                    modifier = Modifier.testTag("formatted-table-selection-delete")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Clear cells"]) }
                 TextButton(onClick = {
                     if (controller.replaceFormattedTableCellSelectionFromTsv(tableReplacement)) tableReplacement = ""
-                }, modifier = Modifier.testTag("formatted-table-selection-replace")) { Text("Replace TSV") }
+                }, modifier = Modifier.testTag("formatted-table-selection-replace")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replace TSV"]) }
                 TextButton(onClick = controller::resetFormattedTableCellSelection,
-                    modifier = Modifier.testTag("formatted-table-selection-clear")) { Text("Clear selection") }
+                    modifier = Modifier.testTag("formatted-table-selection-clear")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Clear selection"]) }
             }
             OutlinedTextField(value = tableReplacement, onValueChange = { tableReplacement = it },
-                label = { Text("Replacement TSV") },
+                label = { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Replacement TSV"]) },
                 modifier = Modifier.fillMaxWidth().testTag("formatted-table-replacement"))
         }
     }
@@ -1206,7 +1213,7 @@ private fun FormattedQuote(
             }
         }.toAnnotatedString()
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-            Text("│".repeat(line.depth), color = linkColor,
+            Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["│"].repeat(line.depth), color = linkColor,
                 modifier = Modifier.padding(end = 8.dp), style = MaterialTheme.typography.bodyLarge)
             val displayed = if (draft.text == inline.visible && draft.composition == null) decorated
                 else AnnotatedString(draft.text)
@@ -1234,14 +1241,14 @@ private fun FormattedQuote(
                     onStart(MarkdownFormattedTextPosition(quote.block.id, draft.selection.start,
                         quoteLineIndex = line.index))
                 }, modifier = Modifier.testTag("formatted-quote-text-start-${quote.block.id}-${line.index}")) {
-                    Text("Set start")
+                    Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set start"])
                 }
                 TextButton(onClick = {
                     onEnd(MarkdownFormattedTextPosition(quote.block.id, draft.selection.end,
                         quoteLineIndex = line.index))
                 }, enabled = endpoints != null,
                     modifier = Modifier.testTag("formatted-quote-text-end-${quote.block.id}-${line.index}")) {
-                    Text("Set end")
+                    Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set end"])
                 }
             }
         }
@@ -1314,7 +1321,7 @@ private fun FormattedListItems(
                 TextButton(
                     onClick = { controller.selectFormattedListItem(blockId, path) },
                     modifier = Modifier.testTag("formatted-list-select-$blockId-$pathTag"),
-                ) { Text("Select") }
+                ) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Select"]) }
                 if (firstLine != null) {
                     val lineIndex = item.lines.indexOf(firstLine)
                     FormattedListTextField(controller, blockId, list, path, lineIndex,
@@ -1436,10 +1443,10 @@ private fun FormattedListTextField(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = { onSetStart(MarkdownFormattedTextPosition(blockId,
                 controller.formattedListSelection.start, path, lineIndex)) },
-                modifier = Modifier.testTag("formatted-list-text-start-$blockId-${path.joinToString("-" )}")) { Text("Set start") }
+                modifier = Modifier.testTag("formatted-list-text-start-$blockId-${path.joinToString("-" )}")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set start"]) }
             TextButton(onClick = { onSetEnd(MarkdownFormattedTextPosition(blockId,
                 controller.formattedListSelection.end, path, lineIndex)) }, enabled = textEndpoints != null,
-                modifier = Modifier.testTag("formatted-list-text-end-$blockId-${path.joinToString("-" )}")) { Text("Set end") }
+                modifier = Modifier.testTag("formatted-list-text-end-$blockId-${path.joinToString("-" )}")) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set end"]) }
         }
     }
     }
@@ -1497,7 +1504,7 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                 TextButton(
                     onClick = { controller.selectFormattedTableCell(blockId, selectedRow, columnIndex) },
                     modifier = Modifier.testTag("formatted-table-select-$blockId-$selectedRow-$columnIndex"),
-                ) { Text("Select") }
+                ) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Select"]) }
                 BasicTextField(
                     value = TextFieldValue(decorated, safeSelection),
                     onValueChange = { next ->
@@ -1520,12 +1527,12 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
                         TextButton(onClick = { onSetStart(MarkdownFormattedTextPosition(blockId,
                             safeSelection.start, tableCell = cellPosition)) },
                             modifier = Modifier.testTag("formatted-table-text-start-$blockId-$selectedRow-$columnIndex")) {
-                            Text("Set start")
+                            Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set start"])
                         }
                         TextButton(onClick = { onSetEnd(MarkdownFormattedTextPosition(blockId,
                             safeSelection.end, tableCell = cellPosition)) }, enabled = textEndpoints != null,
                             modifier = Modifier.testTag("formatted-table-text-end-$blockId-$selectedRow-$columnIndex")) {
-                            Text("Set end")
+                            Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["Set end"])
                         }
                     }
                 }
@@ -1538,10 +1545,10 @@ private fun FormattedTable(controller: MarkdownEditorController, blockId: String
             Row { cells.forEachIndexed { column, raw -> cell(raw, false, row, column) } }
         }
         Row {
-            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertRowAfter(it.rows.lastIndex) } }) { Text("+ Row") }
-            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertColumnAfter(it.columnCount - 1) } }) { Text("+ Column") }
-            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteRow(it.rows.lastIndex) } }, enabled = table.rows.isNotEmpty()) { Text("− Row") }
-            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteColumn(it.columnCount - 1) } }, enabled = table.columnCount > 1) { Text("− Column") }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertRowAfter(it.rows.lastIndex) } }) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["+ Row"]) }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.insertColumnAfter(it.columnCount - 1) } }) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["+ Column"]) }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteRow(it.rows.lastIndex) } }, enabled = table.rows.isNotEmpty()) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["− Row"]) }
+            TextButton(onClick = { controller.editSemanticTable(blockId) { it.deleteColumn(it.columnCount - 1) } }, enabled = table.columnCount > 1) { Text(com.jackcaow.smoothmarkdown.LocalMarkdownStrings.current["− Column"]) }
         }
     }
 }
