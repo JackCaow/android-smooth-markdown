@@ -1,6 +1,6 @@
 # Public library contract
 
-Version `0.3.0` contains the additive structured APIs below. Packages from `0.2.0` predate these APIs. Existing flat reader and streaming entry points remain supported. Use the individual-module JitPack coordinates in the [installation guide](../README.md#install); Maven Central publication remains a separate release gate.
+Version `0.3.1` contains the additive structured APIs below. Packages from `0.2.0` predate these APIs. Existing flat reader and streaming entry points remain supported. Use the individual-module JitPack coordinates in the [installation guide](../README.md#install); Maven Central publication remains a separate release gate.
 
 ## Configuration ownership
 

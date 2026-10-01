@@ -17,8 +17,8 @@ publishing {
             groupId = if (isJitPack) providers.environmentVariable("GROUP").orElse("com.github.JackCaow.android-smooth-markdown").get()
                 else providers.gradleProperty("publicationGroup").orElse("io.github.jackcaow").get()
             artifactId = "smoothmarkdown-core"
-            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.3.0").get()
-                else providers.gradleProperty("publicationVersion").orElse("0.3.0").get()
+            version = if (isJitPack) providers.environmentVariable("VERSION").orElse("0.3.1").get()
+                else providers.gradleProperty("publicationVersion").orElse("0.3.1").get()
             pom {
                 name.set("Smooth Markdown Core")
                 description.set("Pure JVM source-preserving CommonMark and GFM parser")

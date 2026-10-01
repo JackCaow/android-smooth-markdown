@@ -5,7 +5,7 @@ The preferred customization entry point is `MarkdownStyleSheet.designTokens`. Le
 - `MarkdownStyleSheet`: document typography, semantic colors, block spacing, lists, tables, code and quote decorations, and inline spans.
 - `MarkdownStyleSheet.designTokens`: semantic document colors (`document`), explicit typography (`typography`), and component details for enhanced headings/quotes/links, code controls and syntax, details, keyboard keys, math, image placeholders, footnotes, built-in plugin panels, and Mermaid base themes.
 
-The `0.3.0` release includes these additive component-token APIs. Applications upgrading from `0.2.0` can keep their legacy stylesheet values and add token overrides gradually.
+The `0.3.1` release includes these additive component-token APIs. Applications upgrading from `0.2.0` can keep their legacy stylesheet values and add token overrides gradually.
 
 ## Start from a preset
 

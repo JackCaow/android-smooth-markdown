@@ -58,7 +58,7 @@ jobs:
         working-directory: android-smooth-markdown
         run: |
           ./gradlew :smoothmarkdown-core:publishReleasePublicationToCentralBundleRepository :smoothmarkdown:publishReleasePublicationToCentralBundleRepository --no-daemon
-          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.3.0 --no-daemon
+          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.3.1 --no-daemon
       - name: Verify four packaged native ABIs and 16KB ELF alignment
         working-directory: android-smooth-markdown
         run: python3 scripts/build-rust-parser.py --check-aar smoothmarkdown/build/outputs/aar/smoothmarkdown-release.aar

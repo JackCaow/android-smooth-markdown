@@ -15,6 +15,9 @@ import sys
 import tempfile
 import zipfile
 
+if sys.version_info < (3, 5):
+    sys.exit('Rust parser source builds require Python 3.5 or newer')
+
 ROOT = Path(__file__).resolve().parents[1]
 RUST = ROOT / 'rust-core'
 SHIM = ROOT / 'smoothmarkdown-core/src/main/cpp/smooth_markdown_rust_jni.c'
@@ -55,12 +58,12 @@ def ndk_path(explicit):
 
 def check_elf(path, abi=None):
     data=Path(path).read_bytes()
-    if data[:4]!=b'\x7fELF' or data[5]!=1:raise RuntimeError(f'{path}: unsupported ELF')
+    if data[:4]!=b'\x7fELF' or data[5]!=1:raise RuntimeError('{}: unsupported ELF'.format(path))
     bits=data[4]
     if abi is not None:
         machine=struct.unpack_from('<H',data,18)[0]
         expected={'arm64-v8a':183,'armeabi-v7a':40,'x86':3,'x86_64':62}[abi]
-        if machine!=expected:raise RuntimeError(f'{path}: ELF machine {machine} does not match {abi}')
+        if machine!=expected:raise RuntimeError('{}: ELF machine {} does not match {}'.format(path, machine, abi))
     if bits==2:
         phoff=struct.unpack_from('<Q',data,32)[0];size,count=struct.unpack_from('<HH',data,54)
     elif bits==1:
@@ -71,17 +74,17 @@ def check_elf(path, abi=None):
         start=phoff+i*size
         if struct.unpack_from('<I',data,start)[0]==1:
             alignment=struct.unpack_from('<Q' if bits==2 else '<I',data,start+(48 if bits==2 else 28))[0]
-            if alignment<16384:raise RuntimeError(f'{path}: LOAD alignment {alignment} < 16384')
+            if alignment<16384:raise RuntimeError('{}: LOAD alignment {} < 16384'.format(path, alignment))
             aligns.append(alignment)
-    if not aligns:raise RuntimeError(f'{path}: no ELF LOAD segments')
-    print(f'16KB ELF verified: {path.name}, LOAD alignments {aligns}',flush=True)
+    if not aligns:raise RuntimeError('{}: no ELF LOAD segments'.format(path))
+    print('16KB ELF verified: {}, LOAD alignments {}'.format(path.name, aligns),flush=True)
 
 def build_android(abi,ndk):
     rust_target,clang_target=ABIS[abi]
     host={'Darwin':'darwin-x86_64','Linux':'linux-x86_64','Windows':'windows-x86_64'}[platform.system()]
     toolbin=ndk/'toolchains/llvm/prebuilt'/host/'bin'
     clang=toolbin/(clang_target+'24-clang'+('.cmd' if platform.system()=='Windows' else ''))
-    if not clang.exists():raise RuntimeError(f'NDK compiler is missing: {clang}')
+    if not clang.exists():raise RuntimeError('NDK compiler is missing: {}'.format(clang))
     output=BUILD/'jniLibs'/abi;output.mkdir(parents=True,exist_ok=True)
     cargo_dir=BUILD/'cargo'/abi
     env=os.environ.copy();env['CARGO_TARGET_DIR']=str(cargo_dir)
@@ -97,15 +100,15 @@ def build_android(abi,ndk):
     check_elf(library,abi)
 
 def check_aar(path):
-    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix='smooth-rust-aar-') as temporary:
-        expected={f'jni/{abi}/libsmooth_markdown_rust_jni.so' for abi in ABIS}
+    with zipfile.ZipFile(str(path)) as archive, tempfile.TemporaryDirectory(prefix='smooth-rust-aar-') as temporary:
+        expected={'jni/{}/libsmooth_markdown_rust_jni.so'.format(abi) for abi in ABIS}
         actual={name for name in archive.namelist() if name.endswith('/libsmooth_markdown_rust_jni.so')}
-        if actual!=expected:raise RuntimeError(f'{path}: expected four ABI JNI entries, got {sorted(actual)}')
+        if actual!=expected:raise RuntimeError('{}: expected four ABI JNI entries, got {}'.format(path, sorted(actual)))
         for abi in ABIS:
             binary=Path(temporary)/abi/'libsmooth_markdown_rust_jni.so'
-            binary.parent.mkdir();binary.write_bytes(archive.read(f'jni/{abi}/libsmooth_markdown_rust_jni.so'))
+            binary.parent.mkdir();binary.write_bytes(archive.read('jni/{}/libsmooth_markdown_rust_jni.so'.format(abi)))
             check_elf(binary,abi)
-    print(f'AAR verified: {path} contains all four matching ABIs with 16KB ELF alignment',flush=True)
+    print('AAR verified: {} contains all four matching ABIs with 16KB ELF alignment'.format(path),flush=True)
 
 def java_home(explicit):
     value=explicit or os.environ.get('JAVA_HOME')
@@ -117,7 +120,7 @@ def java_home(explicit):
     if platform.system()=='Darwin':
         # Some bundled JBR runtimes lack headers. JNI uses the stable C ABI, so
         # the system JDK's headers may compile a bridge loaded by a newer JVM.
-        found=subprocess.run(['/usr/libexec/java_home'],capture_output=True,text=True)
+        found=subprocess.run(['/usr/libexec/java_home'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,universal_newlines=True)
         if found.returncode==0:
             value=Path(found.stdout.strip())
             if (value/'include/jni.h').exists():return value

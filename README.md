@@ -4,7 +4,7 @@ A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor
 
 ## Runtime dependencies
 
-Version `0.3.0` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
+Version `0.3.1` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
 
 The reader uses a library-owned Markdown AST and Rust parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
 
@@ -33,7 +33,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.3.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.3.1")
 }
 ```
 
@@ -45,7 +45,7 @@ For a JVM application without Android or Compose, use the same JitPack repositor
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.1")
 }
 ```
 
@@ -58,13 +58,15 @@ val html = MarkdownCoreParser().renderHtml("**Hello**")
 
 Core needs Java 17 and Kotlin's standard library. Its JVM fallback works without native binaries.
 
-These are the individual-module coordinates for the `0.3.0` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+`0.3.0` remains a failed JitPack build tag; `0.3.1` fixes the build environment without replacing that tag.
 
-**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.3.0` and `io.github.jackcaow:smoothmarkdown-core:0.3.0`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
+These are the individual-module coordinates for the `0.3.1` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+
+**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.3.1` and `io.github.jackcaow:smoothmarkdown-core:0.3.1`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
 
 For source integration, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. Building these source modules also requires the [Rust/NDK toolchain](docs/rust-parser-build.md). The `app` module is only the Demo.
 
-See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md) for the structured APIs in `0.3.0`.
+See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md) for the structured APIs in `0.3.1`.
 
 ## Quick start
 
@@ -102,7 +104,7 @@ val style = base.copy(
 SmoothMarkdown(markdown = content, styleSheet = style)
 ```
 
-Import `com.jackcaow.smoothmarkdown.MarkdownStyleSheet` and `androidx.compose.ui.unit.dp`. The `0.3.0` release includes component tokens. See the [styling guide](docs/styling.md) for presets, nested overrides, precedence, streaming, plugin panels, Mermaid palettes, and editor preview styling. `SmoothMarkdownEditor(styleSheet = style)` uses reader styling in Preview/Split; editor controls use `MarkdownEditorTheme`.
+Import `com.jackcaow.smoothmarkdown.MarkdownStyleSheet` and `androidx.compose.ui.unit.dp`. The `0.3.1` release includes component tokens. See the [styling guide](docs/styling.md) for presets, nested overrides, precedence, streaming, plugin panels, Mermaid palettes, and editor preview styling. `SmoothMarkdownEditor(styleSheet = style)` uses reader styling in Preview/Split; editor controls use `MarkdownEditorTheme`.
 
 ### Render a stream
 

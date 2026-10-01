@@ -6,7 +6,7 @@ normal Maven dependency; Cargo, Rust, and the NDK are **source build tools**,
 not requirements for library consumers. The parser and JNI bridge contain no
 third-party crates or JNI bridge libraries.
 
-The `0.3.0` reader package ships these binaries. See the [installation guide](../README.md#install) for its JitPack module coordinates. Maven Central publication is separate.
+The `0.3.1` reader package ships these binaries. See the [installation guide](../README.md#install) for its JitPack module coordinates. Maven Central publication is separate.
 
 The `smoothmarkdown-core` JAR remains usable on a JVM without native binaries.
 It uses the Kotlin implementation when the native library is unavailable.
@@ -19,7 +19,7 @@ not a separate path selected because plugins or editing are enabled.
 
 ## Source build prerequisites
 
-- JDK 17 or newer, Python 3, Android SDK API 37, and Android NDK 28 or newer.
+- JDK 17 or newer, Python 3.5+, Android SDK API 37, and Android NDK 28 or newer.
 - Stable Rust and the four Android targets:
 
 ```sh
@@ -74,3 +74,12 @@ header, fixtures, source manifest and JNI shim, plus the native build script for
 inspection. The reader sources JAR supplies the Compose rendering/editor APIs.
 To rebuild the complete native library, use a repository checkout: source JARs
 are IDE/debugging archives, not standalone Gradle projects.
+
+## JitPack bootstrap
+
+JitPack runs `scripts/prepare-jitpack.sh` before Gradle. It installs Google's
+command-line tools 12.0 for Java 17, verifies the official archive checksum, and
+installs API 37/build-tools 36/NDK 28.2 plus stable Rust and all four Android
+Rust targets. It does not call the image's obsolete `sdkmanager`.
+The build script supports Python 3.5 or newer; the bootstrap prints the actual
+Python, Java, SDK manager, Rust and Cargo versions and fails on setup errors.
