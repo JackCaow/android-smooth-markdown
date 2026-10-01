@@ -6,21 +6,21 @@
 
 截至 2026-10-01：
 
-兼容基线调整后的源码使用 Kotlin `1.9.24`、Compose Foundation `1.6.8` 和 compileSdk `35`；AAR 接入最低要求为 AGP `8.6.0`、compileSdk `35`，且不向宿主传递 Compose BOM。既有 `0.3.1` 发布包及下表固定提交尚未包含此调整，仍适用第 2 节的旧要求。具体构建、消费者验证和自定义选择迁移见 [兼容性说明](android-compatibility.md)。
+`0.4.0` 使用 Kotlin `1.9.24`、Compose Foundation `1.6.8` 和 compileSdk `35`；AAR 接入最低要求为 AGP `8.6.0`、compileSdk `35`，且不向宿主传递 Compose BOM。旧 `0.3.1` 发布包不包含此调整，仍需要 compileSdk 37；建议升级到 `0.4.0`。具体构建、消费者验证和自定义选择迁移见 [兼容性说明](android-compatibility.md)。
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 已发布版本 | JitPack `0.3.1` |
-| 最新增量和后台流式优化 | 固定源码提交 `71173df812bc3c07b9399f72113904a0d2855ca2`，构建到本地 Maven |
+| 当前版本 | JitPack `0.4.0` |
+| 固定源码构建 | 检出 tag `0.4.0`，构建到本地 Maven |
 | Maven Central | 尚未发布，请使用上述方式 |
 
-`0.3.1` 已包含 Rust 解析器、独立 Core、分组配置和 Design Token。最新后台调度、增量传输和完成时序修复已合入 main，尚未包含在 `0.3.1` 发布包中。下面的公开 API 示例兼容当前 main；需要新优化时采用第 10 节的固定提交方式。
+`0.4.0` 包含 Rust 解析器、独立 Core、分组配置、Design Token、后台调度、增量传输和完成时序修复。下面的公开 API 示例适用于 `0.4.0`；需要源码构建时采用第 10 节的固定 tag 方式。
 
 项目地址：[android-smooth-markdown](https://github.com/JackCaow/android-smooth-markdown)。
 
 ## 2 安装已发布版本
 
-要求 Android API 24+、compileSdk 37+、Java 17 字节码和启用 Compose。仓库验证使用 Kotlin/Compose compiler `2.4.20`、Compose BOM `2026.09.00`；Gradle 运行 JDK 应匹配应用使用的 AGP/Gradle。
+要求 Android API 24+、compileSdk 35+、AGP 8.6.0+、Java 17 字节码和启用 Compose。源码使用 Kotlin `1.9.24` / Compose compiler `1.5.14`；独立消费者已验证 Kotlin `1.9.22` / compiler `1.5.8` 和 Kotlin `2.1.20` / 同版本 Compose plugin。Foundation 最低 `1.6.8`，宿主自行选择兼容 BOM；Gradle 运行 JDK 应匹配应用使用的 AGP/Gradle。
 
 在应用项目的 `settings.gradle.kts` 合并以下仓库配置：
 
@@ -43,7 +43,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.3.1")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.4.0")
 }
 ```
 
@@ -257,7 +257,7 @@ controller 默认 Source 模式；上例选择 Formatted，也支持 Preview/Spl
 使用第 2 节的 JitPack 仓库，仅添加：
 
 ```kotlin
-implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.1")
+implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.0")
 ```
 
 ```kotlin
@@ -270,18 +270,18 @@ val html = parser.renderHtml("**Hello**")
 
 Core 是 JVM JAR，使用 Java 17 和 Kotlin 标准库，不依赖 Android、Compose 或协程。没有可用 native backend 的 JVM 环境使用库自有 Kotlin 回退解析器。AST 导入路径是 `com.jackcaow.smoothmarkdown.ast`。
 
-## 10 接入最新固定源码提交
+## 10 从固定版本源码构建
 
-需要本轮后台流式优化时，在开发机器构建独立仓库，再发布到**本地** Maven。该版本名只是本地版本，不表示 Maven Central 已发布：
+需要源码构建时，在开发机器检出固定 tag，再发布到**本地** Maven。该版本名只是本地版本，不表示 Maven Central 已发布：
 
 ```sh
 git clone https://github.com/JackCaow/android-smooth-markdown.git
 cd android-smooth-markdown
-git checkout 71173df812bc3c07b9399f72113904a0d2855ca2
-./gradlew :smoothmarkdown-core:publishReleasePublicationToMavenLocal :smoothmarkdown:publishReleasePublicationToMavenLocal -PpublicationVersion=0.3.1-local.71173df
+git checkout 0.4.0
+./gradlew :smoothmarkdown-core:publishReleasePublicationToMavenLocal :smoothmarkdown:publishReleasePublicationToMavenLocal -PpublicationVersion=0.4.0-local
 ```
 
-源码构建需要 SDK API 37、NDK 28+、Python、Rust 及四种 Android Rust target；具体安装见 [Rust 构建手册](rust-parser-build.md)。应用项目仓库添加：
+源码构建需要 SDK API 35、NDK 28+、Python、Rust 及四种 Android Rust target；具体安装见 [Rust 构建手册](rust-parser-build.md)。应用项目仓库添加：
 
 ```kotlin
 mavenLocal {
@@ -292,7 +292,7 @@ mavenLocal {
 reader 依赖改为：
 
 ```kotlin
-implementation("io.github.jackcaow:smooth-markdown:0.3.1-local.71173df")
+implementation("io.github.jackcaow:smooth-markdown:0.4.0-local")
 ```
 
 不要同时保留稳定包的 reader 依赖。本地 Maven 只在构建机器可用；团队 CI 需构建同一固定提交并发布到团队 Maven 仓库，或在该 CI 的准备阶段完成本地发布。
@@ -301,8 +301,8 @@ implementation("io.github.jackcaow:smooth-markdown:0.3.1-local.71173df")
 
 | 现象 | 检查与处理 |
 | --- | --- |
-| 找不到依赖 | 确认 JitPack 仓库、完整模块坐标和版本 `0.3.1`；`0.3.0` 是失败的 JitPack 构建标签 |
-| 找不到后台增量功能 | `0.3.1` 还未包含最新优化，按第 10 节固定源码接入 |
+| 找不到依赖 | 确认 JitPack 仓库、完整模块坐标和版本 `0.4.0`；`0.3.0` 是失败的 JitPack 构建标签 |
+| 找不到后台增量功能 | 升级到 `0.4.0`；第 10 节也提供固定源码构建方式 |
 | 编译提示 Kotlin metadata 或 SDK 不兼容 | 核对 Kotlin/Compose compiler、compileSdk 及 Gradle/JDK，与第 2 节要求对齐 |
 | 在 XML/View 工程使用 | reader 需要 Compose；通过宿主的 `ComposeView` 嵌入，或仅使用 Core 自己渲染 |
 | 图片不显示 | 检查完整 HTTPS 地址、认证头、响应字节格式、网络权限及资源错误回调 |

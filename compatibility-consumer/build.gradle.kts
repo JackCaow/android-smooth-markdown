@@ -11,7 +11,9 @@ android {
 }
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach { kotlinOptions.jvmTarget = "17" }
 dependencies {
-    implementation("io.github.jackcaow:smooth-markdown:" + providers.gradleProperty("artifactVersion").get())
+    val group = providers.gradleProperty("artifactGroup").orElse("io.github.jackcaow").get()
+    val reader = providers.gradleProperty("readerArtifact").orElse("smooth-markdown").get()
+    implementation("$group:$reader:" + providers.gradleProperty("artifactVersion").get())
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
 }
 android { composeOptions { kotlinCompilerExtensionVersion = "1.5.8" } }

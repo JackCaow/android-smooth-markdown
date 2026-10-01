@@ -58,12 +58,12 @@ jobs:
         working-directory: android-smooth-markdown
         run: |
           ./gradlew :smoothmarkdown-core:publishReleasePublicationToCentralBundleRepository :smoothmarkdown:publishReleasePublicationToCentralBundleRepository --no-daemon
-          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.3.1 --no-daemon
+          ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.4.0 --no-daemon
       - name: Verify independently compiled old and modern consumers
         working-directory: android-smooth-markdown
         run: |
-          ./gradlew -p compatibility-consumer assembleDebug -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.3.1 --no-daemon
-          ./gradlew -p compatibility-consumer clean assembleDebug -PmodernKotlin=true -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.3.1 --no-daemon
+          ./gradlew -p compatibility-consumer assembleDebug -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0 --no-daemon
+          ./gradlew -p compatibility-consumer clean assembleDebug -PmodernKotlin=true -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0 --no-daemon
       - name: Check consumer requirements in AAR and POM
         working-directory: android-smooth-markdown
         run: python3 tools/check_consumer_requirements.py

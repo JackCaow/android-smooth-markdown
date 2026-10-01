@@ -1,6 +1,6 @@
 # Android 兼容基线
 
-本次调整只涉及 Android。既有 `0.3.1` 发布 tag 不变，仍需要 compileSdk 37；以下较低基线适用于本次调整后的源码和未来包含它的发布包。
+`0.4.0` 只调整 Android 的兼容基线，包含后台流式调度优化。既有 `0.3.1` 发布 tag 不变，仍需要 compileSdk 37；以下较低基线适用于 `0.4.0`。
 
 ## 构建库与接入库
 
@@ -18,7 +18,7 @@
 
 库不再导出 Compose BOM，避免要求宿主同步升级整套 Compose。Foundation 与 Material3 显式声明最低依赖，宿主使用更高版本时仍按正常 Gradle 依赖解析规则决定最终版本。这不意味着任意更高版本均已实测。
 
-对已发布的 `0.3.1`，修改应用自己的 Kotlin 或 BOM 不会消除旧 AAR 的 SDK 37 要求。需要使用包含本次调整的源码/新发布包。
+对已发布的 `0.3.1`，修改应用自己的 Kotlin 或 BOM 不会消除旧 AAR 的 SDK 37 要求。请升级到 `0.4.0`。
 
 ## 选择功能迁移
 
@@ -57,16 +57,24 @@ class LabelBuilder : MarkdownNodeBuilder {
   :smoothmarkdown:publishReleasePublicationToCentralBundleRepository
 
 ./gradlew -p compatibility-consumer clean assembleDebug \
-  -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.3.1
+  -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0
 
 ./gradlew -p compatibility-consumer clean assembleDebug -PmodernKotlin=true \
-  -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.3.1
+  -PartifactRepository="$PWD/build/central-staging" -PartifactVersion=0.4.0
 
 python3 tools/check_consumer_requirements.py
 python3 tools/check_public_api.py
 ```
 
-这里的版本号仅标识本地测试产物，不会覆盖远程已发布 tag，也不是 Maven Central 已发布的证明。正式发版后应使用新版本号，并在独立消费者上复验远程下载产物。
+上述命令使用本地 Maven 暂存产物，不是 Maven Central 发布证明。正式版本通过 JitPack 提供；验证远程包时使用下面的命令（仓库、group 与 artifact 坐标同时切换）：
+
+```bash
+./gradlew -p compatibility-consumer clean assembleDebug \
+  -PartifactRepository=https://jitpack.io \
+  -PartifactGroup=com.github.JackCaow.android-smooth-markdown \
+  -PreaderArtifact=smoothmarkdown -PartifactVersion=0.4.0
+# 新 Kotlin 消费者另加 -PmodernKotlin=true
+```
 
 工具同时检查 AAR 最低 SDK/AGP、POM 不导出 Compose BOM、JVM 方法签名和四种 Rust JNI ABI。UI 验收覆盖 `PublicLibraryUiSuite`、`SelectionCompatibilityUiSuite` 和 Demo `ConversationLongPressUiTest`；CI 固定使用 API 35 模拟器。
 
@@ -82,4 +90,4 @@ python3 tools/check_public_api.py
 
 旧 Compose 1.6 的测试清单采用默认带 ActionBar 的 Activity；测试 APK 使用 targetSdk 34，避免 Android 15 强制窗口布局使其测试内容不可见。实际运行系统仍是 API 35；这不是库的最低 SDK、编译 SDK 或宿主 targetSdk 限制。引用背景的绿色及更新后的黄色均以实际像素复验，原有精确颜色断言保留。
 
-此次为源码兼容性调整的本地验收，未包含真机验收或新版本远程发布验收。
+以上是本地源码验收记录，不包含真机验证；远程发布验收结果以 `0.4.0` 的 GitHub release 记录为准。

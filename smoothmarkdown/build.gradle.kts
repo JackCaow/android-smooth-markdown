@@ -37,9 +37,9 @@ android {
 
 val isJitPack = providers.environmentVariable("JITPACK").orNull == "true"
 val publicationVersion = if (isJitPack) {
-    providers.environmentVariable("VERSION").orElse("0.3.1").get()
+    providers.environmentVariable("VERSION").orElse("0.4.0").get()
 } else {
-    providers.gradleProperty("publicationVersion").orElse("0.3.1").get()
+    providers.gradleProperty("publicationVersion").orElse("0.4.0").get()
 }
 val publicationGroup = if (isJitPack) {
     providers.environmentVariable("GROUP").orElse("com.github.JackCaow.android-smooth-markdown").get()

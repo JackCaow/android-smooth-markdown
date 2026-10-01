@@ -2,7 +2,7 @@
 
 Existing flat entry points remain available. The grouped entry point is selected by supplying `renderOptions`; ordinary calls without this argument keep their old meaning.
 
-For the lower Android/Kotlin/Compose baseline and selection migration for custom builders, see [Android compatibility](android-compatibility.md). These changes do not alter the existing `0.3.1` artifact.
+For the lower Android/Kotlin/Compose baseline and selection migration for custom builders, see [Android compatibility](android-compatibility.md). These changes ship in `0.4.0`; the existing `0.3.1` artifact remains unchanged.
 
 ## Reader
 
@@ -20,7 +20,7 @@ SmoothMarkdown(
 
 Import `com.jackcaow.smoothmarkdown.*`. The same groups are accepted by the Flow and StateFlow stream entry points. A hot StateFlow normally does not complete.
 
-For parser-only use, depend on `com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.1` and call `MarkdownCoreParser().parse(source)` or `.renderHtml(source)`. A source integration must include both core and reader modules when using the reader.
+For parser-only use, depend on `com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.0` and call `MarkdownCoreParser().parse(source)` or `.renderHtml(source)`. A source integration must include both core and reader modules when using the reader.
 
 ## Appearance
 
