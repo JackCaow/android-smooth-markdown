@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-01",
+  "stage": "background stream scheduling",
+  "runtime": "Android API 35 emulator",
+  "suite": "PublicLibraryUiSuite",
+  "tests": 24,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "host_tests": {
+    "core": 17,
+    "core_skipped": 1,
+    "reader": 494,
+    "reader_skipped": 3,
+    "failures": 0,
+    "errors": 0
+  },
+  "focused_tests": 18,
+  "new_worker_tests": 10,
+  "new_background_ui_tests": 3,
+  "public_api": "reviewed consumer baseline unchanged; exact historical compiler bridges normalized only in baseline",
+  "coverage": [
+    "real packaged JNI parse/decode runs off main thread",
+    "latest full prefix coalescing without fragment loss",
+    "full AST recovery when UI skips parser versions",
+    "final source participates in layout before completion once",
+    "main thread plugin callback compatibility",
+    "replacing unfinished flow rejects stale source and completion",
+    "same owner native cleanup and executor termination after final result",
+    "missing native backend retains original JVM parser fallback"
+  ],
+  "boundaries": [
+    "host parser benchmarks predate background scheduling",
+    "no physical device timing or frame-time claim",
+    "plugin/math/footnote/HTML/details compatibility parsing stays on UI thread"
+  ]
+}

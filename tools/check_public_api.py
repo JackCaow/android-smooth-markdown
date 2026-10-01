@@ -24,7 +24,7 @@ for jar in jars:
             # Kotlin internal transports are JVM-public implementation classes, not consumer API.
             if re.match(r'^com\.jackcaow\.smoothmarkdown\.nativeparser\.(RustMarkdownBridge|RustMarkdownWire)(\$|$)', cls):
                 continue
-            if re.match(r'^com\.jackcaow\.smoothmarkdown\.StreamingMarkdown(Session|Document|SessionKt)(\$|$)', cls):
+            if re.match(r'^com\.jackcaow\.smoothmarkdown\.StreamingMarkdown(Session|Document|SessionKt|Worker|WorkerKt|Request|Requests|Result|Backend|Publisher|Completion|Emission)(\$|$)', cls):
                 continue
             classes.add(cls)
 result = subprocess.check_output(['javap', '-public', '-classpath', ':'.join(map(str, jars)), *sorted(classes)], text=True)
@@ -77,7 +77,19 @@ if candidates:
                 synthetic_accessors.add((current_class, pending_method))
             pending_method = None
 
-def normalize_signatures(source):
+# Pre-background compilation generated these closure state-getter bridges. Moving
+# completion publication removed them; ordinals are compiler implementation details.
+# The source declares only the two public StreamMarkdown overloads, no access$ methods.
+# These tombstones apply ONLY to the historical baseline. A current user-written
+# method with the same signature remains API unless its actual flag is ACC_SYNTHETIC.
+historical_synthetic_accessors = {
+    ('com.jackcaow.smoothmarkdown.StreamMarkdownKt',
+     'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$4(androidx.compose.runtime.State);'),
+    ('com.jackcaow.smoothmarkdown.StreamMarkdownKt',
+     'public static final kotlin.jvm.functions.Function1 access$StreamMarkdown$lambda$11(androidx.compose.runtime.State);'),
+}
+
+def normalize_signatures(source, historical=False):
     normalized = []
     current_class = None
     skip_class = False
@@ -86,7 +98,8 @@ def normalize_signatures(source):
         if match:
             current_class = match.group(1)
             skip_class = current_class in synthetic_classes
-        if skip_class or (current_class, line.strip()) in synthetic_accessors:
+        if skip_class or (current_class, line.strip()) in synthetic_accessors or (
+                historical and (current_class, line.strip()) in historical_synthetic_accessors):
             continue
         normalized.append(line)
     return '\n'.join(normalized) + '\n'
@@ -96,8 +109,8 @@ baseline = root/'api/public-jvm.txt'
 if args.update:
     baseline.write_text(current)
     print('Public JVM signature baseline updated')
-elif not baseline.exists() or normalize_signatures(baseline.read_text().splitlines()) != current:
-    old = normalize_signatures(baseline.read_text().splitlines()).splitlines() if baseline.exists() else []
+elif not baseline.exists() or normalize_signatures(baseline.read_text().splitlines(), historical=True) != current:
+    old = normalize_signatures(baseline.read_text().splitlines(), historical=True).splitlines() if baseline.exists() else []
     print('\n'.join(difflib.unified_diff(old, current.splitlines(), fromfile='baseline', tofile='current')))
     raise SystemExit('Public API changed. Review compatibility before updating the baseline.')
 else:

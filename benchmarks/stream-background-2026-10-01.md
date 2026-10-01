@@ -1,0 +1,11 @@
+# Background stream scheduling validation — 2026-10-01
+
+Eligible `StreamMarkdown` flows parse and decode owned native AST on a serial worker. Complete source prefixes are accumulated before pending requests coalesce. Every processed snapshot updates the worker's full tree, even if the UI skips it. Publication validates context, epoch, version and source. The UI adapts a full native snapshot when the base version was skipped; matching bases retain existing Markup nodes and stable identities.
+
+Markup mutation, composition, plugin callbacks and compatibility parsing remain on the UI thread. Formulas, footnotes, HTML, details and custom plugins retain their existing path. Missing JNI retains the owned JVM parser fallback. No public Kotlin declarations change.
+
+Finite flows publish their final document into a successful composition before `onComplete`; the notification waits for a frame and main queue turn so lazy visible children can finish layout. Replacing a flow rejects old results and prevents old completion. Completion metadata is included in the final request. After sending the final result, the owner thread frees the native handle and shuts down its executor; completed visible chat bubbles do not retain idle parser threads. A hot StateFlow remains active until its composition is disposed.
+
+Validation: Core 17 and Reader 494 host cases with zero failures (4 optional/environment skips), 18 focused stream cases including 10 new worker cases, and 24/24 emulator UI tests (3 new background cases). The public consumer API baseline remains unchanged. Actual runtime validation found and fixed an inherited-dispatcher race and a parent-before-lazy-child completion ordering defect. Validation evidence is recorded in [background runtime evidence](evidence/stream-background-runtime-2026-10-01.json). Deterministic tests include actual native reference invalidation, latest pending prefixes, UI-skipped versions, completion once, in-flight disposal and same-owner cleanup. Instrumentation checks real JNI parsing off the main thread, UI participation before completion, plugin thread behavior and replacing unfinished flows.
+
+Existing host parser benchmarks predate background scheduling. No additional device timing or Compose frame-time improvement is claimed.
