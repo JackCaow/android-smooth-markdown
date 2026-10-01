@@ -17,9 +17,7 @@ class NativeMarkdownASTParser(
     private data class Fence(val marker: Char, val count: Int, val info: String)
     private data class Marker(val indent: Int, val prefix: String, val ordered: Boolean, val number: Int, val style: Char, val overflowSpaces: Int)
     fun parse(source: String): NativeMarkdownNode {
-        if (customInline == null && customBlock == null) {
-            RustMarkdownBridge.parse(source, enableGFM, enableNativeExtensions)?.let { return filterHTML(it) }
-        }
+        RustMarkdownBridge.parse(source, enableGFM, enableNativeExtensions, customInline, customBlock)?.let { return filterHTML(it) }
         val lines = sourceLines(source)
         val references = linkedMapOf<String, NativeMarkdownReference>()
         fun collect(node: NativeMarkdownNode) {

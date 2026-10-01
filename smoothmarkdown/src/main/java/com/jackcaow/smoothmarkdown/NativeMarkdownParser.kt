@@ -12,16 +12,13 @@ class NativeMarkdownParser(
     // Core is a compiler friend module; its internal transport is library SPI, not application API.
     fun parse(source: String): Markup {
         val hasHostPlugins = plugins?.let {
-            it.blockPlugins.isNotEmpty() || it.sourceBlockPlugins.isNotEmpty() || it.inlinePlugins.isNotEmpty()
+            it.blockPlugins.isNotEmpty() || it.inlinePlugins.isNotEmpty()
         } ?: false
-        // Math and footnotes are native Rust extensions. Host hooks and details retain their existing adapter.
-        val needsHooks = hasHostPlugins || (enableExtensions && Regex("""(?im)^ {0,3}<details(?: open)?>\s*$""").containsMatchIn(source))
         val scanner = NativeMarkdownASTParser(enableGFM,
             customInline = if (enableExtensions || hasHostPlugins) ::inlinePlugin else null,
             customBlock = if (enableExtensions || hasHostPlugins) ::blockPlugin else null,
-            enableNativeExtensions = false)
-        val tree = (if (enableExtensions && !needsHooks) RustMarkdownBridge.parseForReader(source, enableGFM) else null)
-            ?: scanner.parse(source)
+            enableNativeExtensions = enableExtensions)
+        val tree = scanner.parse(source)
         val references = mutableMapOf<String, NativeMarkdownReference>()
         fun collect(node: NativeMarkdownNode) {
             if (node.kind == NativeMarkdownNode.Kind.REFERENCE_DEFINITION)
@@ -35,12 +32,15 @@ class NativeMarkdownParser(
                 NativeMarkdownNode.Kind.BLOCK_MATH -> BlockMathNode(node.source.trim().removePrefix("$$").removeSuffix("$$").trim())
                 NativeMarkdownNode.Kind.FOOTNOTE_REFERENCE -> FootnoteReferenceNode(node.label)
                 NativeMarkdownNode.Kind.FOOTNOTE_DEFINITION -> {
-                    val lines = node.source.lines()
+                    val lines = (node.literalText ?: node.source).lines()
                     val first = lines.firstOrNull().orEmpty().substringAfter("]:" ).trim()
                     val body = (listOf(first) + lines.drop(1).map { it.trim() }).filter { it.isNotEmpty() }.joinToString("\n")
                     val definition = FootnoteDefinitionNode(node.label).also { it.rawInlineSource = body }
                     val converter = NativeMarkdownMarkupConverter(body)
-                    NativeMarkdownInlineParser.parse(body, 0, references, enableGFM, customInline = ::inlinePlugin).forEach {
+                    val inline = RustMarkdownBridge.parseInline(body, references = references, enableGFM = enableGFM,
+                        enableExtensions = true, customInline = ::inlinePlugin)?.children
+                        ?: NativeMarkdownInlineParser.parse(body, 0, references, enableGFM, customInline = ::inlinePlugin)
+                    inline.forEach {
                         val child = converter.convert(it)
                         child.sourceSpans = emptyList()
                         child.descendants().forEach { descendant -> descendant.sourceSpans = emptyList() }
@@ -107,7 +107,7 @@ class NativeMarkdownParser(
                 }
                 val raw = lines.subList(index, end).joinToString("\n")
                 return NativeCustomBlockMatch(NativeMarkdownNode(NativeMarkdownNode.Kind.FOOTNOTE_DEFINITION,
-                    raw, SourceRange(offset, raw.length), label = footnote.groupValues[1]), end - index)
+                    raw, SourceRange(offset, raw.length), literalText = raw, label = footnote.groupValues[1]), end - index)
             }
         }
         for (plugin in plugins?.findBlockPlugins(opening).orEmpty()) {
@@ -146,7 +146,10 @@ class NativeMarkdownParser(
             it.bodySource = body.trim()
             val paragraph = Paragraph()
             val converter = NativeMarkdownMarkupConverter(summary)
-            NativeMarkdownInlineParser.parse(summary, 0, emptyMap(), enableGFM).forEach { child -> paragraph.appendChild(converter.convert(child)) }
+            val inline = RustMarkdownBridge.parseInline(summary, enableGFM = enableGFM,
+                enableExtensions = enableExtensions, customInline = ::inlinePlugin)?.children
+                ?: NativeMarkdownInlineParser.parse(summary, 0, emptyMap(), enableGFM, customInline = ::inlinePlugin)
+            inline.forEach { child -> paragraph.appendChild(converter.convert(child)) }
             FootnoteReferencePostProcessor(summary).process(paragraph)
             it.summary = listOf(paragraph)
             it.body = parseMarkdown(it.bodySource, plugins, enableCache = false).children().toList()

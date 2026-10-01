@@ -1,10 +1,12 @@
 package com.jackcaow.smoothmarkdown
 
 import com.jackcaow.smoothmarkdown.ast.*
+import com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge
 
 /** HTML export directly from the library-owned AST; no parser or renderer dependency is required. */
 class NativeMarkdownHTMLSerializer(private val escapeHtml: Boolean = false) {
-    fun render(root: Markup): String = buildString { write(root, this) }
+    fun render(root: Markup): String = RustMarkdownBridge.renderHtml(root, escapeHtml)
+        ?: buildString { write(root, this) }
 
     private fun children(node: Markup, output: StringBuilder) {
         var child = node.firstChild

@@ -10,8 +10,12 @@ This change prepares the next 0.3.0 package; it does not publish that version.
 
 The `smoothmarkdown-core` JAR remains usable on a JVM without native binaries.
 It uses the Kotlin implementation when the native library is unavailable.
-Android's packaged reader uses Rust for supported built-in grammar; host parser
-callbacks retain the Kotlin parsing path so existing plugin behavior is preserved.
+Android's packaged reader uses Rust for standard grammar and for scanning host
+parser hooks, details and footnote content. Standard editor block/inline syntax
+also uses shared AST ranges; platform code retains lossless source patches and
+selection behavior. HTML export consumes the actual mutable host AST through the
+shared serializer. The fallback is for environments without a usable native backend,
+not a separate path selected because plugins or editing are enabled.
 
 ## Source build prerequisites
 

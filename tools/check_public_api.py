@@ -27,14 +27,69 @@ for jar in jars:
             classes.add(cls)
 result = subprocess.check_output(['javap', '-public', '-classpath', ':'.join(map(str, jars)), *sorted(classes)], text=True)
 lines = [line.rstrip() for line in result.splitlines() if not line.startswith('Compiled from')]
-current = '\n'.join(lines) + '\n'
+
+# Inspect class-file flags before ignoring compiler artifacts. A user-written public
+# method named access$... remains API unless it actually has ACC_SYNTHETIC.
+header = re.compile(r'^[^ ].*\b(?:class|interface) ([^\s<{]+)')
+candidates = set()
+current_class = None
+for line in lines:
+    match = header.match(line)
+    if match:
+        current_class = match.group(1)
+        if current_class.endswith('$WhenMappings'):
+            candidates.add(current_class)
+    if current_class and re.search(r'\baccess\$[^ (]+\(', line):
+        candidates.add(current_class)
+
+synthetic_classes = set()
+synthetic_accessors = set()
+if candidates:
+    verbose = subprocess.check_output(['javap', '-v', '-p', '-classpath', ':'.join(map(str, jars)), *sorted(candidates)], text=True)
+    current_class = None
+    class_synthetic = False
+    pending_method = None
+    for line in verbose.splitlines():
+        if line.startswith('Classfile '):
+            current_class = None
+            class_synthetic = False
+            pending_method = None
+        if current_class is None and 'flags:' in line:
+            class_synthetic = 'ACC_SYNTHETIC' in line
+        match = re.search(r'this_class:.*// (\S+)', line)
+        if match:
+            current_class = match.group(1).replace('/', '.')
+            if class_synthetic and current_class.endswith('$WhenMappings'):
+                synthetic_classes.add(current_class)
+        if line.startswith('  public ') and re.search(r'\baccess\$[^ (]+\(', line):
+            pending_method = line.strip()
+        elif pending_method and 'flags:' in line:
+            if 'ACC_SYNTHETIC' in line:
+                synthetic_accessors.add((current_class, pending_method))
+            pending_method = None
+
+def normalize_signatures(source):
+    normalized = []
+    current_class = None
+    skip_class = False
+    for line in source:
+        match = header.match(line)
+        if match:
+            current_class = match.group(1)
+            skip_class = current_class in synthetic_classes
+        if skip_class or (current_class, line.strip()) in synthetic_accessors:
+            continue
+        normalized.append(line)
+    return '\n'.join(normalized) + '\n'
+
+current = normalize_signatures(lines)
 baseline = root/'api/public-jvm.txt'
 if args.update:
     baseline.write_text(current)
     print('Public JVM signature baseline updated')
-elif not baseline.exists() or baseline.read_text() != current:
-    old = baseline.read_text().splitlines() if baseline.exists() else []
+elif not baseline.exists() or normalize_signatures(baseline.read_text().splitlines()) != current:
+    old = normalize_signatures(baseline.read_text().splitlines()).splitlines() if baseline.exists() else []
     print('\n'.join(difflib.unified_diff(old, current.splitlines(), fromfile='baseline', tofile='current')))
     raise SystemExit('Public API changed. Review compatibility before updating the baseline.')
 else:
-    print('Public JVM signatures match reviewed baseline')
+    print('Public JVM signatures match reviewed baseline (verified compiler artifacts excluded)')

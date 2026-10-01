@@ -3,6 +3,11 @@ package com.jackcaow.smoothmarkdown
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownASTParser
 import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode
+import com.jackcaow.smoothmarkdown.nativeparser.NativeCustomInlineMatch
+import com.jackcaow.smoothmarkdown.nativeparser.SourceRange
+import com.jackcaow.smoothmarkdown.editor.MarkdownInlineEditing
+import com.jackcaow.smoothmarkdown.ast.Heading
+import com.jackcaow.smoothmarkdown.ast.Text
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,4 +37,28 @@ class RustParserRuntimeTest {
         assertTrue(document.descendants().any { it is BlockMathNode && it.latex == "z^2" })
         assertTrue(document.descendants().any { it is FootnoteDefinitionNode && it.label == "note" })
     }
+    @Test fun packagedHooksEditorAndMutableHTMLShareRustOnAndroid() {
+        val bridge = Class.forName("com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge")
+        val count = bridge.getDeclaredField("successfulParses").apply { isAccessible = true }.get(null) as AtomicLong
+        val renders = bridge.getDeclaredField("successfulHtmlRenders").apply { isAccessible = true }.get(null) as AtomicLong
+        val payload = Any()
+        val before = count.get()
+        val source = "> 中文🙂 @x\n> next"
+        val tree = NativeMarkdownASTParser(customInline = { text, index, offset ->
+            if (text.startsWith("@x", index)) NativeCustomInlineMatch(
+                NativeMarkdownNode(NativeMarkdownNode.Kind.RAW, "@x", SourceRange(offset, 2), payload = payload), 2) else null
+        }).parse(source)
+        assertTrue(count.get() > before)
+        assertSame(payload, tree.children.single().children.single().children.last { it.payload === payload }.payload)
+        val editorBefore = count.get()
+        assertEquals("# 中文🙂", MarkdownInlineEditing.parse("# **中文🙂**").visible)
+        assertTrue(count.get() > editorBefore)
+        val document = MarkdownCoreParser().parse("# Before")
+        val heading = document.firstChild as Heading
+        (heading.firstChild as Text).literal = "Changed<🙂>"
+        val htmlBefore = renders.get()
+        assertEquals("<h1>Changed&lt;🙂&gt;</h1>\n", NativeMarkdownHTMLSerializer().render(document))
+        assertTrue(renders.get() > htmlBefore)
+    }
+
 }

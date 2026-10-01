@@ -88,7 +88,10 @@ class RustMarkdownBridgeTest {
         word(0xfffffffeL); word(0); word(0); word(0xffffffffL); word(0xffffffffL); word(0); word(0)
         assertEquals(source, RustMarkdownWire.decode(output.toByteArray(), source).source)
     }
-    @Test fun suppliedHostHooksRemainOnFallbackPath() {
+    @Test fun suppliedHostHooksRunInsideSharedScanner() {
+        if (System.getProperty("smoothmarkdown.rust.required") == "true") assertTrue(RustMarkdownBridge.available)
+        assumeTrue(RustMarkdownBridge.available)
+        val before = RustMarkdownBridge.successfulParseCount
         var calls = 0
         val root = NativeMarkdownASTParser(customInline = { source, index, offset ->
             if (source[index] == '@') {
@@ -97,6 +100,7 @@ class RustMarkdownBridgeTest {
             } else null
         }).parse("@ custom")
         assertTrue(calls > 0)
+        assertTrue(RustMarkdownBridge.successfulParseCount > before)
         assertTrue(root.children.single().children.any { it.kind == NativeMarkdownNode.Kind.RAW })
     }
 }
