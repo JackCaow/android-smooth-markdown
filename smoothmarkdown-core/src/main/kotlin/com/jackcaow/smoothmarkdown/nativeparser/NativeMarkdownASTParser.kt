@@ -174,7 +174,18 @@ class NativeMarkdownASTParser(
         val body = text.trimStart()
         if (!body.startsWith("\\[")) return false
         val payload = body.drop(2)
-        return mathClosing(payload, "\\]") != null || mathClosing(payload, "]") == null
+        if (mathClosing(payload, "\\]") != null) return true
+        var depth = 0
+        var escaped = false
+        for (ch in payload) {
+            if (escaped) { escaped = false; continue }
+            when (ch) {
+                '\\' -> escaped = true
+                '[' -> depth++
+                ']' -> { if (depth == 0) return false; depth-- }
+            }
+        }
+        return true
     }
     private fun mathClosing(source: String, delimiter: String): Int? {
         var at = source.indexOf(delimiter)

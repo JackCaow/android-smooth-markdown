@@ -72,6 +72,8 @@ class MathTest {
         }
         assertEquals("x[0]", (parseMarkdown("\\[x[0]\\]").firstChild as BlockMathNode).latex)
         assertEquals("x[0]", (parseMarkdown("\\[\nx[0]").firstChild as BlockMathNode).latex)
+        assertEquals("x[0]", (parseMarkdown("\\[x[0]").firstChild as BlockMathNode).latex)
+        assertEquals("x[0]\n+1", (parseMarkdown("\\[x[0]\n+1\n\\]").firstChild as BlockMathNode).latex)
     }
 
 }
