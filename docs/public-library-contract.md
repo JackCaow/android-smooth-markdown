@@ -1,6 +1,6 @@
 # Public library contract
 
-The planned release containing these APIs is 0.3.0; it has not been published yet. The structured APIs in this source revision are additive. Published 0.2.0 packages do not contain them. Existing flat reader and streaming entry points remain supported for source consumers.
+Version `0.3.0` contains the additive structured APIs below. Packages from `0.2.0` predate these APIs. Existing flat reader and streaming entry points remain supported. Use the individual-module JitPack coordinates in the [installation guide](../README.md#install); Maven Central publication remains a separate release gate.
 
 ## Configuration ownership
 
@@ -16,7 +16,7 @@ The planned release containing these APIs is 0.3.0; it has not been published ye
 
 Use `MarkdownStyleSheet.designTokens` for new customization. It groups semantic document colors, typography and component decoration. Resolution creates a separate safe copy; it does not overwrite the application's original stylesheet.
 
-Explicit tokens take precedence over legacy decoration/text-style fields, then scalar fields, then preset defaults. Set an optional token to nil/null to restore the legacy fallback. Explicit code control options take precedence over the enhanced-component default. A nil/null code control configuration follows that default. Explicit copy labels take precedence over `MarkdownStrings`; nil/null labels inherit it.
+Explicit tokens take precedence over legacy decoration/text-style fields, then scalar fields, then preset defaults. Set an optional token to null to restore the legacy fallback. Explicit code control options take precedence over the enhanced-component default. A null code control configuration follows that default. Explicit copy labels take precedence over `MarkdownStrings`; null labels inherit it.
 
 Typography uses six named heading slots. Compatibility heading arrays are normalized to six slots at the rendering boundary. Invalid dimensions become zero, opacity is clamped to 0...1, and invalid font/line-height values fall back to safe defaults. Platform font handles remain platform-native. Use explicit font metrics when a renderer has separate native and declarative text paths.
 
@@ -26,9 +26,9 @@ Parser and builder registries expose observable revisions. Register, unregister 
 
 ## Resources
 
-The default loader uses system APIs and bounded caches. Custom loaders return encoded bitmap/SVG bytes and must cooperate with cancellation. Headers participate in cache identity. SVG referenced images/fonts use the same loader. iOS SVG inlining is bounded to 32 references and 8 MiB in total; unresolved browser resources are blocked rather than fetched outside the configured transport. Default policy reuses cache entries; reload fetches a fresh value and replaces the cached value; no-store neither reads nor writes the library cache. A custom loader must also honor no-store in its own implementation.
+The default loader uses system APIs and bounded caches. Custom loaders return encoded bitmap/SVG bytes and must cooperate with cancellation. Headers participate in cache identity. SVG referenced images/fonts use the same loader. SVG input is bounded to 2 MiB and image downloads to 8 MiB; unresolved browser resources are blocked rather than fetched outside the configured transport. Default policy reuses cache entries; reload fetches a fresh value and replaces the cached value; no-store neither reads nor writes the library cache. A custom loader must also honor no-store in its own implementation.
 
-Credentials must not be forwarded across origins on redirects. Transport overrides do not bypass image URL validation, byte/dimension limits or native image decoding. Keep a stable resource configuration during a document's lifetime; headers automatically isolate account cache entries. iOS provider assignment refreshes identity automatically; Android uses the loader instance as part of the cache key. Replace configuration to reload visible content.
+Credentials must not be forwarded across origins on redirects. Transport overrides do not bypass image URL validation, byte/dimension limits or native image decoding. Keep a stable resource configuration during a document's lifetime; headers automatically isolate account cache entries. The loader instance is part of the cache key. Replace configuration to reload visible content.
 
 ## Syntax and failure behavior
 

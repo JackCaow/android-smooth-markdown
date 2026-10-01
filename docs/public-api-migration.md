@@ -18,7 +18,7 @@ SmoothMarkdown(
 
 Import `com.jackcaow.smoothmarkdown.*`. The same groups are accepted by the Flow and StateFlow stream entry points. A hot StateFlow normally does not complete.
 
-For parser-only use, depend on `project(":smoothmarkdown-core")` and call `MarkdownCoreParser().parse(source)` or `.renderHtml(source)`. A source integration must include both core and reader modules when using the reader.
+For parser-only use, depend on `com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.3.0` and call `MarkdownCoreParser().parse(source)` or `.renderHtml(source)`. A source integration must include both core and reader modules when using the reader.
 
 ## Appearance
 

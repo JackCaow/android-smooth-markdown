@@ -5,7 +5,7 @@ The preferred customization entry point is `MarkdownStyleSheet.designTokens`. Le
 - `MarkdownStyleSheet`: document typography, semantic colors, block spacing, lists, tables, code and quote decorations, and inline spans.
 - `MarkdownStyleSheet.designTokens`: semantic document colors (`document`), explicit typography (`typography`), and component details for enhanced headings/quotes/links, code controls and syntax, details, keyboard keys, math, image placeholders, footnotes, built-in plugin panels, and Mermaid base themes.
 
-These component tokens are additive APIs in the current source tree; the published `0.2.0` artifact predates them. Use the corresponding source revision until a release containing these APIs is published.
+The `0.3.0` release includes these additive component-token APIs. Applications upgrading from `0.2.0` can keep their legacy stylesheet values and add token overrides gradually.
 
 ## Start from a preset
 
@@ -59,7 +59,7 @@ SmoothMarkdown(markdown = source, styleSheet = style, useEnhancedComponents = tr
 
 Use nested `copy()` calls to retain all other values from the chosen preset. Replacing a group with a new token instance resets that group's other properties to their defaults.
 
-Explicit tokens override legacy fields; nil/null restores their fallback. Numeric values are normalized at consumption. See the [public library contract](public-library-contract.md) for configuration ownership and precedence.
+Explicit tokens override legacy fields; null restores their fallback. Numeric values are normalized at consumption. See the [public library contract](public-library-contract.md) for configuration ownership and precedence.
 
 ## Which configuration controls what?
 
@@ -113,7 +113,7 @@ Custom builders and custom plugins own their Compose output. They can read the s
 This token API covers the core reader and the listed built-in plugin components. It is not a single replacement theme for every module:
 
 - Editor chrome and source/formatted editing surfaces use `editor.MarkdownEditorTheme`. Pass `styleSheet = style` to `SmoothMarkdownEditor` to apply reader styling in Preview and Split modes; this parameter does not restyle source/formatted editing controls.
-- Mermaid base colors and Material typography are configurable through `designTokens.mermaid`. `mermaid.MermaidThemeColors.preset(name)` returns the `default`, `dark`, `forest`, or `neutral` palette for copying. Explicit token colors override the fence theme preset; source `style`/`classDef` directives still override individual nodes. `outerPadding` and `maxHeight` apply to fenced diagrams; standalone views retain their caller modifier. Specialty diagram layout geometry and chart series/status palettes remain fixed inside their diagram implementations.
+- Mermaid base colors and library-owned typography are configurable through `designTokens.mermaid`. `mermaid.MermaidThemeColors.preset(name)` returns the `default`, `dark`, `forest`, or `neutral` palette for copying. Explicit token colors override the fence theme preset; source `style`/`classDef` directives still override individual nodes. `outerPadding` and `maxHeight` apply to fenced diagrams; standalone views retain their caller modifier. Specialty diagram layout geometry and chart series/status palettes remain fixed inside their diagram implementations.
 - App navigation bars, conversation controls, loading/error content supplied by your app, and the Demo's screen controls belong to the host app. Configure these with Compose/Material APIs in your app; the library does not provide a Demo navigation-bar token.
 
 For example, customize Mermaid without modifying its renderer:

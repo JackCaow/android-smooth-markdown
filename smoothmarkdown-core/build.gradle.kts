@@ -25,7 +25,11 @@ publishing {
                 url.set("https://github.com/JackCaow/android-smooth-markdown")
                 licenses { license { name.set("MIT License"); url.set("https://opensource.org/licenses/MIT") } }
                 developers { developer { id.set("JackCaow"); name.set("JackCaow") } }
-                scm { url.set("https://github.com/JackCaow/android-smooth-markdown") }
+                scm {
+                    connection.set("scm:git:git://github.com/JackCaow/android-smooth-markdown.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/JackCaow/android-smooth-markdown.git")
+                    url.set("https://github.com/JackCaow/android-smooth-markdown")
+                }
             }
         }
     }
@@ -47,4 +51,6 @@ tasks.withType<Test>().configureEach {
 tasks.named<Jar>("sourcesJar") {
     from(rootProject.file("rust-core")) { exclude("target/**", ".git/**"); into("rust-core") }
     from("src/main/cpp") { into("native") }
+    from(rootProject.file("scripts/build-rust-parser.py")) { into("build-tools") }
+    from(rootProject.file("LICENSE"))
 }

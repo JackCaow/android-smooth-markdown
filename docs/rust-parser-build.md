@@ -6,7 +6,7 @@ normal Maven dependency; Cargo, Rust, and the NDK are **source build tools**,
 not requirements for library consumers. The parser and JNI bridge contain no
 third-party crates or JNI bridge libraries.
 
-This change prepares the next 0.3.0 package; it does not publish that version.
+The `0.3.0` reader package ships these binaries. See the [installation guide](../README.md#install) for its JitPack module coordinates. Maven Central publication is separate.
 
 The `smoothmarkdown-core` JAR remains usable on a JVM without native binaries.
 It uses the Kotlin implementation when the native library is unavailable.
@@ -66,3 +66,11 @@ runtime on a 16KB-page Android device. An aligned SDK `.so` alone does not prove
 an application's APK ZIP alignment.
 
 See Android's official [16KB-page guide](https://developer.android.com/guide/practices/page-sizes).
+
+## Published source archives
+
+The Core sources JAR includes the Kotlin AST/parser/HTML APIs, owned Rust source,
+header, fixtures, source manifest and JNI shim, plus the native build script for
+inspection. The reader sources JAR supplies the Compose rendering/editor APIs.
+To rebuild the complete native library, use a repository checkout: source JARs
+are IDE/debugging archives, not standalone Gradle projects.
