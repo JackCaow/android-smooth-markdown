@@ -34,7 +34,7 @@ dependencies {
 }
 ```
 
-The library is also available as a source module. To use source instead, pin this repository to a reviewed commit, include `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. The `app` module is only the Demo.
+The library is also available as source modules. To use source instead, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. The reader exposes Core transitively. The `app` module is only the Demo.
 
 The current source introduces grouped options, resource loading, localized labels, and a pure JVM core. These additions are not included in the published `0.2.0` artifact. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
 
