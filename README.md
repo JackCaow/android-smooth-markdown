@@ -145,6 +145,8 @@ The Demo contains reader, streaming, editor, conversation, AI chat, and Mermaid 
 
 ## Development
 
+Source builds use the owned Rust parser and need its build toolchain; see the [parser build guide](docs/rust-parser-build.md). Packaged AAR consumers need no Rust or NDK installation.
+
 ```bash
 ./gradlew :smoothmarkdown:testDebugUnitTest
 ./gradlew :app:assembleDebug

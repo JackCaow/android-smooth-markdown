@@ -9,12 +9,19 @@ class NativeMarkdownParser(
     private val enableExtensions: Boolean = false,
     private val plugins: ParserPluginRegistry? = null,
 ) {
+    // Core is a compiler friend module; its internal transport is library SPI, not application API.
     fun parse(source: String): Markup {
+        val hasHostPlugins = plugins?.let {
+            it.blockPlugins.isNotEmpty() || it.sourceBlockPlugins.isNotEmpty() || it.inlinePlugins.isNotEmpty()
+        } ?: false
+        // Math and footnotes are native Rust extensions. Host hooks and details retain their existing adapter.
+        val needsHooks = hasHostPlugins || (enableExtensions && Regex("""(?im)^ {0,3}<details(?: open)?>\s*$""").containsMatchIn(source))
         val scanner = NativeMarkdownASTParser(enableGFM,
-            customInline = if (enableExtensions || plugins != null) ::inlinePlugin else null,
-            customBlock = if (enableExtensions || plugins != null) ::blockPlugin else null,
+            customInline = if (enableExtensions || hasHostPlugins) ::inlinePlugin else null,
+            customBlock = if (enableExtensions || hasHostPlugins) ::blockPlugin else null,
             enableNativeExtensions = false)
-        val tree = scanner.parse(source)
+        val tree = (if (enableExtensions && !needsHooks) RustMarkdownBridge.parseForReader(source, enableGFM) else null)
+            ?: scanner.parse(source)
         val references = mutableMapOf<String, NativeMarkdownReference>()
         fun collect(node: NativeMarkdownNode) {
             if (node.kind == NativeMarkdownNode.Kind.REFERENCE_DEFINITION)
@@ -112,7 +119,7 @@ class NativeMarkdownParser(
             if (end < lines.size) end++
             return blockMatch(lines, index, end, offset, node)
         }
-        if (!enableExtensions || !Regex("(?i)^\\s*<details(?: open)?>\\s*$").matches(opening)) return null
+        if (!enableExtensions || !Regex("""(?i)^\s*<details(?: open)?>\s*$""").matches(opening)) return null
         var depth = 1
         var end = index + 1
         var fence: Char? = null

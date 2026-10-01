@@ -6,6 +6,7 @@ import org.junit.runners.Suite
     MarkdownDesignTokensUiTest::class,
     MarkdownRegistryUpdatesUiTest::class,
     NativeImageLoaderTest::class,
+    RustParserRuntimeTest::class,
     ImageBuilderRenderTest::class,
 )
 class PublicLibraryUiSuite

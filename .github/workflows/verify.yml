@@ -31,7 +31,20 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
       - name: Install Android API 37
-        run: sdkmanager 'platforms;android-37.0'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - name: Set up owned Rust parser toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+      - name: Verify owned Rust source and grammar fixtures
+        working-directory: android-smooth-markdown/rust-core
+        run: |
+          shasum -a 256 -c SOURCE.sha256
+          cargo test --locked --offline
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
       - name: Check Flutter Demo fixtures
@@ -39,13 +52,16 @@ jobs:
         run: python3 tools/check_flutter_example_parity.py
       - name: Test library and Demo; compile UI tests; assemble Demo
         working-directory: android-smooth-markdown
-        run: ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug :smoothmarkdown:testDebugUnitTest :smoothmarkdown:compileDebugAndroidTestKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon
+        run: ./gradlew :smoothmarkdown-core:test :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug :smoothmarkdown:testDebugUnitTest :smoothmarkdown:compileDebugAndroidTestKotlin :app:testDebugUnitTest :app:assembleDebug --no-daemon
 
       - name: Verify staged Maven consumers
         working-directory: android-smooth-markdown
         run: |
           ./gradlew :smoothmarkdown-core:publishReleasePublicationToCentralBundleRepository :smoothmarkdown:publishReleasePublicationToCentralBundleRepository --no-daemon
           ./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug -PconsumerArtifactVersion=0.3.0 --no-daemon
+      - name: Verify four packaged native ABIs and 16KB ELF alignment
+        working-directory: android-smooth-markdown
+        run: python3 scripts/build-rust-parser.py --check-aar smoothmarkdown/build/outputs/aar/smoothmarkdown-release.aar
       - name: Check public JVM signatures
         working-directory: android-smooth-markdown
         run: python3 tools/check_public_api.py
@@ -62,7 +78,15 @@ jobs:
       - uses: android-actions/setup-android@v4
       - uses: gradle/actions/setup-gradle@v6
       - name: Install build SDK and emulator
-        run: sdkmanager 'platforms;android-37.0' 'system-images;android-35;google_apis;x86_64' 'emulator'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358' 'system-images;android-35;google_apis;x86_64' 'emulator'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - name: Set up owned Rust parser toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
       - name: Boot emulator
         timeout-minutes: 7
         run: |

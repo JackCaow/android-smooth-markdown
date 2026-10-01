@@ -21,6 +21,9 @@ for jar in jars:
             # Anonymous closures and generated Compose singleton classes are implementation details.
             if re.search(r'\$\d|\$.*\$|Kt\$|ComposableSingletons', cls):
                 continue
+            # Kotlin internal transports are JVM-public implementation classes, not consumer API.
+            if re.match(r'^com\.jackcaow\.smoothmarkdown\.nativeparser\.(RustMarkdownBridge|RustMarkdownWire)(\$|$)', cls):
+                continue
             classes.add(cls)
 result = subprocess.check_output(['javap', '-public', '-classpath', ':'.join(map(str, jars)), *sorted(classes)], text=True)
 lines = [line.rstrip() for line in result.splitlines() if not line.startswith('Compiled from')]
