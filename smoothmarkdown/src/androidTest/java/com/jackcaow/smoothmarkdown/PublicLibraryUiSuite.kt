@@ -8,5 +8,6 @@ import org.junit.runners.Suite
     NativeImageLoaderTest::class,
     RustParserRuntimeTest::class,
     ImageBuilderRenderTest::class,
+    StreamingMarkdownBackgroundUiTest::class,
 )
 class PublicLibraryUiSuite

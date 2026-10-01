@@ -186,6 +186,6 @@ Source: [`smoothmarkdown`](smoothmarkdown/) · Demo: [`app`](app/) · [Implement
 
 ### Streaming performance
 
-Eligible plain Markdown streams reuse committed AST blocks and send only their mutable tail across the native bridge. This bypasses the global parse cache and preserves the existing public API. Plugins, formulas/footnotes, enabled HTML and details keep the established full-document parser; references invalidate earlier blocks. Large single containers may see no improvement. Parsing is currently synchronous; background scheduling is not implemented.
+Eligible plain Markdown streams reuse committed AST blocks and send only their mutable tail across the native bridge. This bypasses the global parse cache and preserves the existing public API. Plugins, formulas/footnotes, enabled HTML and details keep the established full-document parser; references invalidate earlier blocks. Large single containers may see no improvement. Eligible streams parse and decode on a serial background worker. Pending updates coalesce complete source prefixes; the final prefix is published before `onComplete`. Native AST state advances even when an intermediate UI update is skipped. Markup adaptation and UI publication remain on the main thread. Compatibility paths still run on the UI thread to preserve plugin behavior.
 
 See [same-input parser measurements and compatibility boundaries](benchmarks/android-stream-parser-2026-10-01.md). The measured host speedup is not a Compose frame-rate or device claim.

@@ -6,7 +6,8 @@ import com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge
 
 /** A private render handoff keeps the public reader signature and avoids parsing a prefix twice. */
 internal data class StreamingMarkdownDocument(val source: String, val document: Node,
-    val plugins: ParserPluginRegistry?, val enableHtml: Boolean, val blockKeys: Map<Node, Long>)
+    val plugins: ParserPluginRegistry?, val enableHtml: Boolean, val blockKeys: Map<Node, Long>,
+    val parserThreadId: Long? = null)
 internal val LocalStreamingMarkdownDocument = compositionLocalOf<StreamingMarkdownDocument?> { null }
 
 /** One synchronous session per stream/configuration. Published blocks retain their identity.
@@ -39,8 +40,7 @@ internal class StreamingMarkdownSession(
         // Reader extension hooks accept some math spellings beyond the built-in scanner
         // and include incomplete footnote continuation whitespace in public spans.
         // Preserve those published contracts with the existing hook-aware batch scanner.
-        val eligible = plugins == null && !enableHtml && !source.contains("<details", ignoreCase = true) &&
-            !source.contains("[^") && !source.contains('$')
+        val eligible = streamingNativeEligible(source, plugins, enableHtml)
         if (!eligible) {
             closeNative()
             return publish(source, parseMarkdown(source, plugins, enableCache = false, enableHtml = enableHtml), 0)
