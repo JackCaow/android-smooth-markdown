@@ -112,7 +112,7 @@ class NativeMarkdownParser(
         val opening = lines[index]
         if (enableExtensions) {
             val trimmed = opening.trim()
-            if (trimmed.startsWith("$$") || trimmed.startsWith("\\[")) {
+            if (trimmed.startsWith("$$")) {
                 val closing = if (trimmed.startsWith("$$")) "$$" else "\\]"
                 val rest = trimmed.drop(2)
                 var end = index + 1

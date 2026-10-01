@@ -71,13 +71,27 @@ class NativeMarkdownASTParser(
                 result += node(Kind.FOOTNOTE_DEFINITION, start, index).copy(label = label); continue
             }
             val mathOpening = text.trim(' ', '\t')
-            if (enableNativeExtensions && (mathOpening.startsWith("$$") || mathOpening.startsWith("\\["))) {
+            if (enableNativeExtensions && (mathOpening.startsWith("$$") || backslashMathOpen(mathOpening))) {
                 val close = if (mathOpening.startsWith("$$")) "$$" else "\\]"
                 var body = mathOpening.drop(2); index++
                 while (mathClosing(body, close) == null && index < lines.size) { body += "\n" + lines[index++].text }
                 val closing = mathClosing(body, close)
-                if (closing != null) body = body.substring(0, closing)
-                result += node(Kind.BLOCK_MATH, start, index, literalText = body.trim()); continue
+                var math = node(Kind.BLOCK_MATH, start, index, literalText = (if (closing == null) body else body.substring(0, closing)).trim())
+                var trailing: NativeMarkdownNode? = null
+                if (close == "\\]" && closing != null) {
+                    val last = lines[index - 1]
+                    val prefix = if (index == start + 1) last.text.length - last.text.trimStart().length + 2 else 0
+                    val end = prefix + mathClosing(last.text.substring(prefix), close)!! + 2
+                    val sourceEnd = (last.start + end - last.virtualIndent).coerceAtLeast(0)
+                    math = math.copy(source = source.substring(math.sourceRange.offset, sourceEnd), sourceRange = SourceRange(math.sourceRange.offset, sourceEnd - math.sourceRange.offset))
+                    if (last.text.substring(end).isNotBlank()) {
+                        val line = Line(last.text.substring(end), last.raw.substring(end), sourceEnd, last.end, last.projected)
+                        trailing = NativeMarkdownNode(Kind.PARAGRAPH, source.substring(sourceEnd, last.end), SourceRange(sourceEnd, last.end - sourceEnd), paragraphInlines(listOf(line), source, references))
+                    }
+                }
+                result += math
+                if (trailing != null) result += trailing
+                continue
             }
             val heading = heading(text)
             if (heading != null) {
@@ -123,7 +137,7 @@ class NativeMarkdownASTParser(
                 result += node(Kind.HTML_BLOCK, start, index, literalText = if (selected.any { it.projected }) selected.joinToString("") { it.raw } else null); continue
             }
             index++
-            while (index < lines.size && !lines[index].isBlank && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
+            while (index < lines.size && !lines[index].isBlank && !(enableNativeExtensions && (lines[index].text.trimStart().startsWith("$$") || backslashMathOpen(lines[index].text))) && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
             val level = if (index < lines.size && !lines[index].lazyContinuation) setextLevel(lines[index].text) else null
             if (level != null) {
                 val content = lines.subList(start, index).joinToString("\n") { it.text }
@@ -155,6 +169,12 @@ class NativeMarkdownASTParser(
             }
         }
         return children
+    }
+    private fun backslashMathOpen(text: String): Boolean {
+        val body = text.trimStart()
+        if (!body.startsWith("\\[")) return false
+        val payload = body.drop(2)
+        return mathClosing(payload, "\\]") != null || mathClosing(payload, "]") == null
     }
     private fun mathClosing(source: String, delimiter: String): Int? {
         var at = source.indexOf(delimiter)

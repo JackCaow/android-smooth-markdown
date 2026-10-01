@@ -57,4 +57,21 @@ class MathTest {
         assertTrue(paragraph.children().none { it is InlineMathNode })
     }
 
+    @Test fun backslashDisplayKeepsTrailerAndEscapedBrackets() {
+        for (source in listOf("\\[x\\] trailing", "\\[\nx\n\\] trailing")) {
+            val nodes = parseMarkdown(source).children().toList()
+            assertEquals("x", (nodes[0] as BlockMathNode).latex)
+            assertEquals("trailing", inlineText(nodes[1] as Paragraph, false).text.trim())
+            val ast = MarkdownCoreParser().parseAST(source, enableExtensions = true)
+            assertEquals("x", ast.children[0].literalText)
+            assertEquals(" trailing", ast.children[1].source)
+            assertEquals(source.indexOf(" trailing"), ast.children[1].sourceRange.offset)
+        }
+        for (source in listOf("\\[^escaped] and [^real]", "\\[ordinary] text")) {
+            assertTrue(parseMarkdown(source).firstChild is Paragraph)
+        }
+        assertEquals("x[0]", (parseMarkdown("\\[x[0]\\]").firstChild as BlockMathNode).latex)
+        assertEquals("x[0]", (parseMarkdown("\\[\nx[0]").firstChild as BlockMathNode).latex)
+    }
+
 }
