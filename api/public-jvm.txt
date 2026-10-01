@@ -582,6 +582,8 @@ public final class com.jackcaow.smoothmarkdown.MarkdownCodeTokens {
 public final class com.jackcaow.smoothmarkdown.MarkdownCoreParser {
   public com.jackcaow.smoothmarkdown.MarkdownCoreParser(boolean);
   public com.jackcaow.smoothmarkdown.MarkdownCoreParser(boolean, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public final com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode parseAST(java.lang.String, boolean);
+  public static com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode parseAST$default(com.jackcaow.smoothmarkdown.MarkdownCoreParser, java.lang.String, boolean, int, java.lang.Object);
   public final com.jackcaow.smoothmarkdown.ast.Markup parse(java.lang.String);
   public final java.lang.String renderHtml(java.lang.String);
   public com.jackcaow.smoothmarkdown.MarkdownCoreParser();

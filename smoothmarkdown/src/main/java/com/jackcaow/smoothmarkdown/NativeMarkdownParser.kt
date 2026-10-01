@@ -33,8 +33,8 @@ class NativeMarkdownParser(
         collect(tree)
         return NativeMarkdownMarkupConverter(source) { node ->
             if (!enableExtensions) null else when (node.kind) {
-                NativeMarkdownNode.Kind.INLINE_MATH -> InlineMathNode(node.literalText ?: node.source.removePrefix("$").removeSuffix("$"))
-                NativeMarkdownNode.Kind.BLOCK_MATH -> BlockMathNode(node.literalText ?: node.source.trim().removePrefix("$$").removeSuffix("$$").trim())
+                NativeMarkdownNode.Kind.INLINE_MATH -> InlineMathNode(node.literalText ?: node.source.removePrefix("\\(").removeSuffix("\\)").removePrefix("$").removeSuffix("$"))
+                NativeMarkdownNode.Kind.BLOCK_MATH -> BlockMathNode(node.literalText ?: node.source.trim().removePrefix("\\[").removeSuffix("\\]").removePrefix("$$").removeSuffix("$$").trim())
                 NativeMarkdownNode.Kind.FOOTNOTE_REFERENCE -> FootnoteReferenceNode(node.label)
                 NativeMarkdownNode.Kind.FOOTNOTE_DEFINITION -> {
                     val lines = (node.literalText ?: node.source).lines()
@@ -59,6 +59,17 @@ class NativeMarkdownParser(
     }
 
     private fun inlinePlugin(source: String, index: Int, absoluteOffset: Int): NativeCustomInlineMatch? {
+        if (enableExtensions && source.startsWith("\\(", index)) {
+            var end = index + 2
+            while (end < source.length - 1) {
+                if (source.startsWith("\\)", end)) {
+                    if (end > index + 2) return inlineMatch(source, index, absoluteOffset, end - index + 2,
+                        InlineMathNode(source.substring(index + 2, end)))
+                    break
+                }
+                end += if (source[end] == '\\' && end + 1 < source.length) 2 else 1
+            }
+        }
         if (enableExtensions && source[index] == '$' && (index == 0 || source[index - 1] != '$') && source.getOrNull(index + 1) != '$') {
             var cursor = index + 1
             var escaped = false
@@ -86,20 +97,29 @@ class NativeMarkdownParser(
         NativeCustomInlineMatch(NativeMarkdownNode(NativeMarkdownNode.Kind.RAW,
             source.substring(index, index + consumed), SourceRange(offset, consumed), payload = node), consumed)
 
+    private fun mathClosing(source: String, delimiter: String): Int? {
+        if (delimiter == "$$") return source.indexOf(delimiter).takeIf { it >= 0 }
+        var at = source.indexOf(delimiter)
+        while (at >= 0) {
+            var before = at - 1; var escapes = 0
+            while (before >= 0 && source[before--] == '\\') escapes++
+            if (escapes % 2 == 0) return at
+            at = source.indexOf(delimiter, at + delimiter.length)
+        }
+        return null
+    }
     private fun blockPlugin(lines: List<String>, index: Int, offset: Int): NativeCustomBlockMatch? {
         val opening = lines[index]
         if (enableExtensions) {
             val trimmed = opening.trim()
-            if (trimmed.startsWith("$$")) {
+            if (trimmed.startsWith("$$") || trimmed.startsWith("\\[")) {
+                val closing = if (trimmed.startsWith("$$")) "$$" else "\\]"
                 val rest = trimmed.drop(2)
                 var end = index + 1
-                val latex = if (rest.endsWith("$$")) rest.dropLast(2).trim() else {
-                    val body = mutableListOf<String>()
-                    if (rest.isNotEmpty()) body.add(rest)
-                    while (end < lines.size && !lines[end].trim().startsWith("$$")) body.add(lines[end++])
-                    if (end < lines.size) end++
-                    body.joinToString("\n").trim()
-                }
+                var body = rest
+                while (mathClosing(body, closing) == null && end < lines.size) body += "\n" + lines[end++]
+                val close = mathClosing(body, closing)
+                val latex = (if (close == null) body else body.substring(0, close)).trim()
                 return blockMatch(lines, index, end, offset, BlockMathNode(latex))
             }
             val footnote = Regex("^ {0,3}\\[\\^([^]]+)]\\:\\s+(.+)$").matchEntire(opening)

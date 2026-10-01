@@ -36,4 +36,25 @@ class MathTest {
         assertTrue(paragraph.children().none { it is InlineMathNode })
     }
 
+    @Test fun backslashDelimitersReachReaderAndCoreProjection() {
+        val source = "😀 Math \\(x_1\\) and \$y_2\$"
+        val paragraph = parseMarkdown(source).firstChild as Paragraph
+        assertEquals(listOf("x_1", "y_2"), paragraph.children().filterIsInstance<InlineMathNode>().map { it.latex }.toList())
+        assertEquals(2, inlineRender(paragraph, false).math.size)
+        val projected = MarkdownCoreParser().parseAST(source, enableExtensions = true)
+        val formulas = projected.children[0].children.filter { it.kind == com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode.Kind.INLINE_MATH }
+        assertEquals("\\(x_1\\)", formulas[0].source)
+        assertEquals("x_1", formulas[0].literalText)
+        assertEquals(8, formulas[0].sourceRange.offset)
+        assertTrue(MarkdownCoreParser().parseAST(source).children[0].children.none { it.kind == com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode.Kind.INLINE_MATH })
+        assertEquals("x", (parseMarkdown("\\[x\\]").firstChild as BlockMathNode).latex)
+        assertEquals("\\frac{x}{y}", (parseMarkdown("\\[\n\\frac{x}{y}\n\\]").firstChild as BlockMathNode).latex)
+        assertTrue(!streamingNativeEligible("\\(x\\)", null, false))
+        assertTrue(!streamingNativeEligible("\\[x\\]", null, false))
+    }
+    @Test fun backslashEscapesCodeAndPartialMathStayLiteral() {
+        val paragraph = parseMarkdown("`\\(code\\)` \\\\(escaped\\) \\(open").firstChild as Paragraph
+        assertTrue(paragraph.children().none { it is InlineMathNode })
+    }
+
 }
