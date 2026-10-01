@@ -74,7 +74,13 @@ class FormattedListSourcePasteTest {
 
         assertTrue(controller.replaceFormattedListLineWithSourcePaste(id, listOf(0), 0,
             "Before first\n\nsecond after", TextRange(7, 13)))
-        assertEquals("- **Before **first\n\n  second** after**\n- Keep", controller.text)
+        assertEquals("- **Before** first\n\n  second **after**\n- Keep", controller.text)
+        val first = MarkdownInlineEditing.parse("**Before** first")
+        val last = MarkdownInlineEditing.parse("second **after**")
+        assertEquals("Before first", first.visible)
+        assertEquals(TextRange(0, 6), first.marks.single { it.kind == InlineMarkKind.BOLD }.range)
+        assertEquals("second after", last.visible)
+        assertEquals(TextRange(7, 12), last.marks.single { it.kind == InlineMarkKind.BOLD }.range)
         assertTrue(controller.undo())
         assertEquals(original, controller.text)
     }

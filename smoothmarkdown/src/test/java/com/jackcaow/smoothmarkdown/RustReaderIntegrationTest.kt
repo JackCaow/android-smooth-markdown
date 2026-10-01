@@ -74,7 +74,46 @@ class RustReaderIntegrationTest {
         val before = counter.get()
         val registry = ParserPluginRegistry().apply { register(MentionPlugin()) }
         val document = NativeMarkdownParser(enableGFM = true, enableExtensions = true, plugins = registry).parse("Hello @jack")
-        assertEquals(before, counter.get())
+        assertTrue("Host plugins must execute within the shared scanner", counter.get() > before)
         assertTrue(document.descendants().any { it is MentionNode })
     }
+    @Test fun detailsAndFootnoteBodiesUseSharedInlineScannerInProjectedQuotes() {
+        val counter = requireBackend()
+        val before = counter.get()
+        val registry = ParserPluginRegistry().apply { register(MentionPlugin()) }
+        val source = "> <details>\n> <summary>**Title** @jack</summary>\n>\n> [^n]: note **bold** @jane\n>     next\n> </details>"
+        val document = NativeMarkdownParser(true, true, registry).parse(source)
+        val details = document.descendants().filterIsInstance<DetailsNode>().single()
+        assertTrue("outer, summary, body and footnote inline must all use shared scans", counter.get() - before >= 4)
+        assertTrue(details.summary.flatMap { it.descendants().toList() }.any { it is MentionNode })
+        val footnote = details.body.filterIsInstance<FootnoteDefinitionNode>().single()
+        assertTrue(footnote.children().any { it is MentionNode })
+        assertTrue(footnote.children().any { it is com.jackcaow.smoothmarkdown.ast.StrongEmphasis })
+        assertFalse(footnote.rawInlineSource.contains(">"))
+        assertTrue(footnote.rawInlineSource.contains("next"))
+    }
+    @Test fun sameTriggerPriorityAndMissSemanticsRemainInsideSharedScanner() {
+        val counter = requireBackend()
+        val calls = mutableListOf<String>()
+        val registry = ParserPluginRegistry()
+        fun plugin(id: String, priority: Int, claim: Boolean) = object : InlineParserPlugin {
+            override val id = id
+            override val name = id
+            override val priority = priority
+            override val triggerCharacter = '@'
+            override fun canParse(text: String, index: Int) = true
+            override fun parse(text: String, startIndex: Int): InlineParseResult? {
+                calls += id
+                return if (claim) InlineParseResult(MentionNode("winner"), 2) else null
+            }
+            override fun render(node: PluginInlineNode): InlinePluginPresentation? = null
+        }
+        registry.registerAll(listOf(plugin("low", 1, true), plugin("high-miss", 3, false), plugin("middle", 2, true)))
+        val before = counter.get()
+        val document = NativeMarkdownParser(true, true, registry).parse("`@x` [@y](/link)")
+        assertTrue(counter.get() > before)
+        assertEquals(listOf("high-miss", "middle"), calls)
+        assertEquals("winner", document.descendants().filterIsInstance<MentionNode>().single().username)
+    }
+
 }

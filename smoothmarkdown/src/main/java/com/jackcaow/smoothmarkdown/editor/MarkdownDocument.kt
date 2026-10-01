@@ -4,6 +4,10 @@ import androidx.compose.ui.text.TextRange
 import com.jackcaow.smoothmarkdown.ParserPluginRegistry
 import com.jackcaow.smoothmarkdown.SourceBlockParserPlugin
 import com.jackcaow.smoothmarkdown.parseMarkdown
+import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode
+import com.jackcaow.smoothmarkdown.nativeparser.NativeCustomBlockMatch
+import com.jackcaow.smoothmarkdown.nativeparser.SourceRange
+import com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge
 import com.jackcaow.smoothmarkdown.ast.TableBlock
 import com.jackcaow.smoothmarkdown.ast.BlockQuote
 import com.jackcaow.smoothmarkdown.ast.BulletList
@@ -39,6 +43,91 @@ data class MarkdownDocument(val source: String, val blocks: List<MarkdownDocumen
 /** Converts rendered Markdown syntax into source-backed editable blocks. */
 object MarkdownDocumentCodec {
     fun parse(source: String, plugins: ParserPluginRegistry? = null): MarkdownDocument {
+        val hostBlocks: ((List<String>, Int, Int) -> NativeCustomBlockMatch?)? = if (plugins?.blockPlugins?.isNotEmpty() == true) {
+            { lines, index, offset ->
+                plugins.findBlockPlugins(lines[index]).firstNotNullOfOrNull { plugin ->
+                    val node = plugin.createNode(lines[index]) ?: return@firstNotNullOfOrNull null
+                    node.pluginId = plugin.id
+                    var end = index + 1
+                    while (end < lines.size && !plugin.isClosingLine(node, lines[end])) end++
+                    plugin.complete(node, lines.subList(index + 1, end))
+                    if (end < lines.size) end++
+                    val raw = lines.subList(index, end).joinToString("\n")
+                    NativeCustomBlockMatch(NativeMarkdownNode(NativeMarkdownNode.Kind.RAW, raw,
+                        SourceRange(offset, raw.length), payload = node), end - index)
+                }
+            }
+        } else null
+        val root = if (hostBlocks == null) RustMarkdownBridge.parseForEditor(source)
+            else RustMarkdownBridge.parse(source, true, true, customBlock = hostBlocks)
+        root?.let { return nativeDocument(source, it, plugins) }
+        return legacyDocument(source, plugins)
+    }
+
+    /** Shared AST ranges are authoritative; platform source plugins only overlay their own syntax. */
+    private fun nativeDocument(source: String, root: NativeMarkdownNode, plugins: ParserPluginRegistry?): MarkdownDocument {
+        val lines = lineRanges(source)
+        val sourceLines = lines.map { (start, end) -> source.substring(start, end) }
+        val nodes = root.children
+        val blocks = mutableListOf<MarkdownDocumentBlock>()
+        var index = 0
+        var previousEnd = 0
+        fun contentEnd(end: Int): Int {
+            var limit = end
+            // Terminal line separators belong to document trivia, not an editable block.
+            while (limit > 0 && source[limit - 1] in "\r\n") limit--
+            return limit
+        }
+        while (index < nodes.size) {
+            val node = nodes[index]
+            var start = node.sourceRange.offset
+            var end = contentEnd(node.sourceRange.end)
+            var kind = when (node.kind) {
+                NativeMarkdownNode.Kind.HEADING -> MarkdownBlockKind.HEADING
+                NativeMarkdownNode.Kind.BLOCK_QUOTE -> MarkdownBlockKind.QUOTE
+                NativeMarkdownNode.Kind.LIST -> if (node.ordered) MarkdownBlockKind.ORDERED_LIST else MarkdownBlockKind.BULLET_LIST
+                NativeMarkdownNode.Kind.FENCED_CODE, NativeMarkdownNode.Kind.INDENTED_CODE -> MarkdownBlockKind.CODE
+                NativeMarkdownNode.Kind.TABLE -> MarkdownBlockKind.TABLE
+                NativeMarkdownNode.Kind.THEMATIC_BREAK -> MarkdownBlockKind.RULE
+                NativeMarkdownNode.Kind.PARAGRAPH -> if (node.children.singleOrNull()?.kind == NativeMarkdownNode.Kind.IMAGE) MarkdownBlockKind.IMAGE else MarkdownBlockKind.PARAGRAPH
+                else -> MarkdownBlockKind.RAW
+            }
+            var nextIndex = index + 1
+            val firstLine = lines.indexOfLast { it.first <= start }
+            if (firstLine >= 0) {
+                val override = plugins?.sourceBlockPlugins?.firstNotNullOfOrNull { plugin ->
+                    if (!plugin.canParse(sourceLines[firstLine], sourceLines, firstLine)) return@firstNotNullOfOrNull null
+                    val consumed = plugin.parse(sourceLines, firstLine)?.linesConsumed ?: return@firstNotNullOfOrNull null
+                    if (consumed !in 1..sourceLines.size - firstLine) return@firstNotNullOfOrNull null
+                    val pluginEnd = lines[firstLine + consumed - 1].second
+                    if (pluginEnd < end) return@firstNotNullOfOrNull null
+                    var candidate = nextIndex
+                    while (candidate < nodes.size && nodes[candidate].sourceRange.offset < pluginEnd) {
+                        if (contentEnd(nodes[candidate].sourceRange.end) > pluginEnd) return@firstNotNullOfOrNull null
+                        candidate++
+                    }
+                    pluginEnd to candidate
+                }
+                if (override != null) {
+                    start = lines[firstLine].first
+                    end = override.first
+                    nextIndex = override.second
+                    kind = MarkdownBlockKind.RAW
+                }
+            }
+            if (start >= previousEnd && end > start) {
+                blocks += MarkdownDocumentBlock("block-${blocks.size}", kind, source.substring(start, end), TextRange(start, end),
+                    headingLevel = node.level.takeIf { kind == MarkdownBlockKind.HEADING },
+                    language = node.info.trim().takeIf { kind == MarkdownBlockKind.CODE && it.isNotEmpty() })
+                previousEnd = end
+            }
+            index = nextIndex
+        }
+        return MarkdownDocument(source, blocks)
+    }
+
+    /** Only native-artifact/FFI failure reaches the original source-checkout implementation. */
+    private fun legacyDocument(source: String, plugins: ParserPluginRegistry?): MarkdownDocument {
         val lines = lineRanges(source)
         val sourceLines = lines.map { (start, end) -> source.substring(start, end) }
         val blocks = mutableListOf<MarkdownDocumentBlock>()

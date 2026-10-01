@@ -19,6 +19,10 @@ import com.jackcaow.smoothmarkdown.ast.HardLineBreak
 import com.jackcaow.smoothmarkdown.ast.StrongEmphasis
 import com.jackcaow.smoothmarkdown.ast.Text
 import com.jackcaow.smoothmarkdown.NativeMarkdownParser as Parser
+import com.jackcaow.smoothmarkdown.NativeMarkdownMarkupConverter
+import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownNode
+import com.jackcaow.smoothmarkdown.nativeparser.NativeMarkdownTextDecoder
+import com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge
 
 internal enum class InlineMarkKind { BOLD, ITALIC, STRIKETHROUGH, LINK, CODE, WIKILINK }
 internal data class InlineMark(
@@ -30,9 +34,9 @@ internal data class InlineMark(
 )
 
 /**
- * Bounded source-backed inline model for Formatted paragraphs and ATX headings.
- * Preserves delimiters around local edits; cross-mark edits fall back to escaped plain text.
- * Complex links, images, and multi-backtick code remain literal source in this editing pass.
+ * Source-backed formatted text projected from the shared inline AST.
+ * Preserves delimiters around local edits; cross-mark edits may become escaped plain text.
+ * Images and embedded HTML retain their source spelling in the native text editor.
  */
 internal class MarkdownInlineEditing private constructor(
     val source: String,
@@ -70,10 +74,24 @@ internal class MarkdownInlineEditing private constructor(
         val start = boundary(lower) ?: return null
         val end = boundary(upper) ?: return null
         if (start.offset > end.offset) return null
-        val before = source.substring(0, start.offset) + start.closeTokens
-        val after = end.openTokens + source.substring(end.offset)
-        if (before.isNotEmpty() && parse(before, enableWikilinks).visible != visible.substring(0, lower)) return null
-        if (after.isNotEmpty() && parse(after, enableWikilinks).visible != visible.substring(upper)) return null
+        val prefix = source.substring(0, start.offset)
+        val suffix = source.substring(end.offset)
+        var before = prefix + start.closeTokens
+        var after = end.openTokens + suffix
+        val expectedBefore = visible.substring(0, lower)
+        val expectedAfter = visible.substring(upper)
+        // A generated emphasis delimiter cannot close after, or open before, whitespace.
+        // Keep those original characters outside the closed/reopened fragment instead.
+        if (before.isNotEmpty() && parse(before, enableWikilinks).visible != expectedBefore && start.closeTokens.isNotEmpty()) {
+            val whitespace = prefix.takeLastWhile { it.isWhitespace() }
+            if (whitespace.isNotEmpty()) before = prefix.dropLast(whitespace.length) + start.closeTokens + whitespace
+        }
+        if (after.isNotEmpty() && parse(after, enableWikilinks).visible != expectedAfter && end.openTokens.isNotEmpty()) {
+            val whitespace = suffix.takeWhile { it.isWhitespace() }
+            if (whitespace.isNotEmpty()) after = whitespace + end.openTokens + suffix.drop(whitespace.length)
+        }
+        if (before.isNotEmpty() && parse(before, enableWikilinks).visible != expectedBefore) return null
+        if (after.isNotEmpty() && parse(after, enableWikilinks).visible != expectedAfter) return null
         return SplitRange(before, after)
     }
 
@@ -145,9 +163,15 @@ internal class MarkdownInlineEditing private constructor(
         if (kind == InlineMarkKind.LINK && !safeMarkdownDestination(linkDestination(destination))) return null
         val existing = marks.firstOrNull { it.kind == kind && it.range.min == lower && it.range.max == upper }
         if (existing != null && kind != InlineMarkKind.LINK) {
-            val delimiterLength = if (kind == InlineMarkKind.BOLD || kind == InlineMarkKind.STRIKETHROUGH || kind == InlineMarkKind.WIKILINK) 2 else 1
-            return source.replaceRange(existing.sourceStart, existing.sourceEnd,
-                source.substring(existing.sourceStart + delimiterLength, existing.sourceEnd - delimiterLength))
+            val delimiterLength = when (kind) {
+                InlineMarkKind.BOLD, InlineMarkKind.WIKILINK -> 2
+                InlineMarkKind.STRIKETHROUGH -> source.substring(existing.sourceStart, existing.sourceEnd).takeWhile { it == '~' }.length.coerceIn(1, 2)
+                InlineMarkKind.CODE -> source.substring(existing.sourceStart, existing.sourceEnd).takeWhile { it == '`' }.length
+                else -> 1
+            }
+            val unwrapped = if (kind == InlineMarkKind.CODE) escapeMarkdown(visible.substring(existing.range.min, existing.range.max), enableWikilinks)
+                else source.substring(existing.sourceStart + delimiterLength, existing.sourceEnd - delimiterLength)
+            return source.replaceRange(existing.sourceStart, existing.sourceEnd, unwrapped)
         }
         if (kind == InlineMarkKind.LINK || kind == InlineMarkKind.WIKILINK) if (marks.any {
                 it.kind in setOf(InlineMarkKind.LINK, InlineMarkKind.WIKILINK) && lower < it.range.max && upper > it.range.min
@@ -275,8 +299,15 @@ internal class MarkdownInlineEditing private constructor(
             tokens.joinToString("") { it.first })
     }
 
-    /** CommonMark is the authority for candidate syntax; reject unsupported inline node trees. */
+    /** Shared inline grammar is the authority for candidate syntax and semantic coverage. */
     private fun semanticInline(markdown: String): InlineSemantic? {
+        val root = parseNative(markdown, enableWikilinks) ?: return legacySemanticInline(markdown)
+        val model = fromNativeAST(markdown, root, enableWikilinks)
+        return InlineSemantic(model.visible, model.marks.map { it.semantic() })
+    }
+
+    /** Original source-checkout candidate validation, reached only when native FFI is unavailable. */
+    private fun legacySemanticInline(markdown: String): InlineSemantic? {
         val document = Parser.builder().build().parse(markdown)
         val paragraph = document.firstChild as? Paragraph ?: return null
         if (paragraph !== document.lastChild) return null
@@ -355,6 +386,9 @@ internal class MarkdownInlineEditing private constructor(
     }
 
     private fun singleInlineNode(source: String): Node? {
+        RustMarkdownBridge.parseInlineForEditor(source)?.let { root ->
+            return root.children.singleOrNull()?.let { NativeMarkdownMarkupConverter(source).convert(it) }
+        }
         val document = Parser.builder().build().parse(source)
         val paragraph = document.firstChild as? Paragraph ?: return null
         if (paragraph !== document.lastChild || paragraph.firstChild !== paragraph.lastChild) return null
@@ -392,6 +426,43 @@ internal class MarkdownInlineEditing private constructor(
         }
 
         fun parse(source: String, enableWikilinks: Boolean = false): MarkdownInlineEditing {
+            parseNative(source, enableWikilinks)?.let { return fromNativeAST(source, it, enableWikilinks) }
+            return parseLegacy(source, enableWikilinks)
+        }
+
+        private fun wikilinks(source: String) = Regex("""\[\[([^\]\r\n]+)\]\]""").findAll(source).filter { match ->
+            var slash = match.range.first - 1
+            while (slash >= 0 && source[slash] == '\\') slash--
+            (match.range.first - 1 - slash) % 2 == 0
+        }
+
+        private fun parseNative(source: String, enableWikilinks: Boolean): NativeMarkdownNode? {
+            val root = RustMarkdownBridge.parseInlineForEditor(source) ?: return null
+            if (!enableWikilinks) return root
+            val opaque = mutableListOf<com.jackcaow.smoothmarkdown.nativeparser.SourceRange>()
+            fun collect(node: NativeMarkdownNode) {
+                if (node.kind in setOf(NativeMarkdownNode.Kind.INLINE_CODE, NativeMarkdownNode.Kind.IMAGE, NativeMarkdownNode.Kind.INLINE_HTML)) opaque += node.sourceRange
+                else {
+                    if (node.kind == NativeMarkdownNode.Kind.LINK && node.children.isNotEmpty()) {
+                        opaque += com.jackcaow.smoothmarkdown.nativeparser.SourceRange(node.sourceRange.offset,
+                            node.children.first().sourceRange.offset - node.sourceRange.offset)
+                        opaque += com.jackcaow.smoothmarkdown.nativeparser.SourceRange(node.children.last().sourceRange.end,
+                            node.sourceRange.end - node.children.last().sourceRange.end)
+                    }
+                    node.children.forEach(::collect)
+                }
+            }
+            collect(root)
+            val links = wikilinks(source).filter { match -> opaque.none { match.range.first >= it.offset && match.range.first < it.end } }.toList()
+            if (links.isEmpty()) return root
+            // A host note title is opaque to CommonMark. Keep its UTF-16 width for source offsets.
+            val masked = source.toCharArray()
+            links.forEach { match -> for (index in match.range) masked[index] = 'x' }
+            return RustMarkdownBridge.parseInlineForEditor(String(masked))
+        }
+
+        /** Used only when native artifacts or the FFI are unavailable. */
+        private fun parseLegacy(source: String, enableWikilinks: Boolean): MarkdownInlineEditing {
             val visible = StringBuilder()
             val starts = mutableListOf<Int>()
             val ends = mutableListOf<Int>()
@@ -497,6 +568,103 @@ internal class MarkdownInlineEditing private constructor(
                 }
             }
             parseRange(0, source.length)
+            return MarkdownInlineEditing(source, visible.toString(), marks, starts, ends, enableWikilinks)
+        }
+
+        /** Syntax comes from the shared tree; this pass maps semantic UTF-16 units to original lexemes. */
+        private fun fromNativeAST(source: String, root: NativeMarkdownNode, enableWikilinks: Boolean): MarkdownInlineEditing {
+            val visible = StringBuilder()
+            val starts = mutableListOf<Int>()
+            val ends = mutableListOf<Int>()
+            val marks = mutableListOf<InlineMark>()
+            val wikiRanges = if (enableWikilinks) wikilinks(source).associateBy { it.range.first } else emptyMap()
+            var opaqueUntil = 0
+            fun emit(text: String, start: Int, end: Int) {
+                text.forEach { visible.append(it); starts += start; ends += end }
+            }
+            fun emitRaw(start: Int, end: Int, allowWiki: Boolean = false) {
+                var cursor = maxOf(start, opaqueUntil)
+                while (cursor < end) {
+                    val wiki = if (allowWiki) wikiRanges[cursor] else null
+                    if (wiki != null) {
+                        val begin = visible.length
+                        for (index in cursor + 2 until wiki.range.last - 1) emit(source[index].toString(), index, index + 1)
+                        marks += InlineMark(InlineMarkKind.WIKILINK, TextRange(begin, visible.length),
+                            wiki.groupValues[1], cursor, wiki.range.last + 1)
+                        opaqueUntil = wiki.range.last + 1
+                        cursor = opaqueUntil
+                    } else { emit(source[cursor].toString(), cursor, cursor + 1); cursor++ }
+                }
+            }
+            fun emitLiteral(node: NativeMarkdownNode, begin: Int = node.sourceRange.offset,
+                            finish: Int = node.sourceRange.end, literal: String = node.literalText ?: node.source,
+                            allowWiki: Boolean = true, code: Boolean = false) {
+                var cursor = begin
+                var semantic = 0
+                while (cursor < finish && semantic < literal.length) {
+                    val wiki = if (allowWiki) wikiRanges[cursor] else null
+                    if (wiki != null) {
+                        emitRaw(cursor, wiki.range.last + 1, true)
+                        val consumed = minOf(finish, wiki.range.last + 1) - cursor
+                        cursor += consumed
+                        semantic = minOf(literal.length, semantic + consumed)
+                        continue
+                    }
+                    if (cursor < opaqueUntil) { cursor++; semantic++; continue }
+                    if (!code && source[cursor] == '\\' && cursor + 1 < finish && literal[semantic] == source[cursor + 1]) {
+                        emit(literal[semantic].toString(), cursor, cursor + 2); cursor += 2; semantic++; continue
+                    }
+                    if (!code && source[cursor] == '&') {
+                        val close = source.indexOf(';', cursor + 1)
+                        if (close in cursor + 1 until minOf(finish, cursor + 34)) {
+                            val raw = source.substring(cursor, close + 1)
+                            val decoded = NativeMarkdownTextDecoder.decode(raw)
+                            if (decoded != raw && literal.startsWith(decoded, semantic)) {
+                                emit(decoded, cursor, close + 1); cursor = close + 1; semantic += decoded.length; continue
+                            }
+                        }
+                    }
+                    if (source[cursor] == '\r' && cursor + 1 < finish && source[cursor + 1] == '\n' && literal[semantic] in " \n") {
+                        emit(literal[semantic].toString(), cursor, cursor + 2); cursor += 2; semantic++; continue
+                    }
+                    emit(literal[semantic].toString(), cursor, cursor + 1)
+                    cursor++; semantic++
+                }
+                while (semantic < literal.length) {
+                    emit(literal[semantic++].toString(), maxOf(begin, finish - 1), finish)
+                }
+            }
+            lateinit var visit: (NativeMarkdownNode) -> Unit
+            fun marked(node: NativeMarkdownNode, kind: InlineMarkKind, destination: String? = null) {
+                val begin = visible.length
+                node.children.forEach(visit)
+                marks += InlineMark(kind, TextRange(begin, visible.length), destination,
+                    node.sourceRange.offset, node.sourceRange.end)
+            }
+            visit = { node ->
+                if (node.sourceRange.end > opaqueUntil) when (node.kind) {
+                    NativeMarkdownNode.Kind.DOCUMENT -> node.children.forEach(visit)
+                    NativeMarkdownNode.Kind.TEXT -> emitLiteral(node)
+                    NativeMarkdownNode.Kind.STRONG -> marked(node, InlineMarkKind.BOLD)
+                    NativeMarkdownNode.Kind.EMPHASIS -> marked(node, InlineMarkKind.ITALIC)
+                    NativeMarkdownNode.Kind.STRIKETHROUGH -> marked(node, InlineMarkKind.STRIKETHROUGH)
+                    NativeMarkdownNode.Kind.LINK -> marked(node, InlineMarkKind.LINK, node.destination)
+                    NativeMarkdownNode.Kind.INLINE_CODE -> {
+                        val start = visible.length
+                        val delimiter = node.source.takeWhile { it == '`' }.length
+                        var begin = node.sourceRange.offset + delimiter
+                        var finish = node.sourceRange.end - delimiter
+                        val content = source.substring(begin, finish).replace("\r\n", " ").replace('\r', ' ').replace('\n', ' ')
+                        if (content.length >= 2 && content.first() == ' ' && content.last() == ' ' && content.any { it != ' ' }) { begin++; finish-- }
+                        emitLiteral(node, begin, finish, node.literalText ?: NativeMarkdownTextDecoder.codeSpan(node.source), false, true)
+                        marks += InlineMark(InlineMarkKind.CODE, TextRange(start, visible.length), sourceStart = node.sourceRange.offset, sourceEnd = node.sourceRange.end)
+                    }
+                    NativeMarkdownNode.Kind.SOFT_BREAK, NativeMarkdownNode.Kind.HARD_BREAK -> emit("\n", node.sourceRange.offset, node.sourceRange.end)
+                    // Images, HTML, formulas and extension references stay source-backed in native text editing.
+                    else -> emitRaw(node.sourceRange.offset, node.sourceRange.end)
+                }
+            }
+            visit(root)
             return MarkdownInlineEditing(source, visible.toString(), marks, starts, ends, enableWikilinks)
         }
 
