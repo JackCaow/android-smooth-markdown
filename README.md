@@ -4,7 +4,7 @@ A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor
 
 ## Runtime dependencies
 
-Version `0.4.0` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
+Version `0.4.1` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
 
 The reader uses a library-owned Markdown AST and Rust parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
 
@@ -70,7 +70,7 @@ Core needs Java 17 and Kotlin's standard library. Its JVM fallback works without
 
 `0.3.0` remains a failed JitPack build tag; `0.3.1` fixes the build environment without replacing that tag.
 
-These are the individual-module coordinates for the `0.4.0` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+These are the individual-module coordinates for the `0.4.1` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
 
 **Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.4.0` and `io.github.jackcaow:smoothmarkdown-core:0.4.1`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
 
