@@ -31,7 +31,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
       - name: Install Android API 37
-        run: sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Set up owned Rust parser toolchain
         run: |
           rustup toolchain install stable --profile minimal
@@ -75,7 +78,10 @@ jobs:
       - uses: android-actions/setup-android@v4
       - uses: gradle/actions/setup-gradle@v6
       - name: Install build SDK and emulator
-        run: sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358' 'system-images;android-35;google_apis;x86_64' 'emulator'
+        run: |
+          sdkmanager 'platforms;android-37.0' 'ndk;28.2.13676358' 'system-images;android-35;google_apis;x86_64' 'emulator'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Set up owned Rust parser toolchain
         run: |
           rustup toolchain install stable --profile minimal
