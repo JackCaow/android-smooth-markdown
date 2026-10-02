@@ -71,7 +71,7 @@ class NativeMarkdownASTParser(
                 result += node(Kind.FOOTNOTE_DEFINITION, start, index).copy(label = label); continue
             }
             val mathOpening = text.trim(' ', '\t')
-            if (enableNativeExtensions && (mathOpening.startsWith("$$") || backslashMathOpen(mathOpening))) {
+            if (enableNativeExtensions && indentation(text) < 4 && (mathOpening.startsWith("$$") || backslashMathOpen(mathOpening))) {
                 val close = if (mathOpening.startsWith("$$")) "$$" else "\\]"
                 var body = mathOpening.drop(2); index++
                 while (mathClosing(body, close) == null && index < lines.size) { body += "\n" + lines[index++].text }
@@ -137,7 +137,7 @@ class NativeMarkdownASTParser(
                 result += node(Kind.HTML_BLOCK, start, index, literalText = if (selected.any { it.projected }) selected.joinToString("") { it.raw } else null); continue
             }
             index++
-            while (index < lines.size && !lines[index].isBlank && !(enableNativeExtensions && (lines[index].text.trimStart().startsWith("$$") || backslashMathOpen(lines[index].text))) && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
+            while (index < lines.size && !lines[index].isBlank && !(enableNativeExtensions && indentation(lines[index].text) < 4 && (lines[index].text.trimStart().startsWith("$$") || backslashMathOpen(lines[index].text))) && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
             val level = if (index < lines.size && !lines[index].lazyContinuation) setextLevel(lines[index].text) else null
             if (level != null) {
                 val content = lines.subList(start, index).joinToString("\n") { it.text }
