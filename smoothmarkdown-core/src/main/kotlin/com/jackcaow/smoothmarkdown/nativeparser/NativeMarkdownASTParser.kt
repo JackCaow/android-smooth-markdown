@@ -70,10 +70,28 @@ class NativeMarkdownASTParser(
                 index++; while (index < lines.size && !lines[index].isBlank && (lines[index].text.startsWith("    ") || lines[index].text.startsWith('\t'))) index++
                 result += node(Kind.FOOTNOTE_DEFINITION, start, index).copy(label = label); continue
             }
-            if (enableNativeExtensions && text.trim(' ', '\t').startsWith("$$")) {
-                index++; while (index < lines.size && !lines[index].text.contains("$$")) index++
-                if (index < lines.size) index++
-                result += node(Kind.BLOCK_MATH, start, index); continue
+            val mathOpening = text.trim(' ', '\t')
+            if (enableNativeExtensions && indentation(text) < 4 && (mathOpening.startsWith("$$") || backslashMathOpen(mathOpening))) {
+                val close = if (mathOpening.startsWith("$$")) "$$" else "\\]"
+                var body = mathOpening.drop(2); index++
+                while (mathClosing(body, close) == null && index < lines.size) { body += "\n" + lines[index++].text }
+                val closing = mathClosing(body, close)
+                var math = node(Kind.BLOCK_MATH, start, index, literalText = (if (closing == null) body else body.substring(0, closing)).trim())
+                var trailing: NativeMarkdownNode? = null
+                if (close == "\\]" && closing != null) {
+                    val last = lines[index - 1]
+                    val prefix = if (index == start + 1) last.text.length - last.text.trimStart().length + 2 else 0
+                    val end = prefix + mathClosing(last.text.substring(prefix), close)!! + 2
+                    val sourceEnd = (last.start + end - last.virtualIndent).coerceAtLeast(0)
+                    math = math.copy(source = source.substring(math.sourceRange.offset, sourceEnd), sourceRange = SourceRange(math.sourceRange.offset, sourceEnd - math.sourceRange.offset))
+                    if (last.text.substring(end).isNotBlank()) {
+                        val line = Line(last.text.substring(end), last.raw.substring(end), sourceEnd, last.end, last.projected)
+                        trailing = NativeMarkdownNode(Kind.PARAGRAPH, source.substring(sourceEnd, last.end), SourceRange(sourceEnd, last.end - sourceEnd), paragraphInlines(listOf(line), source, references))
+                    }
+                }
+                result += math
+                if (trailing != null) result += trailing
+                continue
             }
             val heading = heading(text)
             if (heading != null) {
@@ -119,7 +137,7 @@ class NativeMarkdownASTParser(
                 result += node(Kind.HTML_BLOCK, start, index, literalText = if (selected.any { it.projected }) selected.joinToString("") { it.raw } else null); continue
             }
             index++
-            while (index < lines.size && !lines[index].isBlank && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
+            while (index < lines.size && !lines[index].isBlank && !(enableNativeExtensions && indentation(lines[index].text) < 4 && (lines[index].text.trimStart().startsWith("$$") || backslashMathOpen(lines[index].text))) && (lines[index].lazyContinuation || (setextLevel(lines[index].text) == null && !interruptsParagraph(index, lines)))) index++
             val level = if (index < lines.size && !lines[index].lazyContinuation) setextLevel(lines[index].text) else null
             if (level != null) {
                 val content = lines.subList(start, index).joinToString("\n") { it.text }
@@ -152,11 +170,54 @@ class NativeMarkdownASTParser(
         }
         return children
     }
+    private fun backslashMathOpen(text: String): Boolean {
+        val body = text.trimStart()
+        if (!body.startsWith("\\[")) return false
+        val payload = body.drop(2)
+        if (mathClosing(payload, "\\]") != null) return true
+        var depth = 0
+        var escaped = false
+        for (ch in payload) {
+            if (escaped) { escaped = false; continue }
+            when (ch) {
+                '\\' -> escaped = true
+                '[' -> depth++
+                ']' -> { if (depth == 0) return false; depth-- }
+            }
+        }
+        return true
+    }
+    private fun mathClosing(source: String, delimiter: String): Int? {
+        var at = source.indexOf(delimiter)
+        while (at >= 0) {
+            var before = at - 1; var escapes = 0
+            while (before >= 0 && source[before--] == '\\') escapes++
+            if (escapes % 2 == 0) return at
+            at = source.indexOf(delimiter, at + delimiter.length)
+        }
+        return null
+    }
+    private fun mathInline(source: String, index: Int, absolute: Int): NativeCustomInlineMatch? {
+        val delimiter = when {
+            source.startsWith("\\(", index) -> "\\)"
+            source[index] == '$' && source.getOrNull(index + 1) != '$' -> "$"
+            else -> return null
+        }
+        val width = delimiter.length
+        val end = mathClosing(source.substring(index + width), delimiter)?.plus(index + width) ?: return null
+        if (end <= index + width) return null
+        val length = end + width - index
+        return NativeCustomInlineMatch(NativeMarkdownNode(Kind.INLINE_MATH, source.substring(index, index + length),
+            SourceRange(absolute, length), literalText = source.substring(index + width, end)), length)
+    }
     private fun inline(source: String, offset: Int, references: Map<String, NativeMarkdownReference>, trimTrailingWhitespace: Boolean = false, trimLeadingWhitespace: Boolean = false): List<NativeMarkdownNode> {
         var content = source; var start = offset
         if (trimLeadingWhitespace) { val leading = content.takeWhile { it == ' ' || it == '\t' }.length; content = content.drop(leading); start += leading }
         if (trimTrailingWhitespace) content = content.trimEnd(' ', '\t')
-        return NativeMarkdownInlineParser.parse(content, start, references, enableGFM, customInline = customInline)
+        return NativeMarkdownInlineParser.parse(content, start, references, enableGFM,
+            customInline = if (enableNativeExtensions) { text, index, absolute ->
+                customInline?.invoke(text, index, absolute) ?: mathInline(text, index, absolute)
+            } else customInline)
     }
     private fun heading(line: String): Triple<Int, String, String>? {
         val parts = match("^( {0,3})(#{1,6})(?:[ \\t]+|$)(.*)$", line) ?: return null

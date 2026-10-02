@@ -4,13 +4,15 @@ A native Kotlin and Jetpack Compose Markdown reader, stream renderer, and editor
 
 ## Runtime dependencies
 
-Version `0.4.0` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
+Version `0.4.1` includes the owned Rust parser, structured configuration, design tokens, resource loading and localized labels. The parser and JNI transport use no third-party code or crates.
 
 The reader uses a library-owned Markdown AST and Rust parser, Android bitmap/network APIs, and system WebView for SVG and MathML. It does not depend on CommonMark, Coil, RaTeX, AndroidSVG, OkHttp, MathJax or KaTeX.
 
 Jetpack Compose and Kotlin coroutines remain framework dependencies. The reader requires Compose. The independent `smoothmarkdown-core` module provides CommonMark/GFM parsing and HTML export on the JVM without Android, Compose, or coroutines. The existing `smoothmarkdown` module includes the core transitively and retains the original AST package names.
 
 Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other library-owned AST types. Applications upgrading from 0.1.0 must update their former `org.commonmark` imports.
+
+Version `0.4.1` adds backslash formula delimiters, broader native code highlighting and correct inline table alignment. Existing constructor and consumer baselines remain supported.
 
 ## Install
 
@@ -20,7 +22,7 @@ Source builds now use Kotlin **1.9.24**, Compose Foundation **1.6.8**, Compose c
 
 Version `0.4.0` lowers the consumer baseline and includes background streaming improvements. The older `0.3.1` artifact remains unchanged and still requires compileSdk 37. See [Android compatibility](docs/android-compatibility.md) for verified consumers and custom-builder migration.
 
-### Install 0.4.0
+### Install 0.4.1
 
 The `0.4.0` reader requires Android API 24+, **compileSdk 35 or newer**, AGP 8.6.0+, Jetpack Compose Foundation 1.6.8+, and Java 17. Kotlin 1.9.22 and 2.1.20 consumers have been verified. Match the Compose compiler to your application's Kotlin version. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
 
@@ -41,7 +43,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.4.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.4.1")
 }
 ```
 
@@ -53,7 +55,7 @@ For a JVM application without Android or Compose, use the same JitPack repositor
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.1")
 }
 ```
 
@@ -68,9 +70,9 @@ Core needs Java 17 and Kotlin's standard library. Its JVM fallback works without
 
 `0.3.0` remains a failed JitPack build tag; `0.3.1` fixes the build environment without replacing that tag.
 
-These are the individual-module coordinates for the `0.4.0` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+These are the individual-module coordinates for the `0.4.1` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
 
-**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.4.0` and `io.github.jackcaow:smoothmarkdown-core:0.4.0`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
+**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.4.0` and `io.github.jackcaow:smoothmarkdown-core:0.4.1`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
 
 For source integration, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. Building these source modules also requires the [Rust/NDK toolchain](docs/rust-parser-build.md). The `app` module is only the Demo.
 

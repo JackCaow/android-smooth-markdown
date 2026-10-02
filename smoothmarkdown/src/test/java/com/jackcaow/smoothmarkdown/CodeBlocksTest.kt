@@ -26,7 +26,7 @@ class CodeBlocksTest {
         assertTrue(codeTokens("let value = 1", "swift").any { it.kind == CodeTokenKind.KEYWORD })
         assertTrue(codeTokens("const value = true", "typescript").any { it.kind == CodeTokenKind.KEYWORD })
         assertTrue(codeTokens("SELECT * FROM notes", "sql").any { it.kind == CodeTokenKind.KEYWORD })
-        assertTrue(codeTokens("{\"ready\": true}", "json").any { it.kind == CodeTokenKind.STRING })
+        assertTrue(codeTokens("{\"ready\": true}", "json").any { it.kind == CodeTokenKind.PROPERTY })
         assertTrue(codeTokens("def read(): # comment", "py").any { it.kind == CodeTokenKind.COMMENT })
         assertTrue(codeTokens("echo 'hello' # comment", "bash").any { it.kind == CodeTokenKind.COMMENT })
         assertFalse(codeTokens("fun main()", "unknown").isNotEmpty())

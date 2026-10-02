@@ -71,7 +71,40 @@ data class MarkdownQuoteTokens(
 }
 
 /** Syntax colors may be overridden per theme without replacing the code renderer. */
-data class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: Color, val number: Color) {
+class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: Color, val number: Color) {
+    // Keep the four-color constructor, components and copy bridges while copying every accent.
+    var type: Color? = null
+    var function: Color? = null
+    var property: Color? = null
+    var operator: Color? = null
+    var punctuation: Color? = null
+    var diffAdd: Color? = null
+    var diffRemove: Color? = null
+    operator fun component1(): Color = keyword
+    operator fun component2(): Color = string
+    operator fun component3(): Color = comment
+    operator fun component4(): Color = number
+    fun copy(keyword: Color = this.keyword, string: Color = this.string,
+             comment: Color = this.comment, number: Color = this.number): MarkdownSyntaxColors =
+        MarkdownSyntaxColors(keyword, string, comment, number).also {
+            it.type = type; it.function = function; it.property = property; it.operator = operator
+            it.punctuation = punctuation; it.diffAdd = diffAdd; it.diffRemove = diffRemove
+        }
+    override fun toString(): String {
+        val base = "keyword=$keyword, string=$string, comment=$comment, number=$number"
+        val accents = if (listOf(type, function, property, operator, punctuation, diffAdd, diffRemove).all { it == null }) ""
+            else ", type=$type, function=$function, property=$property, operator=$operator, punctuation=$punctuation, diffAdd=$diffAdd, diffRemove=$diffRemove"
+        return "MarkdownSyntaxColors($base$accents)"
+    }
+    override fun hashCode(): Int {
+        val base = listOf(string, comment, number).fold(keyword.hashCode()) { result, value -> 31 * result + value.hashCode() }
+        val accents = listOf(type, function, property, operator, punctuation, diffAdd, diffRemove)
+        return if (accents.all { it == null }) base else accents.fold(base) { result, value -> 31 * result + (value?.hashCode() ?: 0) }
+    }
+    override fun equals(other: Any?): Boolean = other is MarkdownSyntaxColors &&
+        keyword == other.keyword && string == other.string && comment == other.comment && number == other.number &&
+        type == other.type && function == other.function && property == other.property && operator == other.operator &&
+        punctuation == other.punctuation && diffAdd == other.diffAdd && diffRemove == other.diffRemove
     companion object {
         fun light() = MarkdownSyntaxColors(Color(0xFFCF222E), Color(0xFF0A3069), Color(0xFF6E7781), Color(0xFF0550AE))
         fun dark() = MarkdownSyntaxColors(Color(0xFFFF7B72), Color(0xFFA5D6FF), Color(0xFF8B949E), Color(0xFF79C0FF))

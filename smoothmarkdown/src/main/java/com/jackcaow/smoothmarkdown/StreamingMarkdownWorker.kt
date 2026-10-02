@@ -188,7 +188,7 @@ internal class StreamingMarkdownCompletion {
 
 internal fun streamingNativeEligible(source: String, plugins: ParserPluginRegistry?, enableHtml: Boolean): Boolean =
     plugins == null && !enableHtml && !source.contains("<details", ignoreCase = true) &&
-        !source.contains("[^") && !source.contains('$')
+        !source.contains("[^") && !source.contains('$') && !source.contains("\\(") && !source.contains("\\[")
 
 internal fun emptyStreamingDocument(): StreamingMarkdownDocument = StreamingMarkdownDocument("",
     com.jackcaow.smoothmarkdown.ast.Document(), null, false, emptyMap())

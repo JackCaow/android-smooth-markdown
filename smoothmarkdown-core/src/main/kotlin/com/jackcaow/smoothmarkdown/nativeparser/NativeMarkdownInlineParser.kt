@@ -124,6 +124,12 @@ object NativeMarkdownInlineParser {
             return if (source[cursor] == ')') Tail(destination, title, cursor + 1) else null
         }
         while (index < source.length) {
+            if (source.startsWith("\\(", index)) {
+                val math = customInline?.invoke(source, index, offset + index)
+                if (math != null && math.consumed > 0 && math.consumed <= source.length - index) {
+                    flush(index); result.add(math.node); index += math.consumed; plainStart = index; continue
+                }
+            }
             if (source[index] == '\\' && index + 1 < source.length) {
                 if (ending(source[index + 1])) {
                     flush(index); var end = endOfLine(index + 1)
