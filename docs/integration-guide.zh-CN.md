@@ -6,15 +6,15 @@
 
 截至 2026-10-01：
 
-`0.4.1` 使用 Kotlin `1.9.24`、Compose Foundation `1.6.8` 和 compileSdk `35`；AAR 接入最低要求为 AGP `8.6.0`、compileSdk `35`，且不向宿主传递 Compose BOM。旧 `0.3.1` 发布包不包含此调整，仍需要 compileSdk 37；建议升级到 `0.4.1`。具体构建、消费者验证和自定义选择迁移见 [兼容性说明](android-compatibility.md)。
+`0.5.0` 使用 Kotlin `1.9.24`、Compose Foundation `1.6.8` 和 compileSdk `35`；AAR 接入最低要求为 AGP `8.6.0`、compileSdk `35`，且不向宿主传递 Compose BOM。旧 `0.3.1` 发布包不包含此调整，仍需要 compileSdk 37；建议升级到 `0.5.0`。具体构建、消费者验证和自定义选择迁移见 [兼容性说明](android-compatibility.md)。
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 当前版本 | JitPack `0.4.1` |
-| 固定源码构建 | 检出 tag `0.4.1`，构建到本地 Maven |
+| 当前版本 | JitPack `0.5.0` |
+| 固定源码构建 | 检出 tag `0.5.0`，构建到本地 Maven |
 | Maven Central | 尚未发布，请使用上述方式 |
 
-`0.4.1` 包含 Rust 解析器、独立 Core、分组配置、Design Token、后台调度、增量传输和完成时序修复。下面的公开 API 示例适用于 `0.4.1`；需要源码构建时采用第 10 节的固定 tag 方式。
+`0.5.0` 包含 Rust 解析器、独立 Core、分组配置、Design Token、后台调度、增量传输和完成时序修复。下面的公开 API 示例适用于 `0.5.0`；需要源码构建时采用第 10 节的固定 tag 方式。
 
 项目地址：[android-smooth-markdown](https://github.com/JackCaow/android-smooth-markdown)。
 
@@ -43,7 +43,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.4.1")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.5.0")
 }
 ```
 
@@ -257,7 +257,7 @@ controller 默认 Source 模式；上例选择 Formatted，也支持 Preview/Spl
 使用第 2 节的 JitPack 仓库，仅添加：
 
 ```kotlin
-implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.4.1")
+implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.5.0")
 ```
 
 ```kotlin
@@ -277,8 +277,8 @@ Core 是 JVM JAR，使用 Java 17 和 Kotlin 标准库，不依赖 Android、Com
 ```sh
 git clone https://github.com/JackCaow/android-smooth-markdown.git
 cd android-smooth-markdown
-git checkout 0.4.1
-./gradlew :smoothmarkdown-core:publishReleasePublicationToMavenLocal :smoothmarkdown:publishReleasePublicationToMavenLocal -PpublicationVersion=0.4.1-local
+git checkout 0.5.0
+./gradlew :smoothmarkdown-core:publishReleasePublicationToMavenLocal :smoothmarkdown:publishReleasePublicationToMavenLocal -PpublicationVersion=0.5.0-local
 ```
 
 源码构建需要 SDK API 35、NDK 28+、Python、Rust 及四种 Android Rust target；具体安装见 [Rust 构建手册](rust-parser-build.md)。应用项目仓库添加：
@@ -292,7 +292,7 @@ mavenLocal {
 reader 依赖改为：
 
 ```kotlin
-implementation("io.github.jackcaow:smooth-markdown:0.4.1-local")
+implementation("io.github.jackcaow:smooth-markdown:0.5.0-local")
 ```
 
 不要同时保留稳定包的 reader 依赖。本地 Maven 只在构建机器可用；团队 CI 需构建同一固定提交并发布到团队 Maven 仓库，或在该 CI 的准备阶段完成本地发布。
@@ -301,8 +301,8 @@ implementation("io.github.jackcaow:smooth-markdown:0.4.1-local")
 
 | 现象 | 检查与处理 |
 | --- | --- |
-| 找不到依赖 | 确认 JitPack 仓库、完整模块坐标和版本 `0.4.1`；`0.3.0` 是失败的 JitPack 构建标签 |
-| 找不到后台增量功能 | 升级到 `0.4.1`；第 10 节也提供固定源码构建方式 |
+| 找不到依赖 | 确认 JitPack 仓库、完整模块坐标和版本 `0.5.0`；`0.3.0` 是失败的 JitPack 构建标签 |
+| 找不到后台增量功能 | 升级到 `0.5.0`；第 10 节也提供固定源码构建方式 |
 | 编译提示 Kotlin metadata 或 SDK 不兼容 | 核对 Kotlin/Compose compiler、compileSdk 及 Gradle/JDK，与第 2 节要求对齐 |
 | 在 XML/View 工程使用 | reader 需要 Compose；通过宿主的 `ComposeView` 嵌入，或仅使用 Core 自己渲染 |
 | 图片不显示 | 检查完整 HTTPS 地址、认证头、响应字节格式、网络权限及资源错误回调 |
@@ -321,3 +321,7 @@ implementation("io.github.jackcaow:smooth-markdown:0.4.1-local")
 - [API 和实现范围](reference.md)
 - [后台流式验收](../benchmarks/stream-background-2026-10-01.md)
 - [已发布版本](https://github.com/JackCaow/android-smooth-markdown/releases)
+
+## 0.5.0 升级注意
+
+新增 Highlight/Superscript/Subscript 可选插件和 GitGraph/Mindmap 原生图类型。升级后重新编译宿主；对 MermaidKind 的穷尽 when 需补新类型分支。布局和 token 构造的已有源码调用保留，但 data class 的 JVM constructor/copy 签名发生变化。
