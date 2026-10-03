@@ -58,6 +58,14 @@ class NativeMarkdownParser(
         }.convert(tree)
     }
 
+    internal fun parseInlineMarkup(source: String): Paragraph {
+        val paragraph = Paragraph()
+        val converter = NativeMarkdownMarkupConverter(source)
+        NativeMarkdownInlineParser.parse(source, 0, emptyMap(), enableGFM, customInline = ::inlinePlugin)
+            .forEach { paragraph.appendChild(converter.convert(it)) }
+        return paragraph
+    }
+
     private fun inlinePlugin(source: String, index: Int, absoluteOffset: Int): NativeCustomInlineMatch? {
         if (enableExtensions && source.startsWith("\\(", index)) {
             var end = index + 2

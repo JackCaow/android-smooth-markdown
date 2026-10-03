@@ -7,11 +7,11 @@ class MermaidPieParser {
     private val unquoted = Regex("^([^:]+):\\s*([0-9.]+)$")
 
     fun parse(lines: List<String>): MermaidDiagram? {
-        val header = lines.firstOrNull() ?: return null
-        if (!Regex("^pie(?:\\s+showData)?$", RegexOption.IGNORE_CASE).matches(header)) return null
-        var title: String? = null
+        val header = lines.firstOrNull()?.trim() ?: return null
+        val declaration = Regex("^pie(?:\\s+(showData))?(?:\\s+title\\s+(.+))?$", RegexOption.IGNORE_CASE).matchEntire(header) ?: return null
+        var title: String? = declaration.groupValues[2].ifBlank { null }
         val slices = mutableListOf<MermaidPieSlice>()
-        for (line in lines.drop(1)) {
+        for (line in lines.drop(1).map(String::trim)) {
             if (line.startsWith("title ", ignoreCase = true)) {
                 title = line.drop(6).trim()
                 continue
@@ -24,7 +24,7 @@ class MermaidPieParser {
         if (slices.isEmpty()) return null
         return MermaidDiagram(
             kind = MermaidKind.Pie, direction = MermaidDirection.TB, nodes = emptyList(), edges = emptyList(),
-            pie = MermaidPieData(title, slices, header.contains("showData", ignoreCase = true)),
+            pie = MermaidPieData(title, slices, declaration.groupValues[1].isNotEmpty()),
         )
     }
 }

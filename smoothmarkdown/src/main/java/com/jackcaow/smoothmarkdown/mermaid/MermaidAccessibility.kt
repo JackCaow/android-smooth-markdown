@@ -8,11 +8,13 @@ internal fun MermaidDiagram.accessibilitySummary(): String {
         return visible + more
     }
     return when (kind) {
-        MermaidKind.Flowchart, MermaidKind.Sequence, MermaidKind.ClassDiagram, MermaidKind.StateDiagram -> {
+        MermaidKind.Flowchart, MermaidKind.Sequence, MermaidKind.ClassDiagram, MermaidKind.StateDiagram, MermaidKind.GitGraph, MermaidKind.Mindmap -> {
             val title = when (kind) {
                 MermaidKind.Flowchart -> "Flowchart"
                 MermaidKind.Sequence -> "Sequence diagram"
                 MermaidKind.ClassDiagram -> "Class diagram"
+                MermaidKind.GitGraph -> "Git graph"
+                MermaidKind.Mindmap -> "Mindmap"
                 else -> "State diagram"
             }
             "$title. ${nodes.size} nodes, ${edges.size} connections. " +

@@ -44,8 +44,8 @@ internal fun MermaidRadarView(diagram: MermaidDiagram, layout: MermaidLayoutResu
     val place = requireNotNull(layout.radar)
     val foreground = MaterialTheme.colorScheme.onSurface
     val grid = foreground.copy(alpha = 0.25f)
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 place.rings.forEach { ring ->
                     if (data.graticule == MermaidRadarGraticule.Circle) {
@@ -104,8 +104,8 @@ internal fun MermaidXYChartView(diagram: MermaidDiagram, layout: MermaidLayoutRe
     val foreground = MaterialTheme.colorScheme.onSurface
     val horizontal = data.orientation == MermaidXYOrientation.Horizontal
     val plot = place.plot
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 val grid = foreground.copy(alpha = 0.18f)
                 for (step in 0..5) {

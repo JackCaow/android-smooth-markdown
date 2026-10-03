@@ -1,7 +1,7 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
 /** Parsed subset of Mermaid supported by the native Compose prototype. */
-enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart, ClassDiagram, StateDiagram, ERDiagram }
+enum class MermaidKind { Flowchart, Sequence, Pie, Timeline, Gantt, Kanban, Radar, XYChart, ClassDiagram, StateDiagram, ERDiagram, GitGraph, Mindmap }
 enum class MermaidDirection { TB, BT, LR, RL }
 enum class MermaidShape {
     Rectangle, Rounded, Stadium, Diamond, Hexagon, Circle, Subroutine,

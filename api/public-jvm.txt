@@ -294,6 +294,22 @@ public final class com.jackcaow.smoothmarkdown.HashtagPlugin implements com.jack
   public com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
   public com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
 }
+public final class com.jackcaow.smoothmarkdown.HighlightNode extends com.jackcaow.smoothmarkdown.PluginInlineNode {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.HighlightNode(java.lang.String);
+  public final java.lang.String getText();
+}
+public final class com.jackcaow.smoothmarkdown.HighlightPlugin implements com.jackcaow.smoothmarkdown.InlineParserPlugin {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.HighlightPlugin();
+  public java.lang.String getId();
+  public java.lang.String getName();
+  public int getPriority();
+  public char getTriggerCharacter();
+  public boolean canParse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
+}
 public final class com.jackcaow.smoothmarkdown.HtmlCodePostProcessor {
   public static final int $stable;
   public com.jackcaow.smoothmarkdown.HtmlCodePostProcessor(java.lang.String);
@@ -926,24 +942,47 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMathTokens {
   public boolean equals(java.lang.Object);
   public com.jackcaow.smoothmarkdown.MarkdownMathTokens(androidx.compose.ui.text.TextStyle, float, androidx.compose.foundation.layout.PaddingValues, java.lang.String, androidx.compose.ui.graphics.Color, kotlin.jvm.internal.DefaultConstructorMarker);
 }
+public final class com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting extends java.lang.Enum<com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting> {
+  public static final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting Curved;
+  public static final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting Straight;
+  public static com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting[] values();
+  public static com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting valueOf(java.lang.String);
+  public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting> getEntries();
+}
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public static final int $stable;
-  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors getColors();
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography getTypography();
   public final androidx.compose.foundation.layout.PaddingValues getOuterPadding();
   public final float getMaxHeight-D9Ej5fM();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting getEdgeRouting();
+  public final float getNodeCornerRadius-D9Ej5fM();
+  public final float getNodePadding-D9Ej5fM();
+  public final float getEdgeWidth-D9Ej5fM();
+  public final float getArrowSize-D9Ej5fM();
+  public final float getLabelPadding-D9Ej5fM();
+  public final float getRankGap-D9Ej5fM();
+  public final float getSiblingGap-D9Ej5fM();
   public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors component1();
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography component2();
   public final androidx.compose.foundation.layout.PaddingValues component3();
   public final float component4-D9Ej5fM();
-  public final com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-eqLRuRQ(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float);
-  public static com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-eqLRuRQ$default(com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, int, java.lang.Object);
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting component5();
+  public final float component6-D9Ej5fM();
+  public final float component7-D9Ej5fM();
+  public final float component8-D9Ej5fM();
+  public final float component9-D9Ej5fM();
+  public final float component10-D9Ej5fM();
+  public final float component11-D9Ej5fM();
+  public final float component12-D9Ej5fM();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-Uu2LS1w(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float);
+  public static com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-Uu2LS1w$default(com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, int, java.lang.Object);
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTypography {
   public static final int $stable;
@@ -1363,7 +1402,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownStyleNormalizationKt {
 public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet {
   public static final com.jackcaow.smoothmarkdown.MarkdownStyleSheet$Companion Companion;
   public static final int $stable;
-  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, int, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, androidx.compose.ui.text.SpanStyle, int, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final androidx.compose.ui.graphics.Color getBackgroundColor-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color getTextColor-QN2ZGVo();
   public final androidx.compose.ui.graphics.Color getHeadingColor-QN2ZGVo();
@@ -1408,6 +1447,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet {
   public final androidx.compose.ui.text.TextStyle getKbdStyle();
   public final com.jackcaow.smoothmarkdown.MarkdownTableBorder getTableBorder();
   public final com.jackcaow.smoothmarkdown.MarkdownDesignTokens getDesignTokens();
+  public final androidx.compose.ui.text.SpanStyle getSmallStyle();
   public com.jackcaow.smoothmarkdown.MarkdownStyleSheet();
   public final com.jackcaow.smoothmarkdown.MarkdownStyleSheet resolved();
   public final androidx.compose.ui.graphics.Color component1-QN2ZGVo();
@@ -1454,12 +1494,13 @@ public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet {
   public final androidx.compose.ui.text.TextStyle component42();
   public final com.jackcaow.smoothmarkdown.MarkdownTableBorder component43();
   public final com.jackcaow.smoothmarkdown.MarkdownDesignTokens component44();
-  public final com.jackcaow.smoothmarkdown.MarkdownStyleSheet copy-Vow2bWw(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List<androidx.compose.ui.text.TextStyle>, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens);
-  public static com.jackcaow.smoothmarkdown.MarkdownStyleSheet copy-Vow2bWw$default(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, int, int, java.lang.Object);
+  public final androidx.compose.ui.text.SpanStyle component45();
+  public final com.jackcaow.smoothmarkdown.MarkdownStyleSheet copy-GyjqNkU(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List<androidx.compose.ui.text.TextStyle>, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, androidx.compose.ui.text.SpanStyle);
+  public static com.jackcaow.smoothmarkdown.MarkdownStyleSheet copy-GyjqNkU$default(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, androidx.compose.ui.text.SpanStyle, int, int, java.lang.Object);
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownStyleSheet(androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, long, long, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, java.util.List, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, androidx.compose.ui.text.TextStyle, float, float, float, float, float, float, androidx.compose.ui.text.TextStyle, androidx.compose.ui.graphics.Color, float, com.jackcaow.smoothmarkdown.MarkdownBlockquoteDecoration, androidx.compose.foundation.layout.PaddingValues, com.jackcaow.smoothmarkdown.MarkdownCodeBlockDecoration, androidx.compose.foundation.layout.PaddingValues, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.SpanStyle, androidx.compose.ui.text.TextStyle, com.jackcaow.smoothmarkdown.MarkdownTableBorder, com.jackcaow.smoothmarkdown.MarkdownDesignTokens, androidx.compose.ui.text.SpanStyle, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownStyleSheet$Companion {
   public final com.jackcaow.smoothmarkdown.MarkdownStyleSheet default();
@@ -1717,6 +1758,7 @@ public final class com.jackcaow.smoothmarkdown.NativeMarkdownParser {
   public com.jackcaow.smoothmarkdown.NativeMarkdownParser(boolean, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry);
   public com.jackcaow.smoothmarkdown.NativeMarkdownParser(boolean, boolean, com.jackcaow.smoothmarkdown.ParserPluginRegistry, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final com.jackcaow.smoothmarkdown.ast.Markup parse(java.lang.String);
+  public final com.jackcaow.smoothmarkdown.ast.Paragraph parseInlineMarkup$smoothmarkdown(java.lang.String);
   public com.jackcaow.smoothmarkdown.NativeMarkdownParser();
   public static final com.jackcaow.smoothmarkdown.NativeMarkdownParser$Builder builder();
 }
@@ -2355,6 +2397,38 @@ public final class com.jackcaow.smoothmarkdown.StreamSnapshot {
   public int hashCode();
   public boolean equals(java.lang.Object);
   public com.jackcaow.smoothmarkdown.StreamSnapshot();
+}
+public final class com.jackcaow.smoothmarkdown.SubscriptNode extends com.jackcaow.smoothmarkdown.PluginInlineNode {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.SubscriptNode(java.lang.String);
+  public final java.lang.String getText();
+}
+public final class com.jackcaow.smoothmarkdown.SubscriptPlugin implements com.jackcaow.smoothmarkdown.InlineParserPlugin {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.SubscriptPlugin();
+  public java.lang.String getId();
+  public java.lang.String getName();
+  public int getPriority();
+  public char getTriggerCharacter();
+  public boolean canParse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
+}
+public final class com.jackcaow.smoothmarkdown.SuperscriptNode extends com.jackcaow.smoothmarkdown.PluginInlineNode {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.SuperscriptNode(java.lang.String);
+  public final java.lang.String getText();
+}
+public final class com.jackcaow.smoothmarkdown.SuperscriptPlugin implements com.jackcaow.smoothmarkdown.InlineParserPlugin {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.SuperscriptPlugin();
+  public java.lang.String getId();
+  public java.lang.String getName();
+  public int getPriority();
+  public char getTriggerCharacter();
+  public boolean canParse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlineParseResult parse(java.lang.String, int);
+  public com.jackcaow.smoothmarkdown.InlinePluginPresentation render(com.jackcaow.smoothmarkdown.PluginInlineNode);
 }
 public final class com.jackcaow.smoothmarkdown.TableBordersKt {
   public static final com.jackcaow.smoothmarkdown.MarkdownTableBorder resolveTableBorder-4WTKRHQ(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, long);
@@ -4440,6 +4514,7 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram {
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDiagramViewKt {
   public static final void MermaidDiagramView(java.lang.String, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, java.lang.String, com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, androidx.compose.runtime.Composer, int, int);
+  public static final void drawEdge-9LQNqLg(androidx.compose.ui.graphics.drawscope.DrawScope, com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge, long, com.jackcaow.smoothmarkdown.MarkdownMermaidTokens);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidDirection extends java.lang.Enum<com.jackcaow.smoothmarkdown.mermaid.MermaidDirection> {
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidDirection TB;
@@ -4549,7 +4624,7 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidERRelationship {
   public boolean equals(java.lang.Object);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidERViewKt {
-  public static final void MermaidERView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, androidx.compose.runtime.Composer, int);
+  public static final void MermaidERView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, kotlin.jvm.functions.Function1<? super java.lang.String, kotlin.Unit>, com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, androidx.compose.runtime.Composer, int, int);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidEdge {
   public static final int $stable;
@@ -4865,6 +4940,8 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidKind extends java.
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidKind ClassDiagram;
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidKind StateDiagram;
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidKind ERDiagram;
+  public static final com.jackcaow.smoothmarkdown.mermaid.MermaidKind GitGraph;
+  public static final com.jackcaow.smoothmarkdown.mermaid.MermaidKind Mindmap;
   public static com.jackcaow.smoothmarkdown.mermaid.MermaidKind[] values();
   public static com.jackcaow.smoothmarkdown.mermaid.MermaidKind valueOf(java.lang.String);
   public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.mermaid.MermaidKind> getEntries();
@@ -4872,10 +4949,39 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidKind extends java.
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayout {
   public static final com.jackcaow.smoothmarkdown.mermaid.MermaidLayout INSTANCE;
   public static final int $stable;
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult compute(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics);
+  public static com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult compute$default(com.jackcaow.smoothmarkdown.mermaid.MermaidLayout, com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics, int, java.lang.Object);
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult compute(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutKt {
   public static final java.lang.Float todayMarkerX(com.jackcaow.smoothmarkdown.mermaid.MermaidGanttPlacement, long, boolean);
+}
+public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics(java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>>, java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>>, float, boolean, float, float, float, float);
+  public com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics(java.util.Map, java.util.Map, float, boolean, float, float, float, float, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public final java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>> getNodeSizes();
+  public final java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>> getLabelSizes();
+  public final float getTextScale();
+  public final boolean getCurvedEdges();
+  public final float getNodePadding();
+  public final float getRankGap();
+  public final float getSiblingGap();
+  public final float getMarkerClearance();
+  public final java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>> component1();
+  public final java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>> component2();
+  public final float component3();
+  public final boolean component4();
+  public final float component5();
+  public final float component6();
+  public final float component7();
+  public final float component8();
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics copy(java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>>, java.util.Map<java.lang.String, kotlin.Pair<java.lang.Float, java.lang.Float>>, float, boolean, float, float, float, float);
+  public static com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics copy$default(com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics, java.util.Map, java.util.Map, float, boolean, float, float, float, float, int, java.lang.Object);
+  public java.lang.String toString();
+  public int hashCode();
+  public boolean equals(java.lang.Object);
+  public com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutMetrics();
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult {
   public static final int $stable;
@@ -5054,20 +5160,24 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidPieTimelineViewKt 
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge {
   public static final int $stable;
-  public com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint>, com.jackcaow.smoothmarkdown.mermaid.MermaidRect);
-  public com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint>, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect);
+  public com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidEdge getEdge();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidPoint getStart();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidPoint getEnd();
   public final kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint> getCurveControls();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect getLabelBounds();
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect getSourceLabelBounds();
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect getTargetLabelBounds();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidEdge component1();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidPoint component2();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidPoint component3();
   public final kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint> component4();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect component5();
-  public final com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge copy(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint>, com.jackcaow.smoothmarkdown.mermaid.MermaidRect);
-  public static com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge copy$default(com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, int, java.lang.Object);
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect component6();
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidRect component7();
+  public final com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge copy(com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair<com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint>, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect);
+  public static com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge copy$default(com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidEdge, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, com.jackcaow.smoothmarkdown.mermaid.MermaidPoint, kotlin.Pair, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, com.jackcaow.smoothmarkdown.mermaid.MermaidRect, int, java.lang.Object);
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);

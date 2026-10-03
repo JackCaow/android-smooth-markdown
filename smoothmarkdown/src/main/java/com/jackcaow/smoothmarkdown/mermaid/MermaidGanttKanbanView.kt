@@ -45,8 +45,8 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
     val surface = MaterialTheme.colorScheme.surfaceVariant
     val todayX = placement.todayMarkerX(currentLocalDay(), data.todayMarker)
     val calendarTicks = placement.calendarTicks()
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 val chartLeft = placement.chartX.dp.toPx()
                 val chartRight = (placement.chartX + placement.chartWidth).dp.toPx()
@@ -112,7 +112,7 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             todayX?.let { x ->
-                Text("Today", Modifier.offset((x - 18f).dp, (placement.headerY + 31f).dp)
+                Text("Today", Modifier.offset((x - 18f).dp, (placement.headerY - 18f).dp)
                     .background(Color(0xFFE91E63).copy(alpha = 0.1f)),
                     color = Color(0xFFE91E63), style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold)
@@ -134,8 +134,8 @@ internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutRes
     val foreground = MaterialTheme.colorScheme.onSurface
     val surface = MaterialTheme.colorScheme.surfaceVariant
     val cardSurface = MaterialTheme.colorScheme.surface
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 placement.columns.forEach { item ->
                     val box = item.box

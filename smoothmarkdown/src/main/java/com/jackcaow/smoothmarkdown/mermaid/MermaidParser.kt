@@ -3,33 +3,32 @@ package com.jackcaow.smoothmarkdown.mermaid
 /** Dispatches supported native diagram syntaxes. */
 object MermaidParser {
     fun parse(source: String): MermaidDiagram? {
-        val rawLines = source.lineSequence().toList()
-        // Flutter removes trailing Mermaid comments before diagram dispatch, including comments
-        // on an otherwise valid relation or state transition.
-        val lines = rawLines.map { it.substringBefore("%%").trim() }.filter(String::isNotEmpty)
-        val headerIndex = if (lines.firstOrNull() == "---") {
-            val end = lines.drop(1).indexOf("---")
+        val rawLines = source.lineSequence().map { it.substringBefore("%%").trimEnd() }
+            .filter { it.isNotBlank() }.toList()
+        val headerIndex = if (rawLines.firstOrNull()?.trim() == "---") {
+            val end = rawLines.drop(1).indexOfFirst { it.trim() == "---" }
             if (end < 0) return null
             end + 2
         } else 0
-        val header = lines.getOrNull(headerIndex) ?: return null
-        val diagramLines = lines.drop(headerIndex)
+        val body = rawLines.drop(headerIndex)
+        val lines = body.map(String::trim)
+        val header = lines.firstOrNull() ?: return null
         return when {
             Regex("^(graph|flowchart)\\s+(TD|TB|BT|LR|RL)$", RegexOption.IGNORE_CASE).matches(header) ->
                 MermaidFlowchartParser().parse(lines)
-            header.equals("sequenceDiagram", ignoreCase = true) -> MermaidSequenceParser().parse(lines)
-            Regex("^pie(?:\\s+showData)?$", RegexOption.IGNORE_CASE).matches(header) -> MermaidPieParser().parse(lines)
-            header.equals("timeline", ignoreCase = true) -> MermaidTimelineParser().parse(lines)
-            header.equals("gantt", ignoreCase = true) -> MermaidGanttParser().parse(rawLines)
-            header.equals("kanban", ignoreCase = true) -> MermaidKanbanParser().parse(rawLines)
-            header.equals("radar-beta", ignoreCase = true) -> MermaidRadarParser().parse(lines)
-            header.equals("classDiagram", ignoreCase = true) ->
-                MermaidStructuredParser(MermaidKind.ClassDiagram).parse(diagramLines)
+            header.equals("sequenceDiagram", true) -> MermaidSequenceParser().parse(lines)
+            Regex("^pie(?:\\s+showData)?(?:\\s+title\\s+.+)?$", RegexOption.IGNORE_CASE).matches(header) -> MermaidPieParser().parse(lines)
+            header.startsWith("gitGraph", true) -> MermaidNativeTreeParser.gitGraph(body)
+            header.equals("mindmap", true) -> MermaidNativeTreeParser.mindmap(body)
+            header.equals("timeline", true) -> MermaidTimelineParser().parse(lines)
+            header.equals("gantt", true) -> MermaidGanttParser().parse(lines)
+            header.equals("kanban", true) -> MermaidKanbanParser().parse(rawLines)
+            header.equals("radar-beta", true) -> MermaidRadarParser().parse(lines)
+            header.equals("classDiagram", true) -> MermaidStructuredParser(MermaidKind.ClassDiagram).parse(lines)
             Regex("^stateDiagram(?:-v2)?$", RegexOption.IGNORE_CASE).matches(header) ->
-                MermaidStructuredParser(MermaidKind.StateDiagram).parse(diagramLines)
-            Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) ->
-                MermaidXYChartParser().parse(lines)
-            header.equals("erDiagram", ignoreCase = true) -> MermaidERParser().parse(diagramLines)
+                MermaidStructuredParser(MermaidKind.StateDiagram).parse(lines)
+            Regex("^xychart(?:-beta)?(?:\\s+horizontal)?$", RegexOption.IGNORE_CASE).matches(header) -> MermaidXYChartParser().parse(lines)
+            header.equals("erDiagram", true) -> MermaidERParser().parse(lines)
             else -> null
         }
     }
@@ -234,11 +233,12 @@ class MermaidFlowchartParser {
 /** Participant declarations and common message arrows from Flutter's SequenceParser. */
 class MermaidSequenceParser {
     fun parse(lines: List<String>): MermaidDiagram? {
-        if (!lines.firstOrNull().equals("sequenceDiagram", ignoreCase = true)) return null
+        if (!lines.firstOrNull()?.trim().equals("sequenceDiagram", ignoreCase = true) ||
+            lines.size > 501 || lines.sumOf { it.length + 1 } > 50_001) return null
         val participants = linkedMapOf<String, MermaidNode>()
         val messages = mutableListOf<MermaidEdge>()
         for (line in lines.drop(1).map(String::trim)) {
-            val declaration = Regex("^(participant|actor)\\s+(\\w+)(?:\\s+as\\s+(.+))?$", RegexOption.IGNORE_CASE)
+            val declaration = Regex("^(participant|actor)\\s+([\\p{L}_][\\p{L}\\p{M}\\p{N}_]*)(?:\\s+as\\s+(.+))?$", RegexOption.IGNORE_CASE)
                 .matchEntire(line)
             if (declaration != null) {
                 val id = declaration.groupValues[2]
@@ -247,7 +247,8 @@ class MermaidSequenceParser {
                         MermaidParticipantType.Actor else MermaidParticipantType.Participant)
                 continue
             }
-            val message = messagePattern.matchEntire(line) ?: continue
+            if (line.isEmpty() || line.startsWith("%%")) continue
+            val message = messagePattern.matchEntire(line) ?: return null
             val from = message.groupValues[1]
             val token = message.groupValues[2]
             val to = message.groupValues[3]
@@ -262,10 +263,186 @@ class MermaidSequenceParser {
                     else -> MermaidArrow.None
                 })
         }
+        if (participants.isEmpty()) return null
         return MermaidDiagram(MermaidKind.Sequence, MermaidDirection.LR, participants.values.toList(), messages)
     }
 
     private companion object {
-        val messagePattern = Regex("""^(\w+)(-->>|->>|-->|->|--x|-x|--\)|-\))(\w+)(?::\s*(.*))?$""")
+        val messagePattern = Regex("""^([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*(-->>|->>|-->|->|--x|-x|--\)|-\))\s*([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*(?::\s*(.*))?$""")
+    }
+}
+
+/** Bounded native Git history and indentation trees; unsupported syntax keeps source fallback. */
+internal object MermaidNativeTreeParser {
+    private fun bounded(lines: List<String>) = lines.size <= 500 && lines.sumOf { it.length + 1 } <= 50_001
+
+    fun gitGraph(lines: List<String>): MermaidDiagram? {
+        if (!bounded(lines)) return null
+        val declaration = Regex("^gitGraph(?:\\s+(LR|TB|BT))?\\s*:?$", RegexOption.IGNORE_CASE)
+            .matchEntire(lines.firstOrNull()?.trim() ?: return null) ?: return null
+        val direction = when (declaration.groupValues[1].uppercase()) {
+            "TB" -> MermaidDirection.TB
+            "BT" -> MermaidDirection.BT
+            else -> MermaidDirection.LR
+        }
+        val nodes = mutableListOf<MermaidNode>()
+        val edges = mutableListOf<MermaidEdge>()
+        val branches = mutableSetOf("main")
+        val heads = mutableMapOf<String, String>()
+        val ids = mutableSetOf<String>()
+        var current = "main"
+        var actions = 0
+        var serial = 1
+        for (raw in lines.drop(1)) {
+            val tokens = tokens(raw.trim()) ?: return null
+            val command = tokens.firstOrNull()?.lowercase() ?: return null
+            if (command == "init") {
+                if (tokens.size != 1 || actions != 0) return null
+                actions++
+                continue
+            }
+            actions++
+            if (command == "branch") {
+                val branch = tokens.getOrNull(1) ?: return null
+                if (tokens.size != 2 || branch.any { it == ':' || it == ';' || it == '\n' } || !branches.add(branch)) return null
+                heads[current]?.let { heads[branch] = it }
+                current = branch
+                continue
+            }
+            if (command == "checkout" || command == "switch") {
+                if (tokens.size != 2 || tokens[1] !in branches) return null
+                current = tokens[1]
+                continue
+            }
+            if (command != "commit" && command != "merge") return null
+            val parents = mutableListOf<String>()
+            heads[current]?.let(parents::add)
+            val offset = if (command == "merge") {
+                val branch = tokens.getOrNull(1) ?: return null
+                val own = heads[current] ?: return null
+                val other = heads[branch] ?: return null
+                if (branch == current || own == other) return null
+                parents += other
+                2
+            } else 1
+            val attributes = attributes(tokens.drop(offset)) ?: return null
+            val id = attributes["id"] ?: run {
+                while ("commit-$serial" in ids) serial++
+                "commit-${serial++}"
+            }
+            if (!ids.add(id)) return null
+            val type = attributes["type"] ?: "NORMAL"
+            nodes += MermaidNode(id, shape = if (type == "HIGHLIGHT") MermaidShape.Rectangle else MermaidShape.Circle,
+                compartments = listOf(listOf(current), attributes["tag"]?.let(::listOf) ?: emptyList(), listOf(type)))
+            parents.forEach { edges += MermaidEdge(it, id, arrow = MermaidArrow.None) }
+            heads[current] = id
+        }
+        if (nodes.isEmpty()) return null
+        return MermaidDiagram(MermaidKind.GitGraph, direction, nodes, edges)
+    }
+
+    fun mindmap(lines: List<String>): MermaidDiagram? {
+        if (!bounded(lines) || !lines.firstOrNull()?.trim().equals("mindmap", true)) return null
+        val nodes = mutableListOf<MermaidNode>()
+        val edges = mutableListOf<MermaidEdge>()
+        val ancestors = mutableListOf<Pair<Int, String>>()
+        val ids = mutableSetOf<String>()
+        var rootIndent: Int? = null
+        var serial = 1
+        for (raw in lines.drop(1)) {
+            var indent = 0
+            for (character in raw) {
+                when (character) {
+                    ' ' -> indent++
+                    '\t' -> indent += 4 - indent % 4
+                    else -> break
+                }
+            }
+            val declaration = mindmapNode(raw.trim()) ?: return null
+            val id = declaration.id ?: run {
+                while ("mindmap:$serial" in ids) serial++
+                "mindmap:${serial++}"
+            }
+            if (!ids.add(id)) return null
+            if (rootIndent != null) {
+                if (indent <= rootIndent) return null
+                while (ancestors.lastOrNull()?.first?.let { it >= indent } == true) ancestors.removeAt(ancestors.lastIndex)
+                val parent = ancestors.lastOrNull()?.second ?: return null
+                edges += MermaidEdge(parent, id, arrow = MermaidArrow.None)
+            } else rootIndent = indent
+            nodes += declaration.toNode(id)
+            ancestors += indent to id
+        }
+        if (nodes.isEmpty()) return null
+        return MermaidDiagram(MermaidKind.Mindmap, MermaidDirection.LR, nodes, edges)
+    }
+
+    private fun mindmapNode(text: String): TreeNode? {
+        val identifier = "([\\p{L}_][\\p{L}\\p{M}\\p{N}_-]*)?"
+        val forms = listOf(
+            "\\(\\((.+)\\)\\)" to MermaidShape.Circle,
+            "\\((.+)\\)" to MermaidShape.Rounded,
+            "\\[(.+)\\]" to MermaidShape.Rectangle,
+            "\\{\\{(.+)\\}\\}" to MermaidShape.Hexagon,
+        )
+        for ((form, shape) in forms) {
+            val match = Regex("^$identifier$form$").matchEntire(text) ?: continue
+            val label = match.groupValues[2].trim()
+            if (label.isEmpty() || (shape == MermaidShape.Rounded && label.startsWith('('))) return null
+            return TreeNode(match.groupValues[1].ifBlank { null }, label, shape)
+        }
+        if (text.isBlank() || text.any { it in "[](){}" } || text.startsWith("::") || "-->" in text) return null
+        return TreeNode(null, text, MermaidShape.Rectangle)
+    }
+    private data class TreeNode(val id: String?, val label: String, val shape: MermaidShape) {
+        fun toNode(id: String): MermaidNode = MermaidNode(id, label, shape)
+    }
+
+    private fun attributes(tokens: List<String>): Map<String, String>? {
+        val result = mutableMapOf<String, String>()
+        var index = 0
+        while (index < tokens.size) {
+            val token = tokens[index++]
+            val colon = token.indexOf(':')
+            if (colon < 0) return null
+            val key = token.substring(0, colon).lowercase()
+            if (key !in listOf("id", "tag", "type") || key in result) return null
+            var value = token.substring(colon + 1)
+            if (value.isEmpty()) value = tokens.getOrNull(index++) ?: return null
+            if (value.isEmpty()) return null
+            if (key == "type") {
+                value = value.uppercase()
+                if (value !in listOf("NORMAL", "REVERSE", "HIGHLIGHT")) return null
+            }
+            result[key] = value
+        }
+        return result
+    }
+
+    private fun tokens(text: String): List<String>? {
+        val result = mutableListOf<String>()
+        var cursor = 0
+        while (cursor < text.length) {
+            if (text[cursor].isWhitespace()) { cursor++; continue }
+            val token = StringBuilder()
+            if (text[cursor] == '"') {
+                cursor++
+                var closed = false
+                while (cursor < text.length) {
+                    val character = text[cursor++]
+                    if (character == '"') { closed = true; break }
+                    if (character == '\\') {
+                        if (cursor == text.length) return null
+                        token.append(text[cursor++])
+                    } else token.append(character)
+                }
+                if (!closed || (cursor < text.length && !text[cursor].isWhitespace())) return null
+            } else {
+                while (cursor < text.length && !text[cursor].isWhitespace() && text[cursor] != '"') token.append(text[cursor++])
+            }
+            if (token.isEmpty()) return null
+            result += token.toString()
+        }
+        return result
     }
 }

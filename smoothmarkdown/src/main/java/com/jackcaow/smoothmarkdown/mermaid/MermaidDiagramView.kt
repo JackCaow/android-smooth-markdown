@@ -2,20 +2,21 @@ package com.jackcaow.smoothmarkdown.mermaid
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
+import com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.hypot
 import com.jackcaow.smoothmarkdown.LocalMarkdownStyleSheet
@@ -72,7 +74,7 @@ fun MermaidDiagramView(
         } ?: MaterialTheme.typography,
     ) {
         MermaidDiagramContent(source, colors?.let { modifier.background(it.background) } ?: modifier,
-            onNodeTap, explicitTheme = colors != null)
+            onNodeTap, explicitTheme = colors != null, style = resolvedStyle)
     }
 }
 
@@ -82,6 +84,7 @@ private fun MermaidDiagramContent(
     modifier: Modifier,
     onNodeTap: ((String) -> Unit)?,
     explicitTheme: Boolean,
+    style: MarkdownMermaidTokens,
 ) {
     val diagram = remember(source) { MermaidParser.parse(source) }
     if (diagram == null) {
@@ -90,33 +93,105 @@ private fun MermaidDiagramContent(
     }
     val description = remember(diagram) { diagram.accessibilitySummary() }
     val accessibleModifier = modifier.clearAndSetSemantics { contentDescription = description }
-    val layout = remember(diagram) { MermaidLayout.compute(diagram) }
-    if (diagram.kind == MermaidKind.Pie) {
-        MermaidPieView(diagram, layout, accessibleModifier)
+    val hostDensity = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val typography = MaterialTheme.typography
+    fun measured(text: String, textStyle: androidx.compose.ui.text.TextStyle): Pair<Float, Float> {
+        val size = textMeasurer.measure(text, textStyle, softWrap = false).size
+        return size.width / hostDensity.density to size.height / hostDensity.density
+    }
+    val nodeSizes = diagram.nodes.associate { node ->
+        val title = measured(node.label, typography.labelMedium)
+        val rows = node.compartments.flatten().map { measured(it, typography.labelSmall) }
+        val shapePadding = when (node.shape) {
+            MermaidShape.Diamond -> 1.8f; MermaidShape.Hexagon, MermaidShape.Circle -> 1.4f
+            else -> 1f
+        }
+        node.id to if (node.shape == MermaidShape.StateStart || node.shape == MermaidShape.StateEnd) (24f to 24f)
+        else (maxOf(88f, (maxOf(title.first, rows.maxOfOrNull { it.first } ?: 0f) + style.nodePadding.value * 2) * shapePadding) to
+            maxOf(48f, (title.second + rows.sumOf { it.second.toDouble() }.toFloat() +
+                node.compartments.count { it.isNotEmpty() } * 8f + style.nodePadding.value * 2) * shapePadding))
+    }
+    val labelMeasurements = (diagram.edges.flatMap { listOfNotNull(it.label, it.sourceLabel, it.targetLabel) } + diagram.subgraphs.map { it.label } + diagram.nodes.flatMap { listOf(it.label) + it.compartments.flatten() }).associateWith {
+        val size = measured(it, typography.labelSmall)
+        size.first + style.labelPadding.value * 2 to size.second
+    }
+    val labels = labelMeasurements.toMutableMap()
+    if (diagram.kind == MermaidKind.GitGraph) diagram.nodes.forEach { node ->
+        node.compartments.firstOrNull()?.firstOrNull()?.let { branch ->
+            val size = measured(branch, typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+            labels[branch] = size.first + style.labelPadding.value * 2 to size.second
+        }
+        node.compartments.getOrNull(1)?.firstOrNull()?.let { tag ->
+            val size = measured(tag, typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+            labels[tag] = size.first + style.labelPadding.value * 2 to size.second
+        }
+    }
+    val metrics = MermaidLayoutMetrics(nodeSizes, labels, hostDensity.fontScale,
+        style.edgeRouting == MarkdownMermaidEdgeRouting.Curved, style.nodePadding.value,
+        style.rankGap.value, style.siblingGap.value, style.arrowSize.value * 1.4f)
+    val layout = remember(diagram, metrics) { MermaidLayout.compute(diagram, metrics) }
+    if (diagram.kind in setOf(MermaidKind.Pie, MermaidKind.Timeline, MermaidKind.Gantt,
+            MermaidKind.Kanban, MermaidKind.Radar, MermaidKind.XYChart, MermaidKind.ERDiagram)) {
+        val checks = mutableListOf<Pair<Pair<Float, Float>, Pair<Float, Float>>>()
+        fun check(text: String?, width: Float, height: Float, textStyle: androidx.compose.ui.text.TextStyle) {
+            if (!text.isNullOrBlank()) checks += measured(text, textStyle) to (width to height)
+        }
+        diagram.pie?.let { data ->
+            check(data.title, 312f, 22f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+            data.slices.forEach { check(it.label + ": 999 (100.0%)", 292f, 27f, typography.bodySmall) }
+        }
+        diagram.timeline?.let { data ->
+            check(data.title, layout.width - 48f, 30f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+            data.sections.forEach { section ->
+                check(section.title, 150f, 27f, typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                section.events.forEach { check(it.title, 150f, 20f, typography.bodySmall)
+                    check(it.description, 150f, 20f, typography.labelSmall) }
+            }
+        }
+        diagram.gantt?.let { data ->
+            check(data.title, layout.width - 32f, 32f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+            check("Today", 60f, 16f, typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+            data.tasks.forEach { check(it.section?.let { section -> "$section · ${it.name}" } ?: it.name,
+                164f, 28f, typography.labelSmall) }
+        }
+        diagram.kanban?.let { data -> data.columns.forEach { column ->
+            check(column.title, 184f, 36f, typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+            column.tasks.forEach { check(it.description, 180f, 36f, typography.bodySmall)
+                check(it.assigned, 180f, 20f, typography.labelSmall) }
+        } }
+        diagram.radar?.let { data -> data.axes.forEach { check(it.label, 84f, 24f, typography.labelSmall) }
+            data.curves.forEach { check(it.label, 280f, 23f, typography.bodySmall) }
+            check(data.title, 364f, 32f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold)) }
+        diagram.xyChart?.let { data -> data.categories.forEach { check(it, 64f, 36f, typography.labelSmall) }
+            check(data.title, layout.width - 32f, 32f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold)) }
+        diagram.er?.let { data -> data.entities.forEach { entity ->
+            val width = layout.er?.entities?.get(entity.id)?.width ?: 204f
+            check(entity.label, width - 16f, 29f, typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+            entity.attributes.forEach { check(it, width - 20f, 24f, typography.labelSmall) }
+        }
+            data.relationships.forEach { check(it.label, 96f, 24f, typography.labelSmall) } }
+        // Grow dp geometry without scaling sp twice. Long labels remain readable through native scrolling.
+        val scale = checks.maxOfOrNull { (actual, available) -> maxOf(actual.first / available.first,
+            actual.second / available.second) }?.coerceAtLeast(1f) ?: 1f
+        Box(accessibleModifier) {
+          CompositionLocalProvider(LocalDensity provides Density(hostDensity.density * scale, hostDensity.fontScale / scale)) {
+            when (diagram.kind) {
+                MermaidKind.Pie -> MermaidPieView(diagram, layout, Modifier)
+                MermaidKind.Timeline -> MermaidTimelineView(diagram, layout, Modifier)
+                MermaidKind.Gantt -> MermaidGanttView(diagram, layout, Modifier)
+                MermaidKind.Kanban -> MermaidKanbanView(diagram, layout, Modifier)
+                MermaidKind.Radar -> MermaidRadarView(diagram, layout, Modifier)
+                MermaidKind.XYChart -> MermaidXYChartView(diagram, layout, Modifier)
+                MermaidKind.ERDiagram -> MermaidERView(diagram, layout, Modifier, onNodeTap, style)
+                else -> Unit
+            }
+          }
+        }
         return
     }
-    if (diagram.kind == MermaidKind.Timeline) {
-        MermaidTimelineView(diagram, layout, accessibleModifier)
-        return
-    }
-    if (diagram.kind == MermaidKind.Gantt) {
-        MermaidGanttView(diagram, layout, accessibleModifier)
-        return
-    }
-    if (diagram.kind == MermaidKind.Kanban) {
-        MermaidKanbanView(diagram, layout, accessibleModifier)
-        return
-    }
-    if (diagram.kind == MermaidKind.Radar) {
-        MermaidRadarView(diagram, layout, accessibleModifier)
-        return
-    }
-    if (diagram.kind == MermaidKind.XYChart) {
-        MermaidXYChartView(diagram, layout, accessibleModifier)
-        return
-    }
-    if (diagram.kind == MermaidKind.ERDiagram) {
-        MermaidERView(diagram, layout, accessibleModifier, onNodeTap)
+    if (diagram.kind == MermaidKind.GitGraph) {
+        MermaidGitView(diagram, layout, accessibleModifier, onNodeTap, style)
         return
     }
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -135,9 +210,8 @@ private fun MermaidDiagramContent(
         return level
     }
     val groupsForDrawing = diagram.subgraphs.sortedBy(::depth)
-    Box(accessibleModifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.coerceAtLeast(1f).dp, layout.height.coerceAtLeast(1f).dp)
-            .mermaidNodeTaps(diagram, layout, onNodeTap)) {
+    MermaidViewport(layout, accessibleModifier) {
+        Box(Modifier.fillMaxSize().mermaidNodeTaps(diagram, layout, onNodeTap)) {
             Canvas(Modifier.fillMaxSize()) {
                 groupsForDrawing.forEach { group ->
                     val rect = layout.subgraphs[group.id] ?: return@forEach
@@ -156,9 +230,9 @@ private fun MermaidDiagramContent(
                             1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())))
                     }
                 }
-                layout.edges.forEach { drawEdge(it, edgeColor) }
+                layout.edges.forEach { drawEdge(it, edgeColor, style) }
                 diagram.nodes.forEach { node ->
-                    layout.nodes[node.id]?.let { drawNode(it, node, nodeFill, nodeStroke) }
+                    layout.nodes[node.id]?.let { drawNode(it, node, nodeFill, nodeStroke, style) }
                 }
             }
             diagram.subgraphs.forEach { group ->
@@ -172,35 +246,37 @@ private fun MermaidDiagramContent(
                     if (node.shape != MermaidShape.StateStart && node.shape != MermaidShape.StateEnd) {
                         if (node.compartments.isNotEmpty()) {
                             androidx.compose.foundation.layout.Column(Modifier.offset(rect.x.dp, rect.y.dp)
-                                .width(rect.width.dp).height(rect.height.dp).padding(5.dp)) {
+                                .width(rect.width.dp).height(rect.height.dp).padding(style.nodePadding)) {
                                 Text(node.label, color = foreground, style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.width(rect.width.dp), textAlign = TextAlign.Center, maxLines = 1)
+                                    modifier = Modifier.width(rect.width.dp), textAlign = TextAlign.Center, maxLines = Int.MAX_VALUE)
                                 node.compartments.forEach { section ->
                                     if (section.isNotEmpty()) {
                                         androidx.compose.material3.HorizontalDivider()
                                         section.forEach { row ->
                                             Text(row, color = foreground, style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1)
+                                                maxLines = Int.MAX_VALUE)
                                         }
                                     }
                                 }
                             }
                         } else Box(Modifier.offset(rect.x.dp, rect.y.dp).width(rect.width.dp).height(rect.height.dp)
-                            .padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+                            .padding(horizontal = style.nodePadding), contentAlignment = Alignment.Center) {
                             Text(node.label, color = node.style?.text?.let(::Color) ?: foreground,
-                                style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center, maxLines = 3)
+                                style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
                         }
                     }
                 }
             }
             layout.edges.forEach { placed ->
                 placed.edge.sourceLabel?.let { label ->
-                    Text(label, modifier = Modifier.offset(placed.start.x.dp + 5.dp, placed.start.y.dp - 19.dp)
+                    Text(label, modifier = Modifier.offset((placed.sourceLabelBounds?.x ?: (placed.start.x + 5f)).dp,
+                        (placed.sourceLabelBounds?.y ?: (placed.start.y - 19f)).dp)
                         .background(surface).padding(horizontal = 2.dp),
                         color = foreground, style = MaterialTheme.typography.labelSmall)
                 }
                 placed.edge.targetLabel?.let { label ->
-                    Text(label, modifier = Modifier.offset(placed.end.x.dp + 5.dp, placed.end.y.dp - 19.dp)
+                    Text(label, modifier = Modifier.offset((placed.targetLabelBounds?.x ?: (placed.end.x + 5f)).dp,
+                        (placed.targetLabelBounds?.y ?: (placed.end.y - 19f)).dp)
                         .background(surface).padding(horizontal = 2.dp),
                         color = foreground, style = MaterialTheme.typography.labelSmall)
                 }
@@ -209,7 +285,7 @@ private fun MermaidDiagramContent(
                     val y = placed.labelBounds?.y ?: ((placed.start.y + placed.end.y) / 2 - 24f)
                     Text(label,
                         modifier = Modifier.offset(x.dp, y.dp)
-                            .background(surface).padding(horizontal = 3.dp),
+                            .background(surface).padding(horizontal = style.labelPadding),
                         color = foreground, style = MaterialTheme.typography.labelSmall)
                 }
             }
@@ -217,7 +293,7 @@ private fun MermaidDiagramContent(
     }
 }
 
-private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill: Color, defaultStroke: Color) {
+private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill: Color, defaultStroke: Color, tokens: MarkdownMermaidTokens) {
     val left = rect.x * density
     val top = rect.y * density
     val width = rect.width * density
@@ -261,18 +337,18 @@ private fun DrawScope.drawNode(rect: MermaidRect, node: MermaidNode, defaultFill
     } else {
         val radius = when (actualShape) {
             MermaidShape.Stadium -> height / 2
-            MermaidShape.Rounded -> 10.dp.toPx()
-            else -> 4.dp.toPx()
+            MermaidShape.Rounded -> tokens.nodeCornerRadius.toPx()
+            else -> tokens.nodeCornerRadius.toPx()
         }
         drawRoundRect(fill, Offset(left, top), Size(width, height), CornerRadius(radius))
         drawRoundRect(stroke, Offset(left, top), Size(width, height), CornerRadius(radius), style = Stroke(strokeWidth))
     }
 }
 
-private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
+internal fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color, tokens: MarkdownMermaidTokens) {
     val start = Offset(placed.start.x * density, placed.start.y * density)
     val end = Offset(placed.end.x * density, placed.end.y * density)
-    val width = if (placed.edge.line == MermaidLine.Thick) 3.dp.toPx() else 1.5.dp.toPx()
+    val width = if (placed.edge.line == MermaidLine.Thick) tokens.edgeWidth.toPx() * 2 else tokens.edgeWidth.toPx()
     val dash = if (placed.edge.line == MermaidLine.Dotted)
         PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx())) else null
     if (start == end) return
@@ -288,7 +364,7 @@ private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
     val length = hypot(dx, dy).coerceAtLeast(1f)
     val ux = dx / length
     val uy = dy / length
-    val size = 8.dp.toPx()
+    val size = tokens.arrowSize.toPx()
     fun marker(at: Offset, toward: Offset, type: MermaidEdgeMarker) {
         val vx = toward.x - at.x; val vy = toward.y - at.y
         val len = hypot(vx, vy).coerceAtLeast(1f)
@@ -298,7 +374,9 @@ private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
         val right = Offset(at.x + ay * size * 0.7f, at.y - ax * size * 0.7f)
         when (type) {
             MermaidEdgeMarker.Inheritance -> {
-                val triangle = Path().apply { moveTo(tip.x, tip.y); lineTo(left.x, left.y); lineTo(right.x, right.y); close() }
+                // Inheritance points toward the attached class, opposite the edge shaft.
+                val attachedTip = Offset(at.x - ax * size * 1.3f, at.y - ay * size * 1.3f)
+                val triangle = Path().apply { moveTo(attachedTip.x, attachedTip.y); lineTo(left.x, left.y); lineTo(right.x, right.y); close() }
                 drawPath(triangle, color, style = Stroke(width))
             }
             MermaidEdgeMarker.Composition, MermaidEdgeMarker.Aggregation -> {
@@ -310,8 +388,8 @@ private fun DrawScope.drawEdge(placed: MermaidPlacedEdge, color: Color) {
             }
         }
     }
-    placed.edge.sourceMarker?.let { marker(start, end, it) }
-    placed.edge.targetMarker?.let { marker(end, start, it) }
+    placed.edge.sourceMarker?.let { marker(start, placed.curveControls?.first?.let { p -> Offset(p.x * density, p.y * density) } ?: end, it) }
+    placed.edge.targetMarker?.let { marker(end, placed.curveControls?.second?.let { p -> Offset(p.x * density, p.y * density) } ?: start, it) }
     when (placed.edge.arrow) {
         MermaidArrow.Arrow -> {
             drawLine(color, end, Offset(end.x - ux * size - uy * size * 0.5f,

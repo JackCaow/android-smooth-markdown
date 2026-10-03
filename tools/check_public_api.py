@@ -12,6 +12,17 @@ jars = [p for p in jars if not p.name.endswith(('-sources.jar', '-javadoc.jar'))
 if len(jars) != 2:
     raise SystemExit('Build :smoothmarkdown:assembleDebug and :smoothmarkdown-core:jar first')
 classes = set()
+# Precisely named Kotlin-internal/private additions reviewed against source declarations.
+# Preserve historical public baseline classes; do not hide whole implementation packages.
+internal_parity_classes = {
+    'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor',
+    'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor$Match',
+    'com.jackcaow.smoothmarkdown.InlineFormattingPluginsKt',  # Only private formattingMatch.
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidNativeTreeParser',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidNativeTreeParser$TreeNode',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidGitViewKt',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidViewportKt',
+}
 # These Kotlin-internal selection implementations are JVM-public for Compose and
 # Kotlin linkage. The supported API is SmoothSelectionController/SmoothSelectableText.
 internal_selection_class = re.compile(
@@ -25,6 +36,8 @@ for jar in jars:
             if not name.endswith('.class') or not name.startswith('com/jackcaow/smoothmarkdown/'):
                 continue
             cls = name[:-6].replace('/', '.')
+            if cls in internal_parity_classes:
+                continue
             # Anonymous closures and generated Compose singleton classes are implementation details.
             if re.search(r'\$\d|\$.*\$|Kt\$|ComposableSingletons', cls):
                 continue
@@ -61,6 +74,17 @@ for line in lines:
         candidates.add(current_class)
 
 synthetic_classes = set()
+# Precisely named Kotlin-internal/private additions reviewed against source declarations.
+# Preserve historical public baseline classes; do not hide whole implementation packages.
+internal_parity_classes = {
+    'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor',
+    'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor$Match',
+    'com.jackcaow.smoothmarkdown.InlineFormattingPluginsKt',  # Only private formattingMatch.
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidNativeTreeParser',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidNativeTreeParser$TreeNode',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidGitViewKt',
+    'com.jackcaow.smoothmarkdown.mermaid.MermaidViewportKt',
+}
 synthetic_accessors = set()
 if candidates:
     verbose = subprocess.check_output(['javap', '-v', '-p', '-classpath', ':'.join(map(str, jars)), *sorted(candidates)], text=True)
@@ -131,7 +155,7 @@ def normalize_signatures(source, historical=False):
         match = header.match(line)
         if match:
             current_class = match.group(1)
-            skip_class = current_class in synthetic_classes or bool(internal_selection_class.match(current_class))
+            skip_class = current_class in synthetic_classes or current_class in internal_parity_classes or bool(internal_selection_class.match(current_class))
         if skip_class or (current_class, line.strip()) in synthetic_accessors or (
                 historical and (current_class, line.strip()) in historical_synthetic_accessors) or internal_selection_method(current_class, line):
             continue

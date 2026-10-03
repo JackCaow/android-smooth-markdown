@@ -119,6 +119,8 @@ data class MarkdownStyleSheet(
     val tableBorder: MarkdownTableBorder? = null,
     /** Additional component decoration tokens; existing typography and decoration fields remain supported. */
     val designTokens: MarkdownDesignTokens = MarkdownDesignTokens(),
+    /** HTML small text layers over the surrounding inline marks. */
+    val smallStyle: SpanStyle? = null,
 ) {
     /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
     constructor() : this(backgroundColor = null)
@@ -166,6 +168,7 @@ data class MarkdownStyleSheet(
             linkStyle = linkStyle?.safe()?.let { it.copy(color = document.linkColor ?: it.color) },
             inlineCodeStyle = inlineCodeStyle?.safe()?.let { it.copy(color = document.inlineCodeTextColor ?: it.color, background = document.inlineCodeBackground ?: it.background) },
             subscriptStyle = subscriptStyle?.safe(),
+            smallStyle = smallStyle?.safe(),
             superscriptStyle = superscriptStyle?.safe(),
             tableHeaderStyle = typography.tableHeader ?: tableHeaderStyle?.safe(),
             tableCellStyle = typography.tableCell ?: tableCellStyle?.safe(),

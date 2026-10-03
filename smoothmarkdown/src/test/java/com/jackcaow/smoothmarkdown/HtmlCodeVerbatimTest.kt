@@ -65,4 +65,11 @@ class HtmlCodeVerbatimTest {
         val quote = parseMarkdown("> <code>a\n> **b**</code>", enableHtml = true).firstChild as BlockQuote
         assertEquals("a\n**b**", inlineText(quote.firstChild as Paragraph, enableHtml = true).text)
     }
+    @Test fun htmlCodeRetainsAuthoredRangeForSourceAwareTransforms() {
+        val source = "before <code>**raw**</code> after"
+        val paragraph = parseMarkdown(source, enableHtml = true).firstChild as Paragraph
+        val code = paragraph.children().filterIsInstance<Code>().single()
+        val span = code.sourceSpans.single()
+        assertEquals("<code>**raw**</code>", source.substring(span.inputIndex, span.inputIndex + span.length))
+    }
 }
