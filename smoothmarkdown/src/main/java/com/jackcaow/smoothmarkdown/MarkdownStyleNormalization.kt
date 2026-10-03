@@ -46,6 +46,8 @@ fun MarkdownDesignTokens.normalized(): MarkdownDesignTokens = copy(
 )
 
 fun MarkdownMermaidTokens.normalized(): MarkdownMermaidTokens = copy(outerPadding = outerPadding.safe(),
+    nodeCornerRadius = nodeCornerRadius.safe(), nodePadding = nodePadding.safe(), edgeWidth = edgeWidth.safe(),
+    arrowSize = arrowSize.safe(), labelPadding = labelPadding.safe(), rankGap = rankGap.safe(), siblingGap = siblingGap.safe(),
     maxHeight = maxHeight.takeIf { it.value.isFinite() && it.value > 0 } ?: 420.dp,
     typography = typography?.let { it.copy(bodySmall = it.bodySmall?.safe(), bodyMedium = it.bodyMedium?.safe(), bodyLarge = it.bodyLarge?.safe(),
         labelSmall = it.labelSmall?.safe(), labelMedium = it.labelMedium?.safe(), labelLarge = it.labelLarge?.safe(),

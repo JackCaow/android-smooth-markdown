@@ -86,4 +86,29 @@ class DetailsTest {
         val images = inlineRender(paragraph, enableHtml = true).images.values
         assertEquals(listOf("Icon"), images.map { it.alt })
     }
+    @Test fun sameLineDisclosurePreservesNestedBodyAndFollowingText() {
+        val document = parseMarkdown("<details open><summary>**Title**</summary>before <details><summary>Inner</summary>inside</details> after</details>tail", enableHtml = true)
+        val details = document.firstChild as DetailsNode
+        assertTrue(details.isOpen)
+        assertEquals("Title", inlineText(details.summary.single(), true).text)
+        assertTrue(details.body.any { it is DetailsNode })
+        assertEquals("tail", inlineText(details.next!!, true).text)
+    }
+
+    @Test fun inlineListDisclosureKeepsListStructureAndCodeClosingTag() {
+        val document = parseMarkdown("- before <details><summary>Info</summary>`</details>` body</details> after", enableHtml = true)
+        val item = document.firstChild!!.firstChild!!
+        assertTrue(document.firstChild is BulletList)
+        val details = item.children().filterIsInstance<DetailsNode>().single()
+        assertEquals("`</details>` body", details.bodySource)
+        assertEquals("before ", inlineText(item.firstChild!!, true).text)
+        assertEquals(" after", inlineText(details.next!!, true).text)
+    }
+
+    @Test fun sameLineHtmlRequiresOptInAndUnmatchedBacktickRemainsLiteral() {
+        val source = "<details><summary>Info</summary>unmatched ` body</details>"
+        assertFalse(parseMarkdown(source).firstChild is DetailsNode)
+        val details = parseMarkdown(source, enableHtml = true).firstChild as DetailsNode
+        assertEquals("unmatched ` body", details.bodySource)
+    }
 }

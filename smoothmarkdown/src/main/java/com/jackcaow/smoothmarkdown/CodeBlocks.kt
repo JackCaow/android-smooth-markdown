@@ -217,10 +217,12 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             else if (LocalMarkdownSelectionOptions.current.outerRegion || !LocalMarkdownSelectionOptions.current.selectable) content()
             else SelectionContainer { content() }
         }
-        if (tokens.showScrollbar && horizontalState.maxValue > 0) {
+        // Reserve scrollbar space from the first layout, before scroll measurements arrive.
+        if (tokens.showScrollbar) {
             val trackColor = tokens.scrollbarTrackColor ?: (sheet.codeTextColor ?: MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = tokens.scrollbarTrackAlpha)
             val thumbColor = tokens.scrollbarThumbColor ?: trackColor.copy(alpha = tokens.scrollbarThumbAlpha)
             Canvas(Modifier.fillMaxWidth().padding(tokens.scrollbarPadding).height(tokens.scrollbarThickness)) {
+                if (horizontalState.maxValue <= 0) return@Canvas
                 drawRoundRect(trackColor, cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height))
                 val viewport = horizontalState.viewportSize.toFloat()
                 val total = viewport + horizontalState.maxValue

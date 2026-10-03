@@ -44,4 +44,13 @@ class MarkdownParseCacheTest {
         assertEquals(1, SmoothMarkdownCache.statistics.size)
         SmoothMarkdownCache.clear()
     }
+    @Test fun canonicallyEquivalentUnicodeStillHasDistinctAuthoredSource() {
+        SmoothMarkdownCache.clear()
+        val composed = parseMarkdown("é")
+        val decomposed = parseMarkdown("e\u0301")
+        assertNotSame(composed, decomposed)
+        assertEquals("é", inlineText(composed.firstChild!!, false).text)
+        assertEquals("e\u0301", inlineText(decomposed.firstChild!!, false).text)
+        SmoothMarkdownCache.clear()
+    }
 }

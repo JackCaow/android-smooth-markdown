@@ -18,10 +18,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Path
+import com.jackcaow.smoothmarkdown.MarkdownMermaidTokens
+import com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,23 +40,38 @@ internal fun MermaidERView(
     layout: MermaidLayoutResult,
     modifier: Modifier,
     onNodeTap: ((String) -> Unit)?,
+    tokens: MarkdownMermaidTokens = MarkdownMermaidTokens(),
 ) {
     val data = requireNotNull(diagram.er)
     val place = requireNotNull(layout.er)
     val foreground = MaterialTheme.colorScheme.onSurface
     val surface = MaterialTheme.colorScheme.surface
     val header = MaterialTheme.colorScheme.surfaceVariant
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp).mermaidNodeTaps(diagram, layout, onNodeTap)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize().mermaidNodeTaps(diagram, layout, onNodeTap)) {
             Canvas(Modifier.fillMaxSize()) {
                 place.relationships.forEach { placed ->
                     val points = placed.points
                     val effect = if (placed.relationship.dotted)
                         PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())) else null
-                    points.zipWithNext { a, b ->
-                        drawLine(foreground.copy(alpha = 0.7f), Offset(a.x.dp.toPx(), a.y.dp.toPx()),
-                            Offset(b.x.dp.toPx(), b.y.dp.toPx()), 1.5.dp.toPx(), pathEffect = effect)
+                    val path = Path().apply {
+                        moveTo(points.first().x.dp.toPx(), points.first().y.dp.toPx())
+                        for (index in 1 until points.lastIndex) {
+                            val previous = points[index - 1]; val corner = points[index]; val next = points[index + 1]
+                            val before = hypot(corner.x - previous.x, corner.y - previous.y).coerceAtLeast(1f)
+                            val after = hypot(next.x - corner.x, next.y - corner.y).coerceAtLeast(1f)
+                            val radius = if (tokens.edgeRouting == MarkdownMermaidEdgeRouting.Curved)
+                                minOf(tokens.nodeCornerRadius.value, before / 2, after / 2) else 0f
+                            val enter = MermaidPoint(corner.x - (corner.x - previous.x) * radius / before,
+                                corner.y - (corner.y - previous.y) * radius / before)
+                            val exit = MermaidPoint(corner.x + (next.x - corner.x) * radius / after,
+                                corner.y + (next.y - corner.y) * radius / after)
+                            lineTo(enter.x.dp.toPx(), enter.y.dp.toPx())
+                            quadraticBezierTo(corner.x.dp.toPx(), corner.y.dp.toPx(), exit.x.dp.toPx(), exit.y.dp.toPx())
+                        }
+                        lineTo(points.last().x.dp.toPx(), points.last().y.dp.toPx())
                     }
+                    drawPath(path, foreground.copy(alpha = 0.7f), style = Stroke(tokens.edgeWidth.toPx(), pathEffect = effect))
                     drawERMarker(points.first(), points[1], placed.relationship.sourceCardinality, foreground)
                     drawERMarker(points.last(), points[points.lastIndex - 1],
                         placed.relationship.targetCardinality, foreground)
@@ -59,15 +80,17 @@ internal fun MermaidERView(
                     val rect = place.entities.getValue(entity.id)
                     val origin = Offset(rect.x.dp.toPx(), rect.y.dp.toPx())
                     val size = Size(rect.width.dp.toPx(), rect.height.dp.toPx())
-                    drawRoundRect(surface, origin, size, CornerRadius(6.dp.toPx()))
-                    drawRoundRect(foreground.copy(alpha = 0.7f), origin, size, CornerRadius(6.dp.toPx()),
-                        style = Stroke(1.3.dp.toPx()))
-                    drawRect(header, origin, Size(size.width, 40.dp.toPx()))
+                    drawRoundRect(surface, origin, size, CornerRadius(tokens.nodeCornerRadius.toPx()))
+                    val outline = Path().apply { addRoundRect(RoundRect(Rect(origin, size),
+                        CornerRadius(tokens.nodeCornerRadius.toPx()))) }
+                    clipPath(outline) { drawRect(header, origin, Size(size.width, 40.dp.toPx())) }
                     if (entity.attributes.isNotEmpty()) {
                         drawLine(foreground.copy(alpha = 0.5f),
                             Offset(origin.x, origin.y + 40.dp.toPx()),
                             Offset(origin.x + size.width, origin.y + 40.dp.toPx()), 1.dp.toPx())
                     }
+                    drawRoundRect(foreground.copy(alpha = 0.7f), origin, size, CornerRadius(tokens.nodeCornerRadius.toPx()),
+                        style = Stroke(1.3.dp.toPx()))
                 }
             }
             data.entities.forEach { entity ->

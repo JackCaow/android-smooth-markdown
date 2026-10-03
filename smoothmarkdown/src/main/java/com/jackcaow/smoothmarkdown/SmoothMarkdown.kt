@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -145,6 +146,7 @@ internal fun parseMarkdown(markdown: String, plugins: ParserPluginRegistry? = nu
     plugins?.transformFencedBlocks(document)
     if (enableHtml) {
         HtmlCodePostProcessor(markdown).process(document)
+        HtmlDetailsPostProcessor(markdown, plugins).process(document)
         HtmlKbdPostProcessor().process(document)
     }
     val result = FootnoteReferencePostProcessor(markdown).process(document)
@@ -1289,7 +1291,7 @@ private fun MarkdownList(list: Node, onLinkClick: (String) -> Unit, onImageClick
                     else sheet.textColor ?: Color.Unspecified
                 Text(
                     marker,
-                    modifier = Modifier.width(sheet.listIndent),
+                    modifier = Modifier.widthIn(min = sheet.listIndent),
                     style = markerStyle,
                     color = markerColor,
                 )
@@ -1430,6 +1432,7 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
             "s", "del", "strike" -> addStyle(strikeSpan, start, end)
             "u", "ins" -> addStyle(underlineSpan, start, end)
             "mark" -> addStyle(highlightSpan, start, end)
+            "small" -> addStyle(SpanStyle(fontSize = 0.8.em).merge(styleSheet.smallStyle), start, end)
             "sub" -> addStyle(SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em)
                 .merge(styleSheet.subscriptStyle), start, end)
             "sup" -> addStyle(SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em)
@@ -1511,6 +1514,9 @@ internal fun inlineRender(node: Node, enableHtml: Boolean, styleSheet: MarkdownS
                     addStyle(when (current) {
                         is MentionNode -> styleSheet.designTokens.plugins.mentionStyle
                         is HashtagNode -> styleSheet.designTokens.plugins.hashtagStyle
+                        is HighlightNode -> highlightSpan
+                        is SuperscriptNode -> SpanStyle(baselineShift = BaselineShift.Superscript, fontSize = 0.75.em).merge(styleSheet.superscriptStyle)
+                        is SubscriptNode -> SpanStyle(baselineShift = BaselineShift.Subscript, fontSize = 0.75.em).merge(styleSheet.subscriptStyle)
                         else -> presentation.style
                     }, start, length)
                     when (current) {

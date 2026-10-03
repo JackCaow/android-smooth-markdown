@@ -36,8 +36,8 @@ internal fun MermaidPieView(diagram: MermaidDiagram, layout: MermaidLayoutResult
     val placement = requireNotNull(layout.pie)
     val surface = MaterialTheme.colorScheme.surface
     val foreground = MaterialTheme.colorScheme.onSurface
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 val left = (placement.center.x - placement.radius) * density
                 val top = (placement.center.y - placement.radius) * density
@@ -77,8 +77,8 @@ internal fun MermaidTimelineView(diagram: MermaidDiagram, layout: MermaidLayoutR
     val foreground = MaterialTheme.colorScheme.onSurface
     val surface = MaterialTheme.colorScheme.surfaceVariant
     val accent = MaterialTheme.colorScheme.primary
-    Box(modifier.horizontalScroll(rememberScrollState()).verticalScroll(rememberScrollState())) {
-        Box(Modifier.size(layout.width.dp, layout.height.dp)) {
+    MermaidViewport(layout, modifier) {
+        Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
                 drawLine(accent, Offset(24.dp.toPx(), placement.axisY.dp.toPx()),
                     Offset((layout.width - 24f).dp.toPx(), placement.axisY.dp.toPx()), 3.dp.toPx())

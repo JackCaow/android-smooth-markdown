@@ -52,6 +52,15 @@ internal class HtmlCodePostProcessor(private val source: String) {
         if (contentEnd == null || contentEnd !in contentStart..source.length) return null
 
         val replacement = Code(inlineSource(parent, contentStart, contentEnd))
+        // Keep original HTML boundaries for subsequent source-aware projections.
+        val wholeEnd = close?.sourceSpans?.lastOrNull()?.let { it.inputIndex + it.length } ?: contentEnd
+        replacement.sourceSpans = parent.sourceSpans.mapNotNull { span ->
+            val from = maxOf(openStart, span.inputIndex)
+            val to = minOf(wholeEnd, span.inputIndex + span.length)
+            if (from < to) span.copy(columnIndex = span.columnIndex + from - span.inputIndex,
+                inputIndex = from, length = to - from) else null
+        }
+
         open.insertBefore(replacement)
         var current: Node? = open
         while (current != null) {

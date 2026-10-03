@@ -12,13 +12,22 @@ import com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors
  * [typography] replaces diagram text roles without exposing a Material3 type.
  * [outerPadding] and [maxHeight] control fences; standalone views retain their caller's modifier.
  * Diagram source style/classDef directives still override individual node colors.
- * Chart series/status palettes and graph layout geometry are currently diagram-specific.
+ * [edgeRouting] and geometry tokens apply to graph diagrams; chart geometry grows with measured text.
  */
 data class MarkdownMermaidTokens(
     val colors: MermaidThemeColors? = null,
     val typography: MarkdownMermaidTypography? = null,
     val outerPadding: PaddingValues = PaddingValues(vertical = 8.dp),
     val maxHeight: Dp = 420.dp,
+    val edgeRouting: MarkdownMermaidEdgeRouting = MarkdownMermaidEdgeRouting.Curved,
+    val nodeCornerRadius: Dp = 8.dp,
+    val nodePadding: Dp = 14.dp,
+    val edgeWidth: Dp = 1.5.dp,
+    val arrowSize: Dp = 8.dp,
+    val labelPadding: Dp = 3.dp,
+    val rankGap: Dp = 64.dp,
+    val siblingGap: Dp = 40.dp,
+
 ) {
     /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
     constructor() : this(colors = null)
@@ -42,3 +51,6 @@ data class MarkdownMermaidTypography(
     val displayMedium: TextStyle? = null,
     val displayLarge: TextStyle? = null,
 )
+
+/** Straight routing is available for forward connections; loops and bypass lanes remain rounded. */
+enum class MarkdownMermaidEdgeRouting { Curved, Straight }

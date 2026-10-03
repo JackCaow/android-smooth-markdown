@@ -16,6 +16,8 @@ data class MermaidPlacedEdge(
     val end: MermaidPoint,
     val curveControls: Pair<MermaidPoint, MermaidPoint>? = null,
     val labelBounds: MermaidRect? = null,
+    val sourceLabelBounds: MermaidRect? = null,
+    val targetLabelBounds: MermaidRect? = null,
 )
 data class MermaidPieSlicePlacement(val slice: MermaidPieSlice, val startAngle: Float, val sweepAngle: Float, val index: Int)
 data class MermaidPiePlacement(
@@ -72,22 +74,37 @@ data class MermaidLayoutResult(
     val er: MermaidERPlacement? = null,
 )
 
+/** Measured text in dp; callers outside Compose can retain deterministic defaults. */
+data class MermaidLayoutMetrics(
+    val nodeSizes: Map<String, Pair<Float, Float>> = emptyMap(),
+    val labelSizes: Map<String, Pair<Float, Float>> = emptyMap(),
+    val textScale: Float = 1f,
+    val curvedEdges: Boolean = true,
+    val nodePadding: Float = 14f,
+    val rankGap: Float = 64f,
+    val siblingGap: Float = 40f,
+    val markerClearance: Float = 11f,
+)
+
 /** Deterministic layered layout for the supported flowchart and sequence subset. Units are dp. */
 object MermaidLayout {
-    fun compute(diagram: MermaidDiagram): MermaidLayoutResult = when (diagram.kind) {
-        MermaidKind.Flowchart -> flowchart(diagram)
-        MermaidKind.Sequence -> sequence(diagram)
+    @JvmOverloads
+    fun compute(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics = MermaidLayoutMetrics()): MermaidLayoutResult = when (diagram.kind) {
+        MermaidKind.Flowchart -> flowchart(diagram, metrics)
+        MermaidKind.Sequence -> sequence(diagram, metrics)
         MermaidKind.Pie -> pie(diagram)
         MermaidKind.Timeline -> timeline(diagram)
         MermaidKind.Gantt -> gantt(diagram)
         MermaidKind.Kanban -> kanban(diagram)
         MermaidKind.Radar -> radar(diagram)
         MermaidKind.XYChart -> xyChart(diagram)
-        MermaidKind.ClassDiagram, MermaidKind.StateDiagram -> flowchart(diagram)
-        MermaidKind.ERDiagram -> erDiagram(diagram)
+        MermaidKind.ClassDiagram, MermaidKind.StateDiagram -> flowchart(diagram, metrics)
+        MermaidKind.Mindmap -> mindmap(diagram, metrics)
+        MermaidKind.GitGraph -> gitGraph(diagram, metrics)
+        MermaidKind.ERDiagram -> erDiagram(diagram, metrics)
     }
 
-    private fun erDiagram(diagram: MermaidDiagram): MermaidLayoutResult {
+    private fun erDiagram(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
         val data = requireNotNull(diagram.er)
         val horizontal = data.direction == MermaidDirection.LR || data.direction == MermaidDirection.RL
         val reverse = data.direction == MermaidDirection.RL || data.direction == MermaidDirection.BT
@@ -96,9 +113,10 @@ object MermaidLayout {
         var cursor = 24f
         ordered.forEach { entity ->
             val height = 42f + entity.attributes.size * 25f + if (entity.attributes.isEmpty()) 0f else 8f
-            boxes[entity.id] = if (horizontal) MermaidRect(cursor, 80f, 190f, height)
-                else MermaidRect(108f, cursor, 204f, height)
-            cursor += if (horizontal) 270f else height + 106f
+            val entityWidth = max(204f, (listOf(entity.label) + entity.attributes).maxOf { textWidth(it) } + 28f)
+            boxes[entity.id] = if (horizontal) MermaidRect(cursor, 80f, entityWidth, height)
+                else MermaidRect(24f, cursor, entityWidth, height)
+            cursor += if (horizontal) entityWidth + 106f else height + 106f
         }
         val width = if (horizontal) cursor - 270f + 214f else 420f
         val height = if (horizontal) (boxes.values.maxOf { it.y + it.height } + 110f) else cursor - 106f + 24f
@@ -136,8 +154,23 @@ object MermaidLayout {
                 (points[0].y + points[1].y) / 2) else mid
             MermaidERPlacedRelationship(edge, points, labelAt)
         }
-        return MermaidLayoutResult(width, height, emptyMap(), emptyList(), emptyMap(),
-            er = MermaidERPlacement(boxes, relations))
+        val allPoints = relations.flatMap { it.points } + relations.flatMap {
+            val half = max(48f, textWidth(it.relationship.label) / 2 + 6f)
+            listOf(MermaidPoint(it.labelAt.x - half, it.labelAt.y - 22f),
+                MermaidPoint(it.labelAt.x + half, it.labelAt.y + 22f))
+        }
+        val left = minOf(0f, allPoints.minOfOrNull { it.x - 16f } ?: 0f)
+        val top = minOf(0f, allPoints.minOfOrNull { it.y - 16f } ?: 0f)
+        val right = max(boxes.values.maxOf { it.x + it.width } + 24f,
+            allPoints.maxOfOrNull { it.x + 16f } ?: 0f)
+        val bottom = max(boxes.values.maxOf { it.y + it.height } + 24f,
+            allPoints.maxOfOrNull { it.y + 16f } ?: 0f)
+        val movedBoxes = boxes.mapValues { (_, box) -> box.copy(x = box.x - left, y = box.y - top) }
+        val movedRelations = relations.map { rel -> rel.copy(
+            points = rel.points.map { MermaidPoint(it.x - left, it.y - top) },
+            labelAt = MermaidPoint(rel.labelAt.x - left, rel.labelAt.y - top)) }
+        return MermaidLayoutResult(right - left, bottom - top, emptyMap(), emptyList(), emptyMap(),
+            er = MermaidERPlacement(movedBoxes, movedRelations))
     }
 
     private fun radar(diagram: MermaidDiagram): MermaidLayoutResult {
@@ -274,9 +307,9 @@ object MermaidLayout {
             timeline = MermaidTimelinePlacement(axisY, sections))
     }
 
-    private fun flowchart(diagram: MermaidDiagram): MermaidLayoutResult {
+    private fun flowchart(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
         if (diagram.nodes.isEmpty()) return MermaidLayoutResult(0f, 0f, emptyMap(), emptyList(), emptyMap())
-        if (diagram.kind == MermaidKind.Flowchart && diagram.subgraphs.isNotEmpty()) return groupedFlowchart(diagram)
+        if (diagram.kind == MermaidKind.Flowchart && diagram.subgraphs.isNotEmpty()) return groupedFlowchart(diagram, metrics)
         val nodeIds = diagram.nodes.mapTo(mutableSetOf()) { it.id }
         // Match Flutter's Dagre layout: keep cycle-closing edges for drawing, but
         // exclude DFS back edges while assigning ranks so a single loop does not
@@ -321,29 +354,37 @@ object MermaidLayout {
         }
         val layers = diagram.nodes.groupBy { rank.getValue(it.id) }.toSortedMap()
         val horizontal = diagram.direction == MermaidDirection.LR || diagram.direction == MermaidDirection.RL
-        val selfLoops = if (diagram.kind == MermaidKind.StateDiagram)
-            diagram.edges.filter { it.from == it.to } else emptyList()
+        val selfLoops = diagram.edges.filter { it.from == it.to }
         fun labelWidth(label: String): Float = label.sumOf { if (it.code > 127) 16.0 else 8.0 }.toFloat() + 8f
-        val loopCrossGap = if (selfLoops.isEmpty()) 40f else if (horizontal) 72f else
+        val loopCrossGap = if (selfLoops.isEmpty()) metrics.siblingGap else if (horizontal) max(72f, (metrics.labelSizes.values.maxOfOrNull { it.second } ?: 20f) * 2 + 24f) else
             max(40f, (selfLoops.maxOfOrNull { labelWidth(it.label.orEmpty()) } ?: 0f) + 72f)
         val rankGap = if (horizontal && selfLoops.isNotEmpty())
             max(64f, (selfLoops.maxOfOrNull { labelWidth(it.label.orEmpty()) } ?: 0f) + 24f)
-            else 64f
+            else metrics.rankGap
         val positions = linkedMapOf<String, MermaidRect>()
         var main = 24f
         var maxCross = 0f
         for (layer in layers.values) {
-            val mainSize = layer.maxOf { if (horizontal) nodeWidth(it) else nodeHeight(it) }
+            val mainSize = layer.maxOf { if (horizontal) nodeWidth(it, metrics) else nodeHeight(it, metrics) }
             var cross = if (horizontal && selfLoops.isNotEmpty()) 84f else 24f
             for (node in layer) {
-                val width = nodeWidth(node)
-                val height = nodeHeight(node)
+                val width = nodeWidth(node, metrics)
+                val height = nodeHeight(node, metrics)
                 positions[node.id] = if (horizontal) MermaidRect(main + (mainSize - width) / 2, cross, width, height)
                 else MermaidRect(cross, main + (mainSize - height) / 2, width, height)
                 cross += (if (horizontal) height else width) + loopCrossGap
             }
             maxCross = max(maxCross, cross - loopCrossGap + 24f)
             main += mainSize + rankGap
+        }
+        if (selfLoops.isEmpty()) layers.values.forEach { layer ->
+            val boxes = layer.map { positions.getValue(it.id) }
+            val span = if (horizontal) boxes.maxOf { it.y + it.height } - boxes.minOf { it.y }
+                else boxes.maxOf { it.x + it.width } - boxes.minOf { it.x }
+            val shift = (maxCross - 48f - span).coerceAtLeast(0f) / 2
+            layer.forEach { node -> val box = positions.getValue(node.id)
+                positions[node.id] = if (horizontal) box.copy(y = box.y + shift) else box.copy(x = box.x + shift)
+            }
         }
         val mainExtent = main - rankGap + 24f
         var width = if (horizontal) mainExtent else maxCross
@@ -364,52 +405,11 @@ object MermaidLayout {
                 group.id to MermaidRect(left, top, right - left, bottom - top)
             }
         }.toMap()
-        val placedEdges = diagram.edges.mapNotNull { edge ->
-            val from = positions[edge.from] ?: groupBoxes[edge.from] ?: return@mapNotNull null
-            val to = positions[edge.to] ?: groupBoxes[edge.to] ?: return@mapNotNull null
-            if (edge.from == edge.to && diagram.kind == MermaidKind.StateDiagram) {
-                val estimatedWidth = labelWidth(edge.label.orEmpty())
-                val start = if (horizontal) MermaidPoint(from.x + from.width * .3f, from.y)
-                    else MermaidPoint(from.x + from.width, from.y + from.height * .3f)
-                val end = if (horizontal) MermaidPoint(from.x + from.width * .7f, from.y)
-                    else MermaidPoint(from.x + from.width, from.y + from.height * .7f)
-                val controls = if (horizontal)
-                    MermaidPoint(start.x - 25f, start.y - 45f) to MermaidPoint(end.x + 25f, end.y - 45f)
-                    else MermaidPoint(start.x + 45f, start.y - 25f) to MermaidPoint(end.x + 45f, end.y + 25f)
-                val label = if (edge.label.isNullOrBlank()) null else if (horizontal)
-                    MermaidRect(from.x, from.y - 58f, estimatedWidth, 18f)
-                    else MermaidRect(from.x + from.width + 48f, from.centerY - 9f, estimatedWidth, 18f)
-                if (!horizontal) width = max(width, from.x + from.width + 64f)
-                if (label != null) width = max(width, label.x + label.width + 24f)
-                return@mapNotNull MermaidPlacedEdge(edge, start, end, controls, label)
-            }
-            val start: MermaidPoint
-            val end: MermaidPoint
-            when (diagram.direction) {
-                MermaidDirection.TB -> {
-                    start = MermaidPoint(from.centerX, from.y + from.height)
-                    end = MermaidPoint(to.centerX, to.y)
-                }
-                MermaidDirection.BT -> {
-                    start = MermaidPoint(from.centerX, from.y)
-                    end = MermaidPoint(to.centerX, to.y + to.height)
-                }
-                MermaidDirection.LR -> {
-                    start = MermaidPoint(from.x + from.width, from.centerY)
-                    end = MermaidPoint(to.x, to.centerY)
-                }
-                MermaidDirection.RL -> {
-                    start = MermaidPoint(from.x, from.centerY)
-                    end = MermaidPoint(to.x + to.width, to.centerY)
-                }
-            }
-            MermaidPlacedEdge(edge, start, end)
-        }
-        return MermaidLayoutResult(width, height, positions, placedEdges, groupBoxes)
+        return routedGraph(diagram, positions, groupBoxes, metrics)
     }
 
     /** Layout each nested subgraph from its own edges before placing it as a unit in its parent. */
-    private fun groupedFlowchart(diagram: MermaidDiagram): MermaidLayoutResult {
+    private fun groupedFlowchart(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
         data class UnitBox(
             val id: String, val group: Boolean, var width: Float, var height: Float,
             val children: List<UnitBox> = emptyList(), var x: Float = 0f, var y: Float = 0f,
@@ -485,23 +485,24 @@ object MermaidLayout {
                 layer.forEach { unit ->
                     if (horizontal) { unit.x = main + (mainSize - unit.width) / 2; unit.y = cross }
                     else { unit.x = cross; unit.y = main + (mainSize - unit.height) / 2 }
-                    cross += (if (horizontal) unit.height else unit.width) + 40f
+                    cross += (if (horizontal) unit.height else unit.width) + metrics.siblingGap
                 }
-                crossExtent = max(crossExtent, cross - 40f)
-                main += mainSize + 64f
+                crossExtent = max(crossExtent, cross - metrics.siblingGap)
+                main += mainSize + metrics.rankGap
             }
-            return if (horizontal) (main - 64f + marginX) to (crossExtent + marginY)
-                else (crossExtent + marginX) to (main - 64f + marginY)
+            return if (horizontal) (main - metrics.rankGap + marginX) to (crossExtent + marginY)
+                else (crossExtent + marginX) to (main - metrics.rankGap + marginY)
         }
         fun children(parentId: String?): List<UnitBox> {
             val direct = if (parentId == null) diagram.nodes.filter { it.id !in directOwner }
                 else diagram.nodes.filter { directOwner[it.id] == parentId }
             val childGroups = diagram.subgraphs.filter { it.parentId == parentId }
-            val entries = direct.map { UnitBox(it.id, false, nodeWidth(it), nodeHeight(it)) } +
+            val entries = direct.map { UnitBox(it.id, false, nodeWidth(it, metrics), nodeHeight(it, metrics)) } +
                 childGroups.map { group ->
                     val nested = children(group.id)
-                    val size = arrange(nested, group.id, 18f, 34f)
-                    UnitBox(group.id, true, max(size.first, group.label.length * 8f + 36f),
+                    val labelSize = metrics.labelSizes[group.label] ?: (textWidth(group.label) to 20f)
+                    val size = arrange(nested, group.id, 18f, max(34f, labelSize.second + 12f))
+                    UnitBox(group.id, true, max(size.first, labelSize.first + 36f),
                         max(size.second, 76f), nested)
                 }
             return entries.sortedWith(compareBy<UnitBox> {
@@ -533,44 +534,259 @@ object MermaidLayout {
             groupBoxes.replaceAll { _, box -> if (horizontal) box.copy(x = width - box.x - box.width)
                 else box.copy(y = height - box.y - box.height) }
         }
-        val placedEdges = diagram.edges.mapNotNull { edge ->
-            val from = positions[edge.from] ?: groupBoxes[edge.from] ?: return@mapNotNull null
-            val to = positions[edge.to] ?: groupBoxes[edge.to] ?: return@mapNotNull null
-            val start: MermaidPoint
-            val end: MermaidPoint
-            when (diagram.direction) {
-                MermaidDirection.TB -> { start = MermaidPoint(from.centerX, from.y + from.height); end = MermaidPoint(to.centerX, to.y) }
-                MermaidDirection.BT -> { start = MermaidPoint(from.centerX, from.y); end = MermaidPoint(to.centerX, to.y + to.height) }
-                MermaidDirection.LR -> { start = MermaidPoint(from.x + from.width, from.centerY); end = MermaidPoint(to.x, to.centerY) }
-                MermaidDirection.RL -> { start = MermaidPoint(from.x, from.centerY); end = MermaidPoint(to.x + to.width, to.centerY) }
-            }
-            MermaidPlacedEdge(edge, start, end)
-        }
-        return MermaidLayoutResult(width, height, positions, placedEdges, groupBoxes)
+        return routedGraph(diagram, positions, groupBoxes, metrics)
     }
 
-    private fun sequence(diagram: MermaidDiagram): MermaidLayoutResult {
-        if (diagram.nodes.isEmpty()) return MermaidLayoutResult(0f, 0f, emptyMap(), emptyList(), emptyMap())
-        val positions = diagram.nodes.mapIndexed { index, node ->
-            node.id to MermaidRect(24f + index * 156f, 20f, 116f, 44f)
+    private fun mindmap(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
+        val children = diagram.edges.groupBy { it.from }.mapValues { entry -> entry.value.map { it.to } }
+        val nodes = diagram.nodes.associateBy { it.id }
+        val roots = diagram.nodes.filter { node -> diagram.edges.none { it.to == node.id } }
+        val boxes = linkedMapOf<String, MermaidRect>()
+        val visiting = mutableSetOf<String>()
+        fun subtreeHeight(id: String): Float {
+            if (!visiting.add(id)) return 0f
+            val node = nodes.getValue(id)
+            val descendants = children[id].orEmpty().filter { it in nodes }
+            val own = nodeHeight(node, metrics)
+            val total = if (descendants.isEmpty()) own else max(own,
+                descendants.sumOf { subtreeHeight(it).toDouble() }.toFloat() + (descendants.size - 1) * metrics.siblingGap)
+            visiting -= id
+            return total
+        }
+        fun place(id: String, x: Float, top: Float) {
+            if (id in boxes) return
+            val node = nodes.getValue(id)
+            val width = nodeWidth(node, metrics); val height = nodeHeight(node, metrics)
+            val total = subtreeHeight(id)
+            boxes[id] = MermaidRect(x, top + (total - height) / 2, width, height)
+            var y = top
+            children[id].orEmpty().filter { it in nodes }.forEach { child ->
+                place(child, x + width + metrics.rankGap, y)
+                y += subtreeHeight(child) + metrics.siblingGap
+            }
+        }
+        var y = 24f
+        roots.forEach { root -> place(root.id, 24f, y); y += subtreeHeight(root.id) + metrics.siblingGap }
+        diagram.nodes.filter { it.id !in boxes }.forEach { node -> place(node.id, 24f, y); y += subtreeHeight(node.id) + metrics.siblingGap }
+        return routedGraph(diagram, boxes, emptyMap(), metrics)
+    }
+
+    private fun gitGraph(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
+        val branches = diagram.nodes.map { it.compartments.firstOrNull()?.firstOrNull() ?: "main" }.distinct()
+        val legendWidth = max(100f, branches.maxOfOrNull { (metrics.labelSizes[it]?.first ?: textWidth(it)) + 32f } ?: 100f)
+        val vertical = diagram.direction == MermaidDirection.TB || diagram.direction == MermaidDirection.BT
+        val laneGap = if (vertical) max(116f, (metrics.labelSizes.values.maxOfOrNull { it.first } ?: 80f) + 66f)
+            else max(116f, (metrics.labelSizes.values.maxOfOrNull { it.second } ?: 20f) * 2 + 66f)
+        val step = if (vertical) max(100f, (metrics.labelSizes.values.maxOfOrNull { it.second } ?: 20f) + 66f) else max(130f, diagram.nodes.maxOfOrNull { node -> (listOf(node.label) + node.compartments.getOrNull(1).orEmpty()).maxOf { metrics.labelSizes[it]?.first ?: textWidth(it) } }?.plus(32f) ?: 130f)
+        val boxes = diagram.nodes.mapIndexed { index, node ->
+            val branch = node.compartments.firstOrNull()?.firstOrNull() ?: "main"
+            node.id to MermaidRect(legendWidth + 24f + index * step, 52f + branches.indexOf(branch) * laneGap, 28f, 28f)
         }.toMap()
+        val edges = diagram.edges.mapNotNull { edge ->
+            val from = boxes[edge.from] ?: return@mapNotNull null
+            val to = boxes[edge.to] ?: return@mapNotNull null
+            val start = MermaidPoint(from.x + from.width, from.centerY)
+            val end = MermaidPoint(to.x, to.centerY)
+            val middle = (start.x + end.x) / 2
+            MermaidPlacedEdge(edge, start, end, if (metrics.curvedEdges)
+                MermaidPoint(middle, start.y) to MermaidPoint(middle, end.y) else null)
+        }
+        val naturalWidth = boxes.values.maxOfOrNull { it.x + step } ?: legendWidth + 48f
+        val naturalHeight = branches.size * laneGap + 40f
+        val width = if (vertical) naturalHeight else naturalWidth
+        val height = if (vertical) naturalWidth else naturalHeight
+        fun point(p: MermaidPoint): MermaidPoint {
+            val swapped = if (vertical) MermaidPoint(p.y, p.x) else p
+            return if (diagram.direction == MermaidDirection.BT) swapped.copy(y = height - swapped.y)
+                else if (diagram.direction == MermaidDirection.RL) swapped.copy(x = width - swapped.x) else swapped
+        }
+        val transformed = boxes.mapValues { (_, rect) ->
+            var box = if (vertical) MermaidRect(rect.y, rect.x, rect.height, rect.width) else rect
+            if (diagram.direction == MermaidDirection.BT) box = box.copy(y = height - box.y - box.height)
+            if (diagram.direction == MermaidDirection.RL) box = box.copy(x = width - box.x - box.width)
+            box
+        }
+        return MermaidLayoutResult(width, height, transformed, edges.map { edge -> edge.copy(
+            start = point(edge.start), end = point(edge.end),
+            curveControls = edge.curveControls?.let { point(it.first) to point(it.second) }) }, emptyMap())
+    }
+
+    private fun textWidth(text: String): Float = text.split("\n").maxOfOrNull { row ->
+        row.sumOf { if (it.code > 127) 14.0 else 7.0 }.toFloat()
+    } ?: 0f
+
+    private fun routedGraph(diagram: MermaidDiagram, nodes: Map<String, MermaidRect>,
+        groups: Map<String, MermaidRect>, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
+        val horizontal = diagram.direction == MermaidDirection.LR || diagram.direction == MermaidDirection.RL
+        val boxes = nodes + groups
+        val outgoing = diagram.edges.groupBy { it.from }
+        val incoming = diagram.edges.groupBy { it.to }
+        fun port(edge: MermaidEdge, outgoingPort: Boolean, box: MermaidRect, side: Int): MermaidPoint {
+            val siblings = (if (outgoingPort) outgoing[edge.from] else incoming[edge.to]).orEmpty()
+            val index = siblings.indexOf(edge).coerceAtLeast(0)
+            val fraction = (index + 1f) / (siblings.size + 1f)
+            val candidate = when (side) {
+                0 -> MermaidPoint(box.x + box.width * fraction, box.y)
+                1 -> MermaidPoint(box.x + box.width, box.y + box.height * fraction)
+                2 -> MermaidPoint(box.x + box.width * fraction, box.y + box.height)
+                else -> MermaidPoint(box.x, box.y + box.height * fraction)
+            }
+            val nodeId = if (outgoingPort) edge.from else edge.to
+            val shape = diagram.node(nodeId)?.shape ?: return candidate
+            val polygon = flowchartPolygon(shape, box) ?: return candidate
+            val dx = candidate.x - box.centerX; val dy = candidate.y - box.centerY
+            polygon.indices.forEach { i ->
+                val a = polygon[i]; val b = polygon[(i + 1) % polygon.size]
+                val sx = b.x - a.x; val sy = b.y - a.y
+                val divisor = dx * sy - dy * sx
+                if (kotlin.math.abs(divisor) > .0001f) {
+                    val ax = a.x - box.centerX; val ay = a.y - box.centerY
+                    val ray = (ax * sy - ay * sx) / divisor
+                    val segment = (ax * dy - ay * dx) / divisor
+                    if (ray >= 0 && segment in 0f..1f) return MermaidPoint(box.centerX + dx * ray, box.centerY + dy * ray)
+                }
+            }
+            return candidate
+        }
+        val edges = diagram.edges.mapIndexedNotNull { index, edge ->
+            val from = boxes[edge.from] ?: return@mapIndexedNotNull null
+            val to = boxes[edge.to] ?: return@mapIndexedNotNull null
+            val labelSize = metrics.labelSizes[edge.label] ?: (textWidth(edge.label.orEmpty()) + 8f to 20f)
+            if (edge.from == edge.to) {
+                val start = if (horizontal) MermaidPoint(from.x + from.width * .3f, from.y)
+                    else MermaidPoint(from.x + from.width, from.y + from.height * .3f)
+                val end = if (horizontal) MermaidPoint(from.x + from.width * .7f, from.y)
+                    else MermaidPoint(from.x + from.width, from.y + from.height * .7f)
+                val reach = max(48f, labelSize.second + 24f)
+                val controls = if (horizontal) MermaidPoint(start.x - 25f, start.y - reach) to
+                    MermaidPoint(end.x + 25f, end.y - reach)
+                    else MermaidPoint(start.x + reach, start.y - 25f) to MermaidPoint(end.x + reach, end.y + 25f)
+                val label = if (edge.label.isNullOrBlank()) null else if (horizontal)
+                    MermaidRect(from.x, from.y - reach - labelSize.second / 2, labelSize.first, labelSize.second)
+                    else MermaidRect(from.x + from.width + reach + 6f, from.centerY - labelSize.second / 2,
+                        labelSize.first, labelSize.second)
+                return@mapIndexedNotNull MermaidPlacedEdge(edge, start, end, controls, label)
+            }
+            val forward = if (horizontal) (to.centerX - from.centerX) *
+                (if (diagram.direction == MermaidDirection.RL) -1 else 1) > 0 else
+                (to.centerY - from.centerY) * (if (diagram.direction == MermaidDirection.BT) -1 else 1) > 0
+            val bypass = nodes.any { (id, box) -> id != edge.from && id != edge.to &&
+                if (horizontal) box.centerX > minOf(from.centerX, to.centerX) &&
+                    box.centerX < maxOf(from.centerX, to.centerX) &&
+                    box.y < maxOf(from.centerY, to.centerY) + 12f && box.y + box.height > minOf(from.centerY, to.centerY) - 12f
+                else box.centerY > minOf(from.centerY, to.centerY) &&
+                    box.centerY < maxOf(from.centerY, to.centerY) &&
+                    box.x < maxOf(from.centerX, to.centerX) + 12f && box.x + box.width > minOf(from.centerX, to.centerX) - 12f
+            }
+            val sideRoute = !forward || bypass
+            val side = if (sideRoute) (if (horizontal) 2 else 1) else when (diagram.direction) {
+                MermaidDirection.TB -> 2; MermaidDirection.BT -> 0
+                MermaidDirection.LR -> 1; MermaidDirection.RL -> 3
+            }
+            val targetSide = if (sideRoute) side else (side + 2) % 4
+            var start = port(edge, true, from, side)
+            var end = port(edge, false, to, targetSide)
+            // Marker polygons are entirely outside the node fill, including source diamonds.
+            fun shift(point: MermaidPoint, side: Int, distance: Float): MermaidPoint = when (side) {
+                0 -> point.copy(y = point.y - distance); 1 -> point.copy(x = point.x + distance)
+                2 -> point.copy(y = point.y + distance); else -> point.copy(x = point.x - distance)
+            }
+            if (edge.sourceMarker != null) start = shift(start, side, metrics.markerClearance)
+            if (edge.targetMarker != null) end = shift(end, targetSide, metrics.markerClearance)
+            val controls = if (sideRoute) {
+                val reach = 48f + index * 12f
+                if (horizontal) MermaidPoint(start.x, (boxes.values.maxOfOrNull { it.y + it.height } ?: 0f) + reach) to
+                    MermaidPoint(end.x, (boxes.values.maxOfOrNull { it.y + it.height } ?: 0f) + reach)
+                else MermaidPoint((boxes.values.maxOfOrNull { it.x + it.width } ?: 0f) + reach, start.y) to
+                    MermaidPoint((boxes.values.maxOfOrNull { it.x + it.width } ?: 0f) + reach, end.y)
+            } else if (metrics.curvedEdges) {
+                if (horizontal) {
+                    val mid = (start.x + end.x) / 2
+                    MermaidPoint(mid, start.y) to MermaidPoint(mid, end.y)
+                } else {
+                    val mid = (start.y + end.y) / 2
+                    MermaidPoint(start.x, mid) to MermaidPoint(end.x, mid)
+                }
+            } else null
+            val midX = if (controls == null) (start.x + end.x) / 2 else
+                (start.x + 3 * controls.first.x + 3 * controls.second.x + end.x) / 8
+            val midY = if (controls == null) (start.y + end.y) / 2 else
+                (start.y + 3 * controls.first.y + 3 * controls.second.y + end.y) / 8
+            MermaidPlacedEdge(edge, start, end, controls,
+                if (edge.label.isNullOrBlank()) null else MermaidRect(midX - labelSize.first / 2,
+                    midY - labelSize.second / 2, labelSize.first, labelSize.second))
+        }
+        val labeledEdges = edges.map { placed ->
+            fun bounds(text: String?, point: MermaidPoint): MermaidRect? {
+                if (text.isNullOrBlank()) return null
+                val size = metrics.labelSizes[text] ?: (textWidth(text) + 8f to 20f)
+                return MermaidRect(point.x + 5f, point.y - size.second - 5f, size.first, size.second)
+            }
+            placed.copy(sourceLabelBounds = bounds(placed.edge.sourceLabel, placed.start),
+                targetLabelBounds = bounds(placed.edge.targetLabel, placed.end))
+        }
+        return graphBounds(nodes, labeledEdges, groups)
+    }
+
+    private fun graphBounds(nodes: Map<String, MermaidRect>, edges: List<MermaidPlacedEdge>,
+        groups: Map<String, MermaidRect>): MermaidLayoutResult {
+        val boxes = nodes.values + groups.values + edges.flatMap { listOfNotNull(it.labelBounds, it.sourceLabelBounds, it.targetLabelBounds) }
+        val points = edges.flatMap { listOf(it.start, it.end) +
+            (it.curveControls?.let { controls -> listOf(controls.first, controls.second) } ?: emptyList()) } +
+            boxes.flatMap { listOf(MermaidPoint(it.x, it.y), MermaidPoint(it.x + it.width, it.y + it.height)) }
+        if (points.isEmpty()) return MermaidLayoutResult(1f, 1f, nodes, edges, groups)
+        val left = points.minOf { it.x } - 24f
+        val top = points.minOf { it.y } - 24f
+        val width = points.maxOf { it.x } - left + 24f
+        val height = points.maxOf { it.y } - top + 24f
+        fun move(p: MermaidPoint) = MermaidPoint(p.x - left, p.y - top)
+        fun moveRect(r: MermaidRect) = r.copy(x = r.x - left, y = r.y - top)
+        return MermaidLayoutResult(width, height, nodes.mapValues { moveRect(it.value) },
+            edges.map { it.copy(start = move(it.start), end = move(it.end),
+                curveControls = it.curveControls?.let { c -> move(c.first) to move(c.second) },
+                labelBounds = it.labelBounds?.let(::moveRect),
+                sourceLabelBounds = it.sourceLabelBounds?.let(::moveRect),
+                targetLabelBounds = it.targetLabelBounds?.let(::moveRect)) }, groups.mapValues { moveRect(it.value) })
+    }
+
+    private fun sequence(diagram: MermaidDiagram, metrics: MermaidLayoutMetrics): MermaidLayoutResult {
+        if (diagram.nodes.isEmpty()) return MermaidLayoutResult(0f, 0f, emptyMap(), emptyList(), emptyMap())
+        val maxMessage = diagram.edges.maxOfOrNull { metrics.labelSizes[it.label]?.first ?: textWidth(it.label.orEmpty()) } ?: 0f
+        val participantWidth = diagram.nodes.maxOf { max(116f, metrics.nodeSizes[it.id]?.first ?: textWidth(it.label) + 28f) }
+        val participantHeight = diagram.nodes.maxOf { max(44f, metrics.nodeSizes[it.id]?.second ?: 44f) }
+        val spacing = max(participantWidth + 40f, maxMessage + 32f)
+        val positions = diagram.nodes.mapIndexed { index, node ->
+            node.id to MermaidRect(24f + index * spacing, 20f, participantWidth, participantHeight)
+        }.toMap()
+        val rowHeight = max(68f, (metrics.labelSizes.values.maxOfOrNull { it.second } ?: 20f) + 48f)
         val edges = diagram.edges.mapIndexedNotNull { index, edge ->
             val from = positions[edge.from] ?: return@mapIndexedNotNull null
             val to = positions[edge.to] ?: return@mapIndexedNotNull null
-            val y = 106f + index * 68f
-            MermaidPlacedEdge(edge, MermaidPoint(from.centerX, y), MermaidPoint(to.centerX, y))
+            val y = participantHeight + 62f + index * rowHeight
+            val label = metrics.labelSizes[edge.label] ?: (textWidth(edge.label.orEmpty()) + 8f to 20f)
+            if (edge.from == edge.to) {
+                val start = MermaidPoint(from.centerX, y)
+                val end = MermaidPoint(from.centerX, y + 24f)
+                val reach = max(48f, label.first + 16f)
+                MermaidPlacedEdge(edge, start, end,
+                    MermaidPoint(start.x + reach, y) to MermaidPoint(start.x + reach, y + 24f),
+                    if (edge.label.isNullOrBlank()) null else MermaidRect(start.x + 8f, y - label.second - 4f, label.first, label.second))
+            } else MermaidPlacedEdge(edge, MermaidPoint(from.centerX, y), MermaidPoint(to.centerX, y),
+                labelBounds = if (edge.label.isNullOrBlank()) null else MermaidRect((from.centerX + to.centerX - label.first) / 2,
+                    y - label.second - 4f, label.first, label.second))
         }
-        return MermaidLayoutResult(positions.values.maxOf { it.x + it.width } + 24f,
-            max(142f, 106f + edges.size * 68f), positions, edges, emptyMap())
+        val bounded = graphBounds(positions, edges, emptyMap())
+        return bounded.copy(height = max(bounded.height, participantHeight + 62f + edges.size * rowHeight + 24f))
     }
 
-    private fun nodeWidth(node: MermaidNode): Float {
+    private fun nodeWidth(node: MermaidNode, metrics: MermaidLayoutMetrics): Float {
+        metrics.nodeSizes[node.id]?.let { return if (node.shape == MermaidShape.Circle) max(it.first, it.second) else it.first }
         if (node.shape == MermaidShape.StateStart || node.shape == MermaidShape.StateEnd) return 24f
         if (node.compartments.isNotEmpty()) {
-            val longest = (listOf(node.label) + node.compartments.flatten()).maxOf { it.length }
-            return (longest * 8f + 32f).coerceIn(120f, 320f)
+            val longest = (listOf(node.label) + node.compartments.flatten()).maxOf { textWidth(it) }
+            return max(120f, longest + 32f)
         }
-        val base = (node.label.length * 8f + 28f).coerceIn(88f, 280f)
+        val base = max(88f, textWidth(node.label) + 28f)
         return when (node.shape) {
             MermaidShape.Diamond, MermaidShape.Hexagon -> base + 30f
             MermaidShape.Parallelogram, MermaidShape.ParallelogramAlt -> base + 22f
@@ -580,9 +796,12 @@ object MermaidLayout {
         }
     }
 
-    private fun nodeHeight(node: MermaidNode): Float = when (node.shape) {
+    private fun nodeHeight(node: MermaidNode, metrics: MermaidLayoutMetrics): Float = metrics.nodeSizes[node.id]?.let {
+        if (node.shape == MermaidShape.Circle) max(it.first, it.second) else it.second
+    } ?: when (node.shape) {
         MermaidShape.StateStart, MermaidShape.StateEnd -> 24f
-        MermaidShape.Diamond, MermaidShape.Hexagon, MermaidShape.Circle -> 76f
+        MermaidShape.Circle -> max(76f, nodeWidth(node, metrics))
+        MermaidShape.Diamond, MermaidShape.Hexagon -> 76f
         MermaidShape.Cylinder -> 64f
         else -> if (node.compartments.isNotEmpty()) 46f + node.compartments.sumOf { it.size }.toFloat() * 22f + 12f else 48f
     }
