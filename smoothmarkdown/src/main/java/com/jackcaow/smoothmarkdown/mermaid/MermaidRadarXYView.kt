@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
+import com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -39,11 +40,11 @@ private fun number(value: Double): String = if (abs(value - value.toLong()) < 0.
     value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 
 @Composable
-internal fun MermaidRadarView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidRadarView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val data = requireNotNull(diagram.radar)
     val place = requireNotNull(layout.radar)
     val foreground = MaterialTheme.colorScheme.onSurface
-    val grid = foreground.copy(alpha = 0.25f)
+    val grid = charts.gridColor ?: foreground.copy(alpha = 0.25f)
     MermaidViewport(layout, modifier) {
         Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
@@ -51,19 +52,19 @@ internal fun MermaidRadarView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                     if (data.graticule == MermaidRadarGraticule.Circle) {
                         val radius = place.radius * (place.rings.indexOf(ring) + 1) / data.ticks
                         drawCircle(grid, radius.dp.toPx(), Offset(place.center.x.dp.toPx(), place.center.y.dp.toPx()),
-                            style = Stroke(1.dp.toPx()))
-                    } else drawPath(pathFor(ring, true), grid, style = Stroke(1.dp.toPx()))
+                            style = Stroke(charts.gridWidth.toPx()))
+                    } else drawPath(pathFor(ring, true), grid, style = Stroke(charts.gridWidth.toPx()))
                 }
                 place.axisEnds.forEach { point ->
                     drawLine(grid, Offset(place.center.x.dp.toPx(), place.center.y.dp.toPx()),
-                        Offset(point.x.dp.toPx(), point.y.dp.toPx()), 1.dp.toPx())
+                        Offset(point.x.dp.toPx(), point.y.dp.toPx()), charts.gridWidth.toPx())
                 }
                 place.curves.forEachIndexed { index, curve ->
-                    val color = piePalette[index % piePalette.size]
-                    drawPath(pathFor(curve, true), color.copy(alpha = 0.17f))
-                    drawPath(pathFor(curve, true), color, style = Stroke(2.5.dp.toPx()))
+                    val color = charts.seriesColor(index, piePalette[(index) % piePalette.size])
+                    drawPath(pathFor(curve, true), color.copy(alpha = charts.fillOpacity ?: 0.17f))
+                    drawPath(pathFor(curve, true), color, style = Stroke((charts.seriesLineWidth ?: 2.5.dp).toPx()))
                     curve.forEach { point ->
-                        drawCircle(color, 4.dp.toPx(), Offset(point.x.dp.toPx(), point.y.dp.toPx()))
+                        drawCircle(color, (charts.pointRadius ?: 4.dp).toPx(), Offset(point.x.dp.toPx(), point.y.dp.toPx()))
                     }
                     if (data.showLegend) {
                         drawRoundRect(color, Offset(88.dp.toPx(), (place.legendY + index * 26f).dp.toPx()),
@@ -98,7 +99,7 @@ internal fun MermaidRadarView(diagram: MermaidDiagram, layout: MermaidLayoutResu
 }
 
 @Composable
-internal fun MermaidXYChartView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidXYChartView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val data = requireNotNull(diagram.xyChart)
     val place = requireNotNull(layout.xyChart)
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -107,35 +108,35 @@ internal fun MermaidXYChartView(diagram: MermaidDiagram, layout: MermaidLayoutRe
     MermaidViewport(layout, modifier) {
         Box(Modifier.fillMaxSize()) {
             Canvas(Modifier.fillMaxSize()) {
-                val grid = foreground.copy(alpha = 0.18f)
+                val grid = charts.gridColor ?: foreground.copy(alpha = 0.18f)
                 for (step in 0..5) {
                     if (horizontal) {
                         val x = (plot.x + plot.width * step / 5f).dp.toPx()
                         drawLine(grid, Offset(x, plot.y.dp.toPx()),
-                            Offset(x, (plot.y + plot.height).dp.toPx()), 1.dp.toPx())
+                            Offset(x, (plot.y + plot.height).dp.toPx()), charts.gridWidth.toPx())
                     } else {
                         val y = (plot.y + plot.height * step / 5f).dp.toPx()
                         drawLine(grid, Offset(plot.x.dp.toPx(), y),
-                            Offset((plot.x + plot.width).dp.toPx(), y), 1.dp.toPx())
+                            Offset((plot.x + plot.width).dp.toPx(), y), charts.gridWidth.toPx())
                     }
                 }
                 place.bars.forEach { bar ->
-                    val color = piePalette[bar.seriesIndex % piePalette.size]
-                    drawRoundRect(color, Offset(bar.rect.x.dp.toPx(), bar.rect.y.dp.toPx()),
+                    val color = charts.seriesColor(bar.seriesIndex, piePalette[(bar.seriesIndex) % piePalette.size])
+                    drawRoundRect(color.copy(alpha = charts.fillOpacity ?: color.alpha), Offset(bar.rect.x.dp.toPx(), bar.rect.y.dp.toPx()),
                         Size(bar.rect.width.dp.toPx(), bar.rect.height.dp.toPx()),
-                        CornerRadius(3.dp.toPx()))
+                        CornerRadius(charts.barCornerRadius.toPx()))
                 }
                 place.lines.forEach { (seriesIndex, points) ->
-                    val color = piePalette[seriesIndex % piePalette.size]
-                    if (points.size > 1) drawPath(pathFor(points, false), color, style = Stroke(2.5.dp.toPx()))
+                    val color = charts.seriesColor(seriesIndex, piePalette[(seriesIndex) % piePalette.size])
+                    if (points.size > 1) drawPath(pathFor(points, false), color, style = Stroke((charts.seriesLineWidth ?: 2.5.dp).toPx()))
                     points.forEach { point ->
-                        drawCircle(color, 4.dp.toPx(), Offset(point.x.dp.toPx(), point.y.dp.toPx()))
+                        drawCircle(color, (charts.pointRadius ?: 4.dp).toPx(), Offset(point.x.dp.toPx(), point.y.dp.toPx()))
                     }
                 }
                 if (horizontal) drawLine(foreground, Offset(place.baseline.dp.toPx(), plot.y.dp.toPx()),
-                    Offset(place.baseline.dp.toPx(), (plot.y + plot.height).dp.toPx()), 1.dp.toPx())
+                    Offset(place.baseline.dp.toPx(), (plot.y + plot.height).dp.toPx()), charts.gridWidth.toPx())
                 else drawLine(foreground, Offset(plot.x.dp.toPx(), place.baseline.dp.toPx()),
-                    Offset((plot.x + plot.width).dp.toPx(), place.baseline.dp.toPx()), 1.dp.toPx())
+                    Offset((plot.x + plot.width).dp.toPx(), place.baseline.dp.toPx()), charts.gridWidth.toPx())
             }
             data.title?.let {
                 Text(it, Modifier.offset(20.dp, 10.dp).width((layout.width - 40f).dp),

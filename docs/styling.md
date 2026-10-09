@@ -113,7 +113,7 @@ Custom builders and custom plugins own their Compose output. They can read the s
 This token API covers the core reader and the listed built-in plugin components. It is not a single replacement theme for every module:
 
 - Editor chrome and source/formatted editing surfaces use `editor.MarkdownEditorTheme`. Pass `styleSheet = style` to `SmoothMarkdownEditor` to apply reader styling in Preview and Split modes; this parameter does not restyle source/formatted editing controls.
-- Mermaid base colors and library-owned typography are configurable through `designTokens.mermaid`. `mermaid.MermaidThemeColors.preset(name)` returns the `default`, `dark`, `forest`, or `neutral` palette for copying. Explicit token colors override the fence theme preset; source `style`/`classDef` directives still override individual nodes. `outerPadding` and `maxHeight` apply to fenced diagrams; standalone views retain their caller modifier. Specialty diagram layout geometry and chart series/status palettes remain fixed inside their diagram implementations.
+- Mermaid base colors and library-owned typography are configurable through `designTokens.mermaid`. `mermaid.MermaidThemeColors.preset(name)` returns the `default`, `dark`, `forest`, or `neutral` palette for copying. Explicit token colors override the fence theme preset; source `style`/`classDef` directives still override individual nodes. `outerPadding` and `maxHeight` apply to fenced diagrams; standalone views retain their caller modifier. Specialty diagram layout algorithms remain internal; chart series/status palettes and decoration are configurable through `charts`.
 - App navigation bars, conversation controls, loading/error content supplied by your app, and the Demo's screen controls belong to the host app. Configure these with Compose/Material APIs in your app; the library does not provide a Demo navigation-bar token.
 
 For example, customize Mermaid without modifying its renderer:
@@ -132,3 +132,8 @@ val diagramStyle = style.copy(
 ```
 
 If a visual change needs a different component structure, a custom diagram series palette, or new layout geometry, use `builderRegistry`, `imageBuilder`, `codeBlockBuilder`, or a custom renderer plugin.
+
+## Specialty charts and complete custom component example
+
+See [customization](customization.md) for chart series/status palettes, decoration tokens,
+normalization rules, and a compilable custom heading with selection, Copy and accessibility.
