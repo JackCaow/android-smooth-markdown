@@ -942,6 +942,66 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMathTokens {
   public boolean equals(java.lang.Object);
   public com.jackcaow.smoothmarkdown.MarkdownMathTokens(androidx.compose.ui.text.TextStyle, float, androidx.compose.foundation.layout.PaddingValues, java.lang.String, androidx.compose.ui.graphics.Color, kotlin.jvm.internal.DefaultConstructorMarker);
 }
+public final class com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens(java.util.List, java.util.Map, java.util.Map, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, java.lang.Float, float, float, float, float, float, float, float, float, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public final java.util.List<androidx.compose.ui.graphics.Color> getSeriesColors();
+  public final java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidGanttStatus, androidx.compose.ui.graphics.Color> getGanttStatusColors();
+  public final java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidKanbanPriority, androidx.compose.ui.graphics.Color> getKanbanPriorityColors();
+  public final androidx.compose.ui.graphics.Color getTodayColor-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getOverLimitColor-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getAtLimitColor-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getBelowLimitColor-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getGridColor-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getColumnBackground-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getCardBackground-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color getSectorBorderColor-QN2ZGVo();
+  public final androidx.compose.ui.unit.Dp getSectorBorderWidth-lTKBWiU();
+  public final androidx.compose.ui.unit.Dp getSeriesLineWidth-lTKBWiU();
+  public final androidx.compose.ui.unit.Dp getPointRadius-lTKBWiU();
+  public final java.lang.Float getFillOpacity();
+  public final float getBarCornerRadius-D9Ej5fM();
+  public final float getTaskCornerRadius-D9Ej5fM();
+  public final float getColumnCornerRadius-D9Ej5fM();
+  public final float getCardCornerRadius-D9Ej5fM();
+  public final float getBorderWidth-D9Ej5fM();
+  public final float getGridWidth-D9Ej5fM();
+  public final float getPriorityStripeWidth-D9Ej5fM();
+  public final float getTodayLineWidth-D9Ej5fM();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens normalized();
+  public final long seriesColor-wrIjXm8$smoothmarkdown(int, long);
+  public final java.util.List<androidx.compose.ui.graphics.Color> component1();
+  public final java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidGanttStatus, androidx.compose.ui.graphics.Color> component2();
+  public final java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidKanbanPriority, androidx.compose.ui.graphics.Color> component3();
+  public final androidx.compose.ui.graphics.Color component4-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component5-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component6-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component7-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component8-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component9-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component10-QN2ZGVo();
+  public final androidx.compose.ui.graphics.Color component11-QN2ZGVo();
+  public final androidx.compose.ui.unit.Dp component12-lTKBWiU();
+  public final androidx.compose.ui.unit.Dp component13-lTKBWiU();
+  public final androidx.compose.ui.unit.Dp component14-lTKBWiU();
+  public final java.lang.Float component15();
+  public final float component16-D9Ej5fM();
+  public final float component17-D9Ej5fM();
+  public final float component18-D9Ej5fM();
+  public final float component19-D9Ej5fM();
+  public final float component20-D9Ej5fM();
+  public final float component21-D9Ej5fM();
+  public final float component22-D9Ej5fM();
+  public final float component23-D9Ej5fM();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens copy-2DA71K8(java.util.List<androidx.compose.ui.graphics.Color>, java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidGanttStatus, androidx.compose.ui.graphics.Color>, java.util.Map<com.jackcaow.smoothmarkdown.mermaid.MermaidKanbanPriority, androidx.compose.ui.graphics.Color>, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, java.lang.Float, float, float, float, float, float, float, float, float);
+  public static com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens copy-2DA71K8$default(com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, java.util.List, java.util.Map, java.util.Map, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, java.lang.Float, float, float, float, float, float, float, float, float, int, java.lang.Object);
+  public java.lang.String toString();
+  public int hashCode();
+  public boolean equals(java.lang.Object);
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens(java.util.List, java.util.Map, java.util.Map, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, androidx.compose.ui.unit.Dp, java.lang.Float, float, float, float, float, float, float, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
+}
+public final class com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokensKt {
+}
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting extends java.lang.Enum<com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting> {
   public static final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting Curved;
   public static final com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting Straight;
@@ -951,7 +1011,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting extend
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public static final int $stable;
-  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, int, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, int, kotlin.jvm.internal.DefaultConstructorMarker);
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors getColors();
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography getTypography();
   public final androidx.compose.foundation.layout.PaddingValues getOuterPadding();
@@ -964,6 +1024,7 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public final float getLabelPadding-D9Ej5fM();
   public final float getRankGap-D9Ej5fM();
   public final float getSiblingGap-D9Ej5fM();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens getCharts();
   public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens();
   public final com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors component1();
   public final com.jackcaow.smoothmarkdown.MarkdownMermaidTypography component2();
@@ -977,12 +1038,13 @@ public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTokens {
   public final float component10-D9Ej5fM();
   public final float component11-D9Ej5fM();
   public final float component12-D9Ej5fM();
-  public final com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-Uu2LS1w(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float);
-  public static com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-Uu2LS1w$default(com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, int, java.lang.Object);
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens component13();
+  public final com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-dZIqi9M(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens);
+  public static com.jackcaow.smoothmarkdown.MarkdownMermaidTokens copy-dZIqi9M$default(com.jackcaow.smoothmarkdown.MarkdownMermaidTokens, com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, int, java.lang.Object);
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, kotlin.jvm.internal.DefaultConstructorMarker);
+  public com.jackcaow.smoothmarkdown.MarkdownMermaidTokens(com.jackcaow.smoothmarkdown.mermaid.MermaidThemeColors, com.jackcaow.smoothmarkdown.MarkdownMermaidTypography, androidx.compose.foundation.layout.PaddingValues, float, com.jackcaow.smoothmarkdown.MarkdownMermaidEdgeRouting, float, float, float, float, float, float, float, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, kotlin.jvm.internal.DefaultConstructorMarker);
 }
 public final class com.jackcaow.smoothmarkdown.MarkdownMermaidTypography {
   public static final int $stable;
@@ -4742,8 +4804,8 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidGanttData {
   public boolean equals(java.lang.Object);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidGanttKanbanViewKt {
-  public static final void MermaidGanttView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
-  public static final void MermaidKanbanView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
+  public static final void MermaidGanttView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
+  public static final void MermaidKanbanView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidGanttParser {
   public static final int $stable;
@@ -5155,8 +5217,8 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidPieSlicePlacement 
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidPieTimelineViewKt {
   public static final java.util.List<androidx.compose.ui.graphics.Color> getPiePalette();
-  public static final void MermaidPieView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
-  public static final void MermaidTimelineView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
+  public static final void MermaidPieView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
+  public static final void MermaidTimelineView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidPlacedEdge {
   public static final int $stable;
@@ -5287,8 +5349,8 @@ public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarPlacement {
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarXYParserKt {
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRadarXYViewKt {
-  public static final void MermaidRadarView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
-  public static final void MermaidXYChartView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, androidx.compose.runtime.Composer, int);
+  public static final void MermaidRadarView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
+  public static final void MermaidXYChartView(com.jackcaow.smoothmarkdown.mermaid.MermaidDiagram, com.jackcaow.smoothmarkdown.mermaid.MermaidLayoutResult, androidx.compose.ui.Modifier, com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens, androidx.compose.runtime.Composer, int);
 }
 public final class com.jackcaow.smoothmarkdown.mermaid.MermaidRect {
   public static final int $stable;

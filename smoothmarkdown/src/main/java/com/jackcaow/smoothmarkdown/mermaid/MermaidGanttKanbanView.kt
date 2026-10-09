@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
+import com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -37,7 +38,7 @@ private fun currentLocalDay(): Long {
 }
 
 @Composable
-internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val data = requireNotNull(diagram.gantt)
     val placement = requireNotNull(layout.gantt)
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -54,13 +55,13 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                 val bottom = (layout.height - 20f).dp.toPx()
                 val headerTop = placement.headerY.dp.toPx()
                 val headerBottom = (placement.headerY + 48f).dp.toPx()
-                drawLine(foreground.copy(alpha = 0.22f), Offset(chartLeft, headerBottom),
-                    Offset(chartRight, headerBottom), 1.dp.toPx())
+                drawLine(charts.gridColor ?: foreground.copy(alpha = 0.22f), Offset(chartLeft, headerBottom),
+                    Offset(chartRight, headerBottom), charts.gridWidth.toPx())
                 calendarTicks.forEach { tick ->
                     val x = tick.x.dp.toPx()
-                    drawLine(foreground.copy(alpha = if (tick.tier == MermaidGanttTickTier.MONTH) 0.32f else 0.18f),
+                    drawLine(charts.gridColor ?: foreground.copy(alpha = if (tick.tier == MermaidGanttTickTier.MONTH) 0.32f else 0.18f),
                         Offset(x, headerTop), Offset(x, headerBottom),
-                        (if (tick.tier == MermaidGanttTickTier.MONTH) 1.5f else 1f).dp.toPx())
+                        charts.gridWidth.toPx() * (if (tick.tier == MermaidGanttTickTier.MONTH) 1.5f else 1f))
                 }
                 placement.tasks.forEachIndexed { index, task ->
                     if (index % 2 == 0) {
@@ -68,7 +69,7 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                             Offset(12.dp.toPx(), task.rowY.dp.toPx()),
                             Size((layout.width - 24f).dp.toPx(), 44.dp.toPx()))
                     }
-                    val color = when (task.task.status) {
+                    val color = charts.ganttStatusColors[task.task.status] ?: when (task.task.status) {
                         MermaidGanttStatus.Done -> Color(0xFF4CAF50)
                         MermaidGanttStatus.Active -> Color(0xFF2196F3)
                         MermaidGanttStatus.Critical -> Color(0xFFF44336)
@@ -87,12 +88,12 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
                         drawPath(diamond, color)
                     } else {
                         drawRoundRect(color, Offset(bar.x.dp.toPx(), bar.y.dp.toPx()),
-                            Size(bar.width.dp.toPx(), bar.height.dp.toPx()), CornerRadius(4.dp.toPx()))
+                            Size(bar.width.dp.toPx(), bar.height.dp.toPx()), CornerRadius(charts.taskCornerRadius.toPx()))
                     }
                 }
                 todayX?.let { x ->
                     val markerX = x.dp.toPx()
-                    drawLine(Color(0xFFE91E63), Offset(markerX, top), Offset(markerX, bottom), 2.dp.toPx())
+                    drawLine((charts.todayColor ?: Color(0xFFE91E63)), Offset(markerX, top), Offset(markerX, bottom), charts.todayLineWidth.toPx())
                 }
             }
             data.title?.let {
@@ -113,8 +114,8 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
             }
             todayX?.let { x ->
                 Text("Today", Modifier.offset((x - 18f).dp, (placement.headerY - 18f).dp)
-                    .background(Color(0xFFE91E63).copy(alpha = 0.1f)),
-                    color = Color(0xFFE91E63), style = MaterialTheme.typography.labelSmall,
+                    .background((charts.todayColor ?: Color(0xFFE91E63)).copy(alpha = 0.1f)),
+                    color = (charts.todayColor ?: Color(0xFFE91E63)), style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold)
             }
             placement.tasks.forEach { item ->
@@ -128,7 +129,7 @@ internal fun MermaidGanttView(diagram: MermaidDiagram, layout: MermaidLayoutResu
 }
 
 @Composable
-internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val data = requireNotNull(diagram.kanban)
     val placement = requireNotNull(layout.kanban)
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -141,15 +142,15 @@ internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutRes
                     val box = item.box
                     val origin = Offset(box.x.dp.toPx(), box.y.dp.toPx())
                     val size = Size(box.width.dp.toPx(), box.height.dp.toPx())
-                    drawRoundRect(surface, origin, size, CornerRadius(8.dp.toPx()))
+                    drawRoundRect(charts.columnBackground ?: surface, origin, size, CornerRadius(charts.columnCornerRadius.toPx()))
                     drawRoundRect(foreground.copy(alpha = 0.3f), origin, size,
-                        CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))
+                        CornerRadius(charts.columnCornerRadius.toPx()), style = Stroke(charts.borderWidth.toPx()))
                     drawLine(foreground.copy(alpha = 0.2f),
                         Offset(origin.x, (box.y + 52f).dp.toPx()),
                         Offset(origin.x + size.width, (box.y + 52f).dp.toPx()), 1.dp.toPx())
                     item.cards.forEachIndexed { index, card ->
                         val priority = item.column.tasks[index].priority
-                        val priorityColor = when (priority) {
+                        val priorityColor = charts.kanbanPriorityColors[priority] ?: when (priority) {
                             MermaidKanbanPriority.VeryHigh -> Color(0xFFD32F2F)
                             MermaidKanbanPriority.High -> Color(0xFFFF9800)
                             MermaidKanbanPriority.Normal -> Color(0xFF9E9E9E)
@@ -158,10 +159,10 @@ internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutRes
                         }
                         val cardOrigin = Offset(card.x.dp.toPx(), card.y.dp.toPx())
                         val cardSize = Size(card.width.dp.toPx(), card.height.dp.toPx())
-                        drawRoundRect(cardSurface, cardOrigin, cardSize, CornerRadius(6.dp.toPx()))
+                        drawRoundRect(charts.cardBackground ?: cardSurface, cardOrigin, cardSize, CornerRadius(charts.cardCornerRadius.toPx()))
                         drawRoundRect(foreground.copy(alpha = 0.18f), cardOrigin, cardSize,
-                            CornerRadius(6.dp.toPx()), style = Stroke(1.dp.toPx()))
-                        drawRoundRect(priorityColor, cardOrigin, Size(4.dp.toPx(), cardSize.height),
+                            CornerRadius(charts.cardCornerRadius.toPx()), style = Stroke(charts.borderWidth.toPx()))
+                        drawRoundRect(priorityColor, cardOrigin, Size(charts.priorityStripeWidth.toPx(), cardSize.height),
                             CornerRadius(2.dp.toPx()))
                     }
                 }
@@ -177,9 +178,9 @@ internal fun MermaidKanbanView(diagram: MermaidDiagram, layout: MermaidLayoutRes
                     overflow = TextOverflow.Ellipsis)
                 item.column.wipLimit?.let { limit ->
                     val badgeColor = when {
-                        item.column.isOverLimit -> Color(0xFFF44336)
-                        item.column.tasks.size == limit -> Color(0xFFB77900)
-                        else -> Color(0xFF388E3C)
+                        item.column.isOverLimit -> charts.overLimitColor ?: Color(0xFFF44336)
+                        item.column.tasks.size == limit -> charts.atLimitColor ?: Color(0xFFB77900)
+                        else -> charts.belowLimitColor ?: Color(0xFF388E3C)
                     }
                     Text("${item.column.tasks.size}/$limit",
                         Modifier.offset((item.box.x + 164f).dp, (item.box.y + 17f).dp).width(46.dp),

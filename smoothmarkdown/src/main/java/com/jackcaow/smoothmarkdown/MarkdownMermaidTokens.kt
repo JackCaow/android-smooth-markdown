@@ -27,6 +27,7 @@ data class MarkdownMermaidTokens(
     val labelPadding: Dp = 3.dp,
     val rankGap: Dp = 64.dp,
     val siblingGap: Dp = 40.dp,
+    val charts: MarkdownMermaidChartTokens = MarkdownMermaidChartTokens(),
 
 ) {
     /** Keep the public JVM no-argument constructor across Kotlin compiler versions. */
