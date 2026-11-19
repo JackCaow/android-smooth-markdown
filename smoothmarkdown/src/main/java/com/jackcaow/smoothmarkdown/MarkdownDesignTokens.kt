@@ -80,6 +80,16 @@ class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: C
     var punctuation: Color? = null
     var diffAdd: Color? = null
     var diffRemove: Color? = null
+    /** Function parameters; null keeps the code foreground. */
+    var parameter: Color? = null
+    /** Annotations, decorators and markup attributes; null uses [type]. */
+    var attribute: Color? = null
+    /** Markup and JSX tags; null uses [keyword]. */
+    var tag: Color? = null
+    /** Named constants; null uses [number]. */
+    var constant: Color? = null
+    /** Escape sequences and interpolation delimiters; null uses [number] / [keyword]. */
+    var escape: Color? = null
     operator fun component1(): Color = keyword
     operator fun component2(): Color = string
     operator fun component3(): Color = comment
@@ -89,22 +99,28 @@ class MarkdownSyntaxColors(val keyword: Color, val string: Color, val comment: C
         MarkdownSyntaxColors(keyword, string, comment, number).also {
             it.type = type; it.function = function; it.property = property; it.operator = operator
             it.punctuation = punctuation; it.diffAdd = diffAdd; it.diffRemove = diffRemove
+            it.parameter = parameter; it.attribute = attribute; it.tag = tag; it.constant = constant; it.escape = escape
         }
     override fun toString(): String {
         val base = "keyword=$keyword, string=$string, comment=$comment, number=$number"
         val accents = if (listOf(type, function, property, operator, punctuation, diffAdd, diffRemove).all { it == null }) ""
             else ", type=$type, function=$function, property=$property, operator=$operator, punctuation=$punctuation, diffAdd=$diffAdd, diffRemove=$diffRemove"
-        return "MarkdownSyntaxColors($base$accents)"
+        val extra = if (listOf(parameter, attribute, tag, constant, escape).all { it == null }) ""
+            else ", parameter=$parameter, attribute=$attribute, tag=$tag, constant=$constant, escape=$escape"
+        return "MarkdownSyntaxColors($base$accents$extra)"
     }
     override fun hashCode(): Int {
         val base = listOf(string, comment, number).fold(keyword.hashCode()) { result, value -> 31 * result + value.hashCode() }
         val accents = listOf(type, function, property, operator, punctuation, diffAdd, diffRemove)
-        return if (accents.all { it == null }) base else accents.fold(base) { result, value -> 31 * result + (value?.hashCode() ?: 0) }
+        val withAccents = if (accents.all { it == null }) base else accents.fold(base) { result, value -> 31 * result + (value?.hashCode() ?: 0) }
+        val extra = listOf(parameter, attribute, tag, constant, escape)
+        return if (extra.all { it == null }) withAccents else extra.fold(withAccents) { result, value -> 31 * result + (value?.hashCode() ?: 0) }
     }
     override fun equals(other: Any?): Boolean = other is MarkdownSyntaxColors &&
         keyword == other.keyword && string == other.string && comment == other.comment && number == other.number &&
         type == other.type && function == other.function && property == other.property && operator == other.operator &&
-        punctuation == other.punctuation && diffAdd == other.diffAdd && diffRemove == other.diffRemove
+        punctuation == other.punctuation && diffAdd == other.diffAdd && diffRemove == other.diffRemove &&
+        parameter == other.parameter && attribute == other.attribute && tag == other.tag && constant == other.constant && escape == other.escape
     companion object {
         fun light() = MarkdownSyntaxColors(Color(0xFFCF222E), Color(0xFF0A3069), Color(0xFF6E7781), Color(0xFF0550AE))
         fun dark() = MarkdownSyntaxColors(Color(0xFFFF7B72), Color(0xFFA5D6FF), Color(0xFF8B949E), Color(0xFF79C0FF))

@@ -166,3 +166,94 @@ JNIEXPORT jbyteArray JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustM
 JNIEXPORT void JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_streamFreeNative(JNIEnv *env,jobject self,jlong handle){
     (void)env;(void)self;if(handle)smr_stream_free((void *)(intptr_t)handle);
 }
+
+JNIEXPORT jintArray JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_highlightNative(JNIEnv *env, jobject self, jstring source, jstring language) {
+    (void)self;
+    if (source == NULL || language == NULL) return NULL;
+    jsize length = (*env)->GetStringLength(env, source);
+    const jchar *units = (*env)->GetStringChars(env, source, NULL);
+    if (units == NULL) return NULL;
+    const char *name = (*env)->GetStringUTFChars(env, language, NULL);
+    if (name == NULL) { (*env)->ReleaseStringChars(env, source, units); return NULL; }
+    size_t name_length = 0;
+    while (name[name_length] != 0) name_length++;
+    SmrBuffer output = {0};
+    int32_t status = smr_highlight_utf16((const uint16_t *)units, (size_t)length, (const uint8_t *)name, name_length, &output);
+    (*env)->ReleaseStringUTFChars(env, language, name);
+    (*env)->ReleaseStringChars(env, source, units);
+    jintArray result = NULL;
+    if (status == 0 && output.data != NULL && output.len >= 8) {
+        const uint8_t *bytes = output.data;
+        uint32_t count = (uint32_t)bytes[4] | (uint32_t)bytes[5] << 8 | (uint32_t)bytes[6] << 16 | (uint32_t)bytes[7] << 24;
+        if (count <= (INT_MAX / 3) && output.len >= 8 + (size_t)count * 12) {
+            result = (*env)->NewIntArray(env, (jsize)(count * 3));
+            if (result != NULL && count > 0) {
+                jint *values = (*env)->GetIntArrayElements(env, result, NULL);
+                if (values != NULL) {
+                    for (uint32_t i = 0; i < count * 3; i++) {
+                        const uint8_t *w = bytes + 8 + (size_t)i * 4;
+                        values[i] = (jint)((uint32_t)w[0] | (uint32_t)w[1] << 8 | (uint32_t)w[2] << 16 | (uint32_t)w[3] << 24);
+                    }
+                    (*env)->ReleaseIntArrayElements(env, result, values, 0);
+                }
+            }
+        }
+    }
+    smr_buffer_free(&output);
+    return result;
+}
+
+JNIEXPORT jstring JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_highlightLanguageNative(JNIEnv *env, jobject self, jstring language) {
+    (void)self;
+    if (language == NULL) return NULL;
+    const char *name = (*env)->GetStringUTFChars(env, language, NULL);
+    if (name == NULL) return NULL;
+    size_t name_length = 0;
+    while (name[name_length] != 0) name_length++;
+    SmrBuffer output = {0};
+    int32_t status = smr_highlight_language((const uint8_t *)name, name_length, &output);
+    (*env)->ReleaseStringUTFChars(env, language, name);
+    jstring result = NULL;
+    if (status == 0 && output.data != NULL && output.len > 0 && output.len < 64) {
+        char canonical[64];
+        for (size_t i = 0; i < output.len; i++) canonical[i] = (char)output.data[i];
+        canonical[output.len] = 0;
+        result = (*env)->NewStringUTF(env, canonical);
+    }
+    smr_buffer_free(&output);
+    return result;
+}
+
+typedef int32_t (*SmrLineCall)(const uint16_t *, size_t, const uint8_t *, size_t, uint32_t, SmrBuffer *);
+
+static jbyteArray highlight_bytes(JNIEnv *env, jstring source, jstring language, jint tab_width, SmrLineCall call) {
+    if (source == NULL || language == NULL) return NULL;
+    jsize length = (*env)->GetStringLength(env, source);
+    const jchar *units = (*env)->GetStringChars(env, source, NULL);
+    if (units == NULL) return NULL;
+    const char *name = (*env)->GetStringUTFChars(env, language, NULL);
+    if (name == NULL) { (*env)->ReleaseStringChars(env, source, units); return NULL; }
+    size_t name_length = 0;
+    while (name[name_length] != 0) name_length++;
+    SmrBuffer output = {0};
+    int32_t status = call((const uint16_t *)units, (size_t)length, (const uint8_t *)name, name_length, (uint32_t)(tab_width < 0 ? 0 : tab_width), &output);
+    (*env)->ReleaseStringUTFChars(env, language, name);
+    (*env)->ReleaseStringChars(env, source, units);
+    jbyteArray result = NULL;
+    if (status == 0 && output.data != NULL && output.len <= INT_MAX) {
+        result = (*env)->NewByteArray(env, (jsize)output.len);
+        if (result != NULL) (*env)->SetByteArrayRegion(env, result, 0, (jsize)output.len, (const jbyte *)output.data);
+    }
+    smr_buffer_free(&output);
+    return result;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_highlightLinesNative(JNIEnv *env, jobject self, jstring source, jstring language, jint tab_width) {
+    (void)self;
+    return highlight_bytes(env, source, language, tab_width, smr_highlight_lines_utf16);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_jackcaow_smoothmarkdown_nativeparser_RustMarkdownBridge_diffNative(JNIEnv *env, jobject self, jstring patch, jstring language, jint tab_width) {
+    (void)self;
+    return highlight_bytes(env, patch, language, tab_width, smr_diff_utf16);
+}

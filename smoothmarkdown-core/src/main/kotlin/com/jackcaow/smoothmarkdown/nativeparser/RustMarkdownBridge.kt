@@ -25,6 +25,55 @@ internal object RustMarkdownBridge {
     private external fun streamNewNative(options: Int): Long
     private external fun streamUpdateNative(handle: Long, source: String): ByteArray?
     private external fun streamFreeNative(handle: Long)
+    private external fun highlightNative(source: String, language: String): IntArray?
+    private external fun highlightLanguageNative(language: String): String?
+    private external fun highlightLinesNative(source: String, language: String, tabWidth: Int): ByteArray?
+    private external fun diffNative(patch: String, language: String, tabWidth: Int): ByteArray?
+
+    /** One display line: text with tabs expanded and flattened `(start, length, kind)` tokens. */
+    class CodeLine(val text: String, val tokens: IntArray)
+    /** One unified-diff row: kind 0 hunk, 1 context, 2 added, 3 removed, 4 note. */
+    class DiffRow(val kind: Int, val number: Int?, val changedStart: Int, val changedLength: Int, val line: CodeLine)
+
+    fun highlightLines(source: String, language: String, tabWidth: Int): List<CodeLine>? {
+        if (!available) return null
+        val bytes = try { highlightLinesNative(source, language, tabWidth) } catch (_: LinkageError) { null } ?: return null
+        return WireCursor(bytes).run { if (!magic("SML1")) null else List(word()) { line() ?: return null } }
+    }
+
+    fun diff(patch: String, language: String, tabWidth: Int): List<DiffRow>? {
+        if (!available) return null
+        val bytes = try { diffNative(patch, language, tabWidth) } catch (_: LinkageError) { null } ?: return null
+        return WireCursor(bytes).run {
+            if (!magic("SMD1")) return@run null
+            List(word()) {
+                val kind = word(); val number = word(); val start = word(); val length = word()
+                DiffRow(kind, number.takeIf { it != -1 }, start, length, line() ?: return@run null)
+            }
+        }
+    }
+
+    private class WireCursor(bytes: ByteArray) {
+        private val buffer = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        fun magic(tag: String): Boolean = buffer.remaining() >= 4 && tag.all { buffer.get() == it.code.toByte() }
+        fun word(): Int = if (buffer.remaining() >= 4) buffer.int else throw IllegalStateException("Truncated highlight buffer")
+        fun line(): CodeLine? {
+            val length = word()
+            if (length < 0 || buffer.remaining() < length * 2) return null
+            val chars = CharArray(length) { buffer.short.toInt().toChar() }
+            val count = word()
+            if (count < 0 || buffer.remaining() < count * 12) return null
+            return CodeLine(String(chars), IntArray(count * 3) { buffer.int })
+        }
+    }
+
+    /** Flattened `(start, length, kind)` UTF-16 tokens, or null when the native core is unavailable. */
+    fun highlight(source: String, language: String): IntArray? =
+        if (!available) null else try { highlightNative(source, language) } catch (_: LinkageError) { null }
+
+    /** Canonical language name; `""` when unsupported, null when the native core is unavailable. */
+    fun highlightLanguage(language: String): String? =
+        if (!available) null else try { highlightLanguageNative(language) ?: "" } catch (_: LinkageError) { null }
 
     /** A stream is confined to its creator thread; it owns the native parser session. */
     internal class StreamSession private constructor(private var handle: Long) : AutoCloseable {
