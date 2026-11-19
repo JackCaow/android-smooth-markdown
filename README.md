@@ -14,7 +14,7 @@ Custom builders import `com.jackcaow.smoothmarkdown.ast.Node` and the other libr
 
 Version `0.5.0` aligns native diagrams, inline formatting, HTML disclosures and layout fixes with the current reader. It adds Git/mindmap diagrams and configurable Mermaid geometry. Recompile consumers when upgrading; exhaustive `when` expressions over `MermaidKind` must handle the new kinds. See the [repair and compatibility record](docs/ios-fix-parity.md).
 
-Version `0.6.0` makes `highlightedCode(code, language, dark, syntaxColors)` and `normalizedCodeLanguage(language)` public, so source and diff viewers can reuse the code-block highlighter. Rendering and parser behavior are unchanged.
+Version `0.6.0` moves syntax highlighting into the shared Rust core ([smooth-rust-core](https://github.com/JackCaow/smooth-rust-core) 0.2.0, vendored in `rust-core/`): 40 languages, stateful lexing across lines, and identifiers classified by position (definitions, parameters, type positions, calls, members). `highlightedCode`, `normalizedCodeLanguage`, `highlightedLines` (whole-file highlighting split into display lines) and `highlightedDiff` (unified diff rows with line numbers, per-side highlighting and word-level changes) are public. `MarkdownSyntaxColors` gains optional `parameter`, `attribute`, `tag`, `constant` and `escape` accents. Canonical language names now come from the core (for example `tsx`, `xml` and `scss` are distinct). Code blocks render the new token classes.
 
 ## Install
 

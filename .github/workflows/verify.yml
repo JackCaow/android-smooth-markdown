@@ -44,6 +44,7 @@ jobs:
         working-directory: android-smooth-markdown/rust-core
         run: |
           shasum -a 256 -c SOURCE.sha256
+          ../tools/sync-rust-core.sh --verify
           cargo test --locked --offline
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6

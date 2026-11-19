@@ -58,28 +58,12 @@ internal val LocalOnCodeCopiedWithMetadata = androidx.compose.runtime.staticComp
 internal fun codeLanguage(info: String?): String? = info?.trim()?.substringBefore(' ')?.substringBefore('\t')
     ?.takeIf { it.isNotEmpty() }
 
-internal fun codeTokens(code: String, language: String?): List<CodeToken> = tokenizeCode(code, language)
 
 /** Highlights [code] with the same lexer and palette as enhanced code blocks, for source and diff viewers. */
 fun highlightedCode(code: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null): AnnotatedString = buildAnnotatedString {
     append(code)
     val colors = syntaxColors ?: if (dark) MarkdownSyntaxColors.dark() else MarkdownSyntaxColors.light()
-    codeTokens(code, language).forEach { token ->
-        val color = when (token.kind) {
-            CodeTokenKind.KEYWORD -> colors.keyword
-            CodeTokenKind.STRING -> colors.string
-            CodeTokenKind.COMMENT -> colors.comment
-            CodeTokenKind.NUMBER -> colors.number
-            CodeTokenKind.TYPE -> colors.type
-            CodeTokenKind.FUNCTION -> colors.function
-            CodeTokenKind.PROPERTY -> colors.property ?: if (code[token.start] == '"' || code[token.start] == '\'') colors.string else null
-            CodeTokenKind.OPERATOR -> colors.operator
-            CodeTokenKind.PUNCTUATION -> colors.punctuation
-            CodeTokenKind.DIFF_ADD -> colors.diffAdd ?: colors.string
-            CodeTokenKind.DIFF_REMOVE -> colors.diffRemove ?: colors.keyword
-        }
-        if (color != null) addStyle(SpanStyle(color = color), token.start, token.end)
-    }
+    for (token in codeTokens(code, language)) nativeStyle(token.kind, colors)?.let { addStyle(it, token.start, token.end) }
 }
 
 internal data class ResolvedCodeBlockDecoration(
@@ -235,4 +219,77 @@ internal fun EnhancedCodeBlock(code: String, info: String?) {
             }
         }
     }
+}
+
+/** One display row of a unified diff (see [highlightedDiff]). */
+class CodeDiffRow(
+    val kind: Kind,
+    /** New-file line for context and added rows, old-file line for removed rows. */
+    val lineNumber: Int?,
+    /** Syntax-highlighted display text without the `+`/`-` prefix, tabs expanded. */
+    val text: AnnotatedString,
+    /** The differing middle of a paired removed/added line, for word-level emphasis. */
+    val changed: IntRange?,
+) {
+    enum class Kind { HUNK, CONTEXT, ADDED, REMOVED, NOTE }
+}
+
+private fun styledLine(line: com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge.CodeLine, colors: MarkdownSyntaxColors): AnnotatedString =
+    buildAnnotatedString {
+        append(line.text)
+        val t = line.tokens
+        var i = 0
+        while (i + 2 < t.size) {
+            val start = t[i]; val end = start + t[i + 1]
+            if (start >= 0 && end <= line.text.length && end > start) nativeStyle(t[i + 2], colors)?.let { addStyle(it, start, end) }
+            i += 3
+        }
+    }
+
+/** Highlights a whole file once and returns its display lines (tabs expanded to [tabWidth] spaces). */
+fun highlightedLines(code: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null, tabWidth: Int = 4): List<AnnotatedString> {
+    val colors = syntaxColors ?: if (dark) MarkdownSyntaxColors.dark() else MarkdownSyntaxColors.light()
+    val tag = language?.trim()?.split(Regex("[\\s,]+"))?.firstOrNull()?.takeIf { it.isNotEmpty() }
+    val lines = tag?.let { com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge.highlightLines(code, it, tabWidth) }
+        ?: return code.removeSuffix("\n").split('\n').map { AnnotatedString(it) }
+    return lines.map { styledLine(it, colors) }
+}
+
+/** Display rows of a unified diff: hunk headers, highlighted code rows with line numbers and word-level changes, and notes. */
+fun highlightedDiff(patch: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null, tabWidth: Int = 4): List<CodeDiffRow> {
+    val colors = syntaxColors ?: if (dark) MarkdownSyntaxColors.dark() else MarkdownSyntaxColors.light()
+    val tag = language?.trim()?.split(Regex("[\\s,]+"))?.firstOrNull().orEmpty()
+    val rows = com.jackcaow.smoothmarkdown.nativeparser.RustMarkdownBridge.diff(patch, tag, tabWidth) ?: return emptyList()
+    return rows.map { row ->
+        val changed = if (row.changedStart < 0 || row.changedLength <= 0) null else row.changedStart until row.changedStart + row.changedLength
+        CodeDiffRow(CodeDiffRow.Kind.entries.getOrElse(row.kind) { CodeDiffRow.Kind.NOTE }, row.number, styledLine(row.line, colors), changed)
+    }
+}
+
+/** Style for a native token kind (the Rust `Kind` enum shared with iOS). */
+internal fun nativeStyle(kind: Int, c: MarkdownSyntaxColors): SpanStyle? = when (kind) {
+    16, 17, 18, 19, 20, 25, 50 -> SpanStyle(color = c.keyword)                                  // keywords, preproc, self/this
+    37, 39, 40, 44, 52 -> SpanStyle(color = c.string)                                           // strings, regex, literals, URIs
+    38 -> SpanStyle(color = c.escape ?: c.number)                                               // escapes
+    32 -> SpanStyle(color = c.escape ?: c.keyword)                                              // interpolation delimiters
+    3, 42 -> SpanStyle(color = c.comment)
+    4 -> SpanStyle(color = c.comment, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) // doc comments
+    23 -> SpanStyle(color = c.number)
+    2, 6 -> SpanStyle(color = c.number)                                                         // booleans, null
+    5 -> SpanStyle(color = c.constant ?: c.number)
+    46, 47, 7, 43, 22, 34, 35 -> (c.type ?: c.keyword).let { SpanStyle(color = it) }           // types, constructors, components, namespaces, selectors
+    13, 15 -> c.function?.let { SpanStyle(color = it) }
+    14 -> SpanStyle(color = c.function ?: androidx.compose.ui.graphics.Color.Unspecified, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+    26, 27, 21 -> c.property?.let { SpanStyle(color = it) }                                     // properties, keys, labels
+    1 -> SpanStyle(color = c.attribute ?: c.type ?: c.keyword)                                  // annotations, attributes
+    41, 33 -> SpanStyle(color = c.tag ?: c.keyword)                                             // tags, element selectors
+    36 -> SpanStyle(color = c.keyword)                                                          // pseudo selectors
+    24 -> c.operator?.let { SpanStyle(color = it) }
+    28, 29, 30, 31 -> c.punctuation?.let { SpanStyle(color = it) }
+    49 -> c.parameter?.let { SpanStyle(color = it) }
+    45, 12 -> SpanStyle(color = c.keyword, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)  // headings, strong
+    11 -> SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+    8 -> SpanStyle(color = c.diffRemove ?: c.keyword)
+    9 -> SpanStyle(color = c.diffAdd ?: c.string)
+    else -> null                                                                                 // variables, embedded, plain
 }
