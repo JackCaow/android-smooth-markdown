@@ -34,7 +34,7 @@ Credentials must not be forwarded across origins on redirects. Transport overrid
 
 CommonMark 0.31.2 is the base language. GFM tables, task lists, strikethrough, autolinks and tag filtering are separately tested. Footnotes, math, safe HTML and plugin syntax are extensions. HTML is opt-in. Parser conformance, visual rendering coverage and formatted-editor support are separate guarantees.
 
-The parser preserves source ranges. Unsupported math, SVG, Mermaid and editor operations follow the documented fallback or rejection behavior rather than implying unlimited syntax support. Advanced Mermaid layouts and some specialty series/status colors remain component-specific; custom diagram builders provide a replacement path.
+The parser preserves source ranges. Unsupported math, SVG, Mermaid and editor operations follow the documented fallback or rejection behavior rather than implying unlimited syntax support. Advanced Mermaid layout algorithms remain component-specific; chart series/status colors and decoration use `MarkdownMermaidTokens.charts`; custom diagram builders provide a replacement path.
 
 ## Compatibility and release gates
 
@@ -49,3 +49,5 @@ The source-built package does not promise binary ABI compatibility between compi
 `DOCUMENT` owns native reader selection; legacy `READER` is its compatibility alias. `OUTER_CONTAINER` is an Android-specific extension for a parent Compose selection container.
 
 Build verification: `./gradlew :consumer-smoke:verifyConsumer :consumer-reader:assembleDebug :smoothmarkdown:testDebugUnitTest :smoothmarkdown:assembleDebug`, then `python3 tools/check_public_api.py`. Use the existing instrumentation suites for runtime interaction.
+
+Custom component and chart appearance contracts are documented in [customization](customization.md).

@@ -1,5 +1,6 @@
 package com.jackcaow.smoothmarkdown.mermaid
 
+import com.jackcaow.smoothmarkdown.MarkdownMermaidChartTokens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -31,7 +32,7 @@ internal val piePalette = listOf(
 )
 
 @Composable
-internal fun MermaidPieView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidPieView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val pie = requireNotNull(diagram.pie)
     val placement = requireNotNull(layout.pie)
     val surface = MaterialTheme.colorScheme.surface
@@ -43,12 +44,12 @@ internal fun MermaidPieView(diagram: MermaidDiagram, layout: MermaidLayoutResult
                 val top = (placement.center.y - placement.radius) * density
                 val diameter = placement.radius * 2 * density
                 placement.slices.forEach { slice ->
-                    val color = piePalette[slice.index % piePalette.size]
+                    val color = charts.seriesColor(slice.index, piePalette[(slice.index) % piePalette.size])
                     val origin = Offset(left, top)
                     val size = Size(diameter, diameter)
                     drawArc(color, slice.startAngle, slice.sweepAngle, useCenter = true, topLeft = origin, size = size)
-                    drawArc(surface, slice.startAngle, slice.sweepAngle, useCenter = true,
-                        topLeft = origin, size = size, style = Stroke(2.dp.toPx()))
+                    drawArc(charts.sectorBorderColor ?: surface, slice.startAngle, slice.sweepAngle, useCenter = true,
+                        topLeft = origin, size = size, style = Stroke((charts.sectorBorderWidth ?: 2.dp).toPx()))
                     drawRoundRect(color, Offset(22.dp.toPx(), (placement.legendY + slice.index * 30f).dp.toPx()),
                         Size(16.dp.toPx(), 16.dp.toPx()), CornerRadius(3.dp.toPx()))
                 }
@@ -71,7 +72,7 @@ internal fun MermaidPieView(diagram: MermaidDiagram, layout: MermaidLayoutResult
 }
 
 @Composable
-internal fun MermaidTimelineView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier) {
+internal fun MermaidTimelineView(diagram: MermaidDiagram, layout: MermaidLayoutResult, modifier: Modifier, charts: MarkdownMermaidChartTokens) {
     val data = requireNotNull(diagram.timeline)
     val placement = requireNotNull(layout.timeline)
     val foreground = MaterialTheme.colorScheme.onSurface
@@ -83,11 +84,11 @@ internal fun MermaidTimelineView(diagram: MermaidDiagram, layout: MermaidLayoutR
                 drawLine(accent, Offset(24.dp.toPx(), placement.axisY.dp.toPx()),
                     Offset((layout.width - 24f).dp.toPx(), placement.axisY.dp.toPx()), 3.dp.toPx())
                 placement.sections.forEach { section ->
-                    val color = piePalette[section.index % piePalette.size]
+                    val color = charts.seriesColor(section.index, piePalette[(section.index) % piePalette.size])
                     val marker = Offset(section.marker.x.dp.toPx(), section.marker.y.dp.toPx())
                     drawLine(color, marker, Offset(marker.x, section.card.y.dp.toPx()), 2.dp.toPx())
                     drawCircle(color, 7.dp.toPx(), marker)
-                    drawCircle(Color.White, 3.dp.toPx(), marker)
+                    drawCircle(charts.sectorBorderColor ?: Color.White, 3.dp.toPx(), marker)
                     val topLeft = Offset(section.card.x.dp.toPx(), section.card.y.dp.toPx())
                     val size = Size(section.card.width.dp.toPx(), section.card.height.dp.toPx())
                     drawRoundRect(surface, topLeft, size, CornerRadius(7.dp.toPx()))
@@ -102,7 +103,7 @@ internal fun MermaidTimelineView(diagram: MermaidDiagram, layout: MermaidLayoutR
                 val x = section.card.x + 9f
                 Text(section.section.title,
                     modifier = Modifier.offset(x.dp, (section.card.y + 8f).dp).width((section.card.width - 18f).dp),
-                    color = piePalette[section.index % piePalette.size], fontWeight = FontWeight.Bold,
+                    color = charts.seriesColor(section.index, piePalette[(section.index) % piePalette.size]), fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 var eventOffset = 35f
                 section.section.events.forEach { event ->
