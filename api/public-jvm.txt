@@ -122,46 +122,107 @@ public final class com.jackcaow.smoothmarkdown.CodeBlocksKt {
   public static final androidx.compose.runtime.ProvidableCompositionLocal<kotlin.jvm.functions.Function1<java.lang.String, kotlin.Unit>> getLocalOnCodeCopied();
   public static final androidx.compose.runtime.ProvidableCompositionLocal<kotlin.jvm.functions.Function2<java.lang.String, java.lang.String, kotlin.Unit>> getLocalOnCodeCopiedWithMetadata();
   public static final java.lang.String codeLanguage(java.lang.String);
-  public static final java.util.List<com.jackcaow.smoothmarkdown.CodeToken> codeTokens(java.lang.String, java.lang.String);
   public static final androidx.compose.ui.text.AnnotatedString highlightedCode(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors);
   public static androidx.compose.ui.text.AnnotatedString highlightedCode$default(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int, java.lang.Object);
   public static final com.jackcaow.smoothmarkdown.ResolvedCodeBlockDecoration resolveCodeBlockDecoration-4WTKRHQ(com.jackcaow.smoothmarkdown.MarkdownStyleSheet, long);
   public static final void EnhancedCodeBlock(java.lang.String, java.lang.String, androidx.compose.runtime.Composer, int);
+  public static final java.util.List<androidx.compose.ui.text.AnnotatedString> highlightedLines(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int);
+  public static java.util.List highlightedLines$default(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int, int, java.lang.Object);
+  public static final java.util.List<com.jackcaow.smoothmarkdown.CodeDiffRow> highlightedDiff(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int);
+  public static java.util.List highlightedDiff$default(java.lang.String, java.lang.String, boolean, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors, int, int, java.lang.Object);
+  public static final androidx.compose.ui.text.SpanStyle nativeStyle(int, com.jackcaow.smoothmarkdown.MarkdownSyntaxColors);
+}
+public final class com.jackcaow.smoothmarkdown.CodeDiffRow {
+  public static final int $stable;
+  public com.jackcaow.smoothmarkdown.CodeDiffRow(com.jackcaow.smoothmarkdown.CodeDiffRow$Kind, java.lang.Integer, androidx.compose.ui.text.AnnotatedString, kotlin.ranges.IntRange);
+  public final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind getKind();
+  public final java.lang.Integer getLineNumber();
+  public final androidx.compose.ui.text.AnnotatedString getText();
+  public final kotlin.ranges.IntRange getChanged();
+}
+public final class com.jackcaow.smoothmarkdown.CodeDiffRow$Kind extends java.lang.Enum<com.jackcaow.smoothmarkdown.CodeDiffRow$Kind> {
+  public static final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind HUNK;
+  public static final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind CONTEXT;
+  public static final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind ADDED;
+  public static final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind REMOVED;
+  public static final com.jackcaow.smoothmarkdown.CodeDiffRow$Kind NOTE;
+  public static com.jackcaow.smoothmarkdown.CodeDiffRow$Kind[] values();
+  public static com.jackcaow.smoothmarkdown.CodeDiffRow$Kind valueOf(java.lang.String);
+  public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.CodeDiffRow$Kind> getEntries();
+}
+public final class com.jackcaow.smoothmarkdown.CodeKind {
+  public static final com.jackcaow.smoothmarkdown.CodeKind INSTANCE;
+  public static final int ATTRIBUTE;
+  public static final int BOOLEAN;
+  public static final int COMMENT;
+  public static final int COMMENT_DOC;
+  public static final int CONSTANT;
+  public static final int CONSTANT_BUILTIN;
+  public static final int CONSTRUCTOR;
+  public static final int DIFF_MINUS;
+  public static final int DIFF_PLUS;
+  public static final int EMPHASIS;
+  public static final int EMPHASIS_STRONG;
+  public static final int FUNCTION;
+  public static final int FUNCTION_DEFINITION;
+  public static final int FUNCTION_METHOD;
+  public static final int KEYWORD;
+  public static final int KEYWORD_CONTROL;
+  public static final int KEYWORD_DECLARATION;
+  public static final int KEYWORD_IMPORT;
+  public static final int KEYWORD_OPERATOR;
+  public static final int LABEL;
+  public static final int NAMESPACE;
+  public static final int NUMBER;
+  public static final int OPERATOR;
+  public static final int PREPROC;
+  public static final int PROPERTY;
+  public static final int PROPERTY_KEY;
+  public static final int PUNCTUATION;
+  public static final int PUNCTUATION_BRACKET;
+  public static final int PUNCTUATION_DELIMITER;
+  public static final int PUNCTUATION_LIST_MARKER;
+  public static final int PUNCTUATION_SPECIAL;
+  public static final int SELECTOR;
+  public static final int SELECTOR_CLASS;
+  public static final int SELECTOR_ID;
+  public static final int SELECTOR_PSEUDO;
+  public static final int STRING;
+  public static final int STRING_ESCAPE;
+  public static final int STRING_REGEX;
+  public static final int STRING_SPECIAL;
+  public static final int TAG;
+  public static final int TAG_DOCTYPE;
+  public static final int TAG_COMPONENT;
+  public static final int TEXT_LITERAL;
+  public static final int TITLE;
+  public static final int TYPE;
+  public static final int TYPE_BUILTIN;
+  public static final int VARIABLE;
+  public static final int VARIABLE_PARAMETER;
+  public static final int VARIABLE_SPECIAL;
+  public static final int LINK_TEXT;
+  public static final int LINK_URI;
+  public static final int $stable;
 }
 public final class com.jackcaow.smoothmarkdown.CodeSyntaxLexerKt {
   public static final java.lang.String normalizedCodeLanguage(java.lang.String);
-  public static final java.util.List<com.jackcaow.smoothmarkdown.CodeToken> tokenizeCode(java.lang.String, java.lang.String);
+  public static final java.util.List<com.jackcaow.smoothmarkdown.CodeToken> codeTokens(java.lang.String, java.lang.String);
 }
 public final class com.jackcaow.smoothmarkdown.CodeToken {
   public static final int $stable;
-  public com.jackcaow.smoothmarkdown.CodeToken(int, int, com.jackcaow.smoothmarkdown.CodeTokenKind);
+  public com.jackcaow.smoothmarkdown.CodeToken(int, int, int);
   public final int getStart();
   public final int getEnd();
-  public final com.jackcaow.smoothmarkdown.CodeTokenKind getKind();
+  public final int getKind();
   public final int component1();
   public final int component2();
-  public final com.jackcaow.smoothmarkdown.CodeTokenKind component3();
-  public final com.jackcaow.smoothmarkdown.CodeToken copy(int, int, com.jackcaow.smoothmarkdown.CodeTokenKind);
-  public static com.jackcaow.smoothmarkdown.CodeToken copy$default(com.jackcaow.smoothmarkdown.CodeToken, int, int, com.jackcaow.smoothmarkdown.CodeTokenKind, int, java.lang.Object);
+  public final int component3();
+  public final com.jackcaow.smoothmarkdown.CodeToken copy(int, int, int);
+  public static com.jackcaow.smoothmarkdown.CodeToken copy$default(com.jackcaow.smoothmarkdown.CodeToken, int, int, int, int, java.lang.Object);
   public java.lang.String toString();
   public int hashCode();
   public boolean equals(java.lang.Object);
-}
-public final class com.jackcaow.smoothmarkdown.CodeTokenKind extends java.lang.Enum<com.jackcaow.smoothmarkdown.CodeTokenKind> {
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind KEYWORD;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind STRING;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind COMMENT;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind NUMBER;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind TYPE;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind FUNCTION;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind PROPERTY;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind OPERATOR;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind PUNCTUATION;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind DIFF_ADD;
-  public static final com.jackcaow.smoothmarkdown.CodeTokenKind DIFF_REMOVE;
-  public static com.jackcaow.smoothmarkdown.CodeTokenKind[] values();
-  public static com.jackcaow.smoothmarkdown.CodeTokenKind valueOf(java.lang.String);
-  public static kotlin.enums.EnumEntries<com.jackcaow.smoothmarkdown.CodeTokenKind> getEntries();
 }
 public final class com.jackcaow.smoothmarkdown.CustomInlineWidget {
   public static final int $stable;
@@ -1536,6 +1597,16 @@ public final class com.jackcaow.smoothmarkdown.MarkdownSyntaxColors {
   public final void setDiffAdd-Y2TPw74(androidx.compose.ui.graphics.Color);
   public final androidx.compose.ui.graphics.Color getDiffRemove-QN2ZGVo();
   public final void setDiffRemove-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getParameter-QN2ZGVo();
+  public final void setParameter-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getAttribute-QN2ZGVo();
+  public final void setAttribute-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getTag-QN2ZGVo();
+  public final void setTag-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getConstant-QN2ZGVo();
+  public final void setConstant-Y2TPw74(androidx.compose.ui.graphics.Color);
+  public final androidx.compose.ui.graphics.Color getEscape-QN2ZGVo();
+  public final void setEscape-Y2TPw74(androidx.compose.ui.graphics.Color);
   public final long component1-0d7_KjU();
   public final long component2-0d7_KjU();
   public final long component3-0d7_KjU();
