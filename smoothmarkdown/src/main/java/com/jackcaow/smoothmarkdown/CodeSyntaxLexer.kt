@@ -4,7 +4,8 @@ package com.jackcaow.smoothmarkdown
 internal enum class CodeTokenKind { KEYWORD, STRING, COMMENT, NUMBER, TYPE, FUNCTION, PROPERTY, OPERATOR, PUNCTUATION, DIFF_ADD, DIFF_REMOVE }
 internal data class CodeToken(val start: Int, val end: Int, val kind: CodeTokenKind)
 
-internal fun normalizedCodeLanguage(language: String?): String? {
+/** Maps a fence tag or file extension (`kt`, `tsx`, `py`, …) to the highlighter's language name. */
+fun normalizedCodeLanguage(language: String?): String? {
     val raw = language?.trim()?.lowercase()?.split(Regex("[\\s,]+"))?.firstOrNull()?.takeIf { it.isNotEmpty() } ?: return null
     return when (raw) {
         "js", "jsx", "javascript", "node" -> "javascript"

@@ -60,7 +60,8 @@ internal fun codeLanguage(info: String?): String? = info?.trim()?.substringBefor
 
 internal fun codeTokens(code: String, language: String?): List<CodeToken> = tokenizeCode(code, language)
 
-internal fun highlightedCode(code: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null): AnnotatedString = buildAnnotatedString {
+/** Highlights [code] with the same lexer and palette as enhanced code blocks, for source and diff viewers. */
+fun highlightedCode(code: String, language: String?, dark: Boolean, syntaxColors: MarkdownSyntaxColors? = null): AnnotatedString = buildAnnotatedString {
     append(code)
     val colors = syntaxColors ?: if (dark) MarkdownSyntaxColors.dark() else MarkdownSyntaxColors.light()
     codeTokens(code, language).forEach { token ->
