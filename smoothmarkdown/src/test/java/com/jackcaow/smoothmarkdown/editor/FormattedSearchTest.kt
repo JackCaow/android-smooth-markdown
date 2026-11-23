@@ -35,6 +35,35 @@ class FormattedSearchTest {
         assertEquals("x", controller.selectedText)
     }
 
+    @Test fun dottedIExpansionSelectsCompleteOriginalSpelling() {
+        val samples = listOf(
+            Triple("i\u0307X", "İX", TextRange(0, 3)),
+            Triple("i\u0307", "İ", TextRange(0, 2)),
+            Triple("İX", "i\u0307X", TextRange(0, 2)),
+            Triple("İ", "i", TextRange(0, 1)),
+            Triple("ΟΣ", "ς", TextRange(1, 2)),
+        )
+        for ((source, query, range) in samples) {
+            val controller = MarkdownEditorController(source)
+            assertEquals(query, listOf(range), controller.findMatches(query))
+            assertEquals(query, listOf(range), search(source, query).map { it.sourceRange })
+            assertEquals(range, controller.selectNextMatch(query))
+            controller.replaceSelection("!")
+            assertEquals(source.replaceRange(range.min, range.max, "!"), controller.text)
+        }
+        assertTrue(MarkdownEditorController("İX").findMatches("\u0307X").isEmpty())
+        assertTrue(search("İX", "\u0307X").isEmpty())
+        assertTrue(MarkdownEditorController("i\u0307X").findMatches("İX", caseSensitive = true).isEmpty())
+
+        val mixed = "i\u0307X iX İX"
+        val ranges = listOf(TextRange(0, 3), TextRange(4, 6), TextRange(7, 9))
+        assertEquals(ranges, MarkdownEditorController(mixed).findMatches("İX"))
+        assertEquals(ranges, search(mixed, "İX").map { it.sourceRange })
+        val formatted = search("# **i\u0307X**", "İX").single()
+        assertEquals(TextRange(0, 3), formatted.visibleRange)
+        assertEquals(TextRange(4, 7), formatted.sourceRange)
+    }
+
     @Test fun matchesRemainNonOverlappingAndCappedInBothModes() {
         val source = "a".repeat(1002)
         val expected = List(500) { TextRange(it * 2, it * 2 + 2) }

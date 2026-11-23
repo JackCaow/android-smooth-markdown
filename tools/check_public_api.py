@@ -15,6 +15,7 @@ classes = set()
 # Precisely named Kotlin-internal/private additions reviewed against source declarations.
 # Preserve historical public baseline classes; do not hide whole implementation packages.
 internal_parity_classes = {
+    'com.jackcaow.smoothmarkdown.editor.EditorSearch',  # Kotlin-internal with a JVM-synthetic entry point.
     'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor',
     'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor$Match',
     'com.jackcaow.smoothmarkdown.InlineFormattingPluginsKt',  # Only private formattingMatch.
@@ -77,6 +78,7 @@ synthetic_classes = set()
 # Precisely named Kotlin-internal/private additions reviewed against source declarations.
 # Preserve historical public baseline classes; do not hide whole implementation packages.
 internal_parity_classes = {
+    'com.jackcaow.smoothmarkdown.editor.EditorSearch',  # Kotlin-internal with a JVM-synthetic entry point.
     'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor',
     'com.jackcaow.smoothmarkdown.HtmlDetailsPostProcessor$Match',
     'com.jackcaow.smoothmarkdown.InlineFormattingPluginsKt',  # Only private formattingMatch.

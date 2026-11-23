@@ -33,20 +33,13 @@ internal class FormattedSearch private constructor(val matches: List<FormattedSe
             val matches = mutableListOf<FormattedSearchMatch>()
 
             fun add(target: FormattedSearchTarget, visible: String, sourceRange: (TextRange) -> TextRange?) {
-                if (visible.length < query.length) return
-                var cursor = 0
-                while (cursor <= visible.length - query.length && matches.size < 500) {
-                    val at = visible.indexOf(query, cursor, ignoreCase = true)
-                    if (at < 0) break
-                    val end = at + query.length
-                    if (safeBoundary(visible, at) && safeBoundary(visible, end)) {
-                        val visibleRange = TextRange(at, end)
-                        val mapped = sourceRange(visibleRange)
-                        if (mapped != null && mapped.min < mapped.max && mapped.max <= document.source.length) {
-                            matches += FormattedSearchMatch(target, visibleRange, mapped)
-                        }
+                if (matches.size >= 500) return
+                for (visibleRange in EditorSearch.ranges(visible, query, caseSensitive = false)) {
+                    val mapped = sourceRange(visibleRange)
+                    if (mapped != null && mapped.min < mapped.max && mapped.max <= document.source.length) {
+                        matches += FormattedSearchMatch(target, visibleRange, mapped)
+                        if (matches.size >= 500) break
                     }
-                    cursor = end // Flutter search uses non-overlapping matches.
                 }
             }
 
@@ -130,7 +123,5 @@ internal class FormattedSearch private constructor(val matches: List<FormattedSe
             return FormattedSearch(matches.sortedWith(compareBy({ it.sourceRange.min }, { it.sourceRange.max })).take(500))
         }
 
-        private fun safeBoundary(text: String, offset: Int): Boolean = offset == 0 || offset == text.length ||
-            !(text[offset - 1].isHighSurrogate() && text[offset].isLowSurrogate())
     }
 }
