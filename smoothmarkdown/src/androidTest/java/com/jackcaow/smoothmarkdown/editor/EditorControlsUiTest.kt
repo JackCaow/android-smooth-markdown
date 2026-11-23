@@ -65,6 +65,20 @@ class EditorControlsUiTest {
         }
     }
 
+    @Test fun sourceFindSelectsTheOriginalTextAfterUnicodeCaseExpansion() {
+        val controller = MarkdownEditorController("İX")
+        compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }
+
+        compose.onNodeWithTag("editor-find").performClick()
+        compose.onNodeWithTag("editor-search-query").performTextInput("x")
+        compose.onNodeWithTag("editor-search-count").assertTextEquals("1/1")
+        compose.onNodeWithTag("editor-search-next").performClick()
+        compose.runOnIdle {
+            assertEquals(androidx.compose.ui.text.TextRange(1, 2), controller.selection)
+            assertEquals("X", controller.selectedText)
+        }
+    }
+
     @Test fun findNavigatesSourceAndFocusModeCanBeExited() {
         val controller = MarkdownEditorController("Alpha beta alpha")
         compose.setContent { MaterialTheme { SmoothMarkdownEditor(controller, Modifier.fillMaxSize()) } }

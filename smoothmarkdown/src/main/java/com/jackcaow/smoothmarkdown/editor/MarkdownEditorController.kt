@@ -1645,13 +1645,18 @@ class MarkdownEditorController(
 
     fun findMatches(query: String, caseSensitive: Boolean = false): List<TextRange> {
         if (query.isEmpty()) return emptyList()
-        val haystack = if (caseSensitive) text else text.lowercase()
-        val needle = if (caseSensitive) query else query.lowercase()
+        // Match against the source: lowercasing can change UTF-16 length (e.g. İ).
+        val source = text
         val matches = mutableListOf<TextRange>()
-        var index = haystack.indexOf(needle)
-        while (index >= 0 && matches.size < 500) {
-            matches += TextRange(index, index + needle.length)
-            index = haystack.indexOf(needle, index + needle.length)
+        var cursor = 0
+        while (cursor <= source.length - query.length && matches.size < 500) {
+            val start = source.indexOf(query, cursor, ignoreCase = !caseSensitive)
+            if (start < 0) break
+            val end = start + query.length
+            if (safeUtf16Boundary(source, start) == start && safeUtf16Boundary(source, end) == end) {
+                matches += TextRange(start, end)
+            }
+            cursor = end
         }
         return matches
     }

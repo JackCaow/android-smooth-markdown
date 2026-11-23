@@ -16,6 +16,21 @@ import java.util.concurrent.atomic.AtomicLong
 /** Proves the packaged NDK library actually loads in Android, with no silent Kotlin fallback. */
 @RunWith(AndroidJUnit4::class)
 class RustParserRuntimeTest {
+    @Test fun packagedDiffKeepsWordRangesAndCommentSpansAcrossEofNotes() {
+        val patch = "@@ -1,2 +1,2 @@\n /* open\n-  old */\n\\ No newline at end of file\n+  new */\n"
+        val colors = MarkdownSyntaxColors.light()
+        val rows = highlightedDiff(patch, "kt", dark = false, syntaxColors = colors)
+        assertEquals(listOf(CodeDiffRow.Kind.HUNK, CodeDiffRow.Kind.CONTEXT, CodeDiffRow.Kind.REMOVED,
+            CodeDiffRow.Kind.NOTE, CodeDiffRow.Kind.ADDED), rows.map { it.kind })
+        for ((row, word) in listOf(rows[2] to "old", rows[4] to "new")) {
+            assertEquals(2, row.lineNumber)
+            assertEquals(word, row.changed?.let { row.text.text.substring(it) })
+            assertTrue(row.text.spanStyles.any {
+                it.item.color == colors.comment && it.start <= 2 && it.end >= 5
+            })
+        }
+    }
+
     @Test fun packagedStreamSessionRetainsBlocksAndInvalidatesLateReferences() {
         StreamingMarkdownSession().use { session ->
             val source = "# 中文🙂\n\nFirst [target][x]\n\nSecond\n\nTail"
