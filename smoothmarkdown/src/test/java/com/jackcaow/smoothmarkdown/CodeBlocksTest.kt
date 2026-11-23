@@ -51,6 +51,32 @@ class CodeBlocksTest {
         assertTrue(second.spanStyles.any { it.item.color == androidx.compose.ui.graphics.Color.Red && second.text.substring(it.start, it.end) == "val" })
     }
 
+    @Test fun eofNotesKeepWordChangesAndMultilineHighlightingOnEachSide() {
+        val patch = listOf(
+            "@@ -5,2 +9,2 @@",
+            " /* open",
+            "-\t🙂 old */",
+            "\\ No newline at end of file",
+            "+\t🙂 new */",
+            "\\ No newline at end of file",
+        ).joinToString("\n")
+        val colors = MarkdownSyntaxColors.light()
+        val rows = highlightedDiff(patch, "kt", dark = false, syntaxColors = colors)
+        assertEquals(listOf(CodeDiffRow.Kind.HUNK, CodeDiffRow.Kind.CONTEXT, CodeDiffRow.Kind.REMOVED,
+            CodeDiffRow.Kind.NOTE, CodeDiffRow.Kind.ADDED, CodeDiffRow.Kind.NOTE), rows.map { it.kind })
+        assertEquals(listOf(null, 9, 6, null, 10, null), rows.map { it.lineNumber })
+        for ((row, word) in listOf(rows[2] to "old", rows[4] to "new")) {
+            assertEquals("    🙂 $word */", row.text.text)
+            assertEquals(word, row.changed?.let { row.text.text.substring(it) })
+            val start = row.text.text.indexOf(word)
+            assertTrue(row.text.spanStyles.any { it.item.color == colors.comment &&
+                it.start <= start && it.end >= start + word.length })
+        }
+        assertTrue(rows.filter { it.kind == CodeDiffRow.Kind.NOTE }.all {
+            it.text.text == "No newline at end of file" && it.changed == null && it.text.spanStyles.isEmpty()
+        })
+    }
+
     @Test fun diffRowsCarryNumbersAndWordChanges() {
         val patch = "diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -3,2 +3,2 @@\n const x = 1\n-let total = price * 2\n+let total = price * 3\n"
         val rows = highlightedDiff(patch, "a.js", dark = false)

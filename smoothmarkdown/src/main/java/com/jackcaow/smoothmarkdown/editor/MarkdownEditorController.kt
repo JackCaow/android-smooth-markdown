@@ -1643,18 +1643,8 @@ class MarkdownEditorController(
         else -> start + (position - start).coerceAtMost(replacementLength)
     }
 
-    fun findMatches(query: String, caseSensitive: Boolean = false): List<TextRange> {
-        if (query.isEmpty()) return emptyList()
-        val haystack = if (caseSensitive) text else text.lowercase()
-        val needle = if (caseSensitive) query else query.lowercase()
-        val matches = mutableListOf<TextRange>()
-        var index = haystack.indexOf(needle)
-        while (index >= 0 && matches.size < 500) {
-            matches += TextRange(index, index + needle.length)
-            index = haystack.indexOf(needle, index + needle.length)
-        }
-        return matches
-    }
+    fun findMatches(query: String, caseSensitive: Boolean = false): List<TextRange> =
+        EditorSearch.ranges(text, query, caseSensitive).take(500).toList()
 
     fun selectNextMatch(query: String, caseSensitive: Boolean = false): TextRange? {
         val matches = findMatches(query, caseSensitive)

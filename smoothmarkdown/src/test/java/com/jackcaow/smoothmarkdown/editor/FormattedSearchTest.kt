@@ -10,6 +10,72 @@ class FormattedSearchTest {
     private fun search(source: String, query: String) =
         FormattedSearch.find(MarkdownDocumentCodec.parse(source), query, enableWikilinks = true).matches
 
+    @Test fun sourceAndFormattedFindReturnOriginalUtf16Ranges() {
+        val source = "İX 😀 ΟΣ İx"
+        val controller = MarkdownEditorController(source)
+        val expected = mapOf(
+            "x" to listOf(TextRange(1, 2), TextRange(10, 11)),
+            "İ" to listOf(TextRange(0, 1), TextRange(9, 10)),
+            "σ" to listOf(TextRange(7, 8)),
+            "😀" to listOf(TextRange(3, 5)),
+            "\uD83D" to emptyList(),
+            "\uDE00" to emptyList(),
+            "" to emptyList(),
+        )
+        expected.forEach { (query, ranges) ->
+            assertEquals(query, ranges, controller.findMatches(query))
+            assertEquals(query, ranges, search(source, query).map { it.sourceRange })
+        }
+        assertEquals(listOf(TextRange(1, 2)), controller.findMatches("X", caseSensitive = true))
+        assertTrue(controller.findMatches("\uDE00", caseSensitive = true).isEmpty())
+        controller.setSelection(0)
+        assertEquals(TextRange(1, 2), controller.selectNextMatch("x"))
+        assertEquals("X", controller.selectedText)
+        assertEquals(TextRange(10, 11), controller.selectPreviousMatch("x"))
+        assertEquals("x", controller.selectedText)
+    }
+
+    @Test fun dottedIExpansionSelectsCompleteOriginalSpelling() {
+        val samples = listOf(
+            Triple("i\u0307X", "İX", TextRange(0, 3)),
+            Triple("I\u0307X", "İX", TextRange(0, 3)),
+            Triple("İX", "I\u0307X", TextRange(0, 2)),
+            Triple("ıX", "İX", TextRange(0, 2)),
+            Triple("i\u0307", "İ", TextRange(0, 2)),
+            Triple("İX", "i\u0307X", TextRange(0, 2)),
+            Triple("İ", "i", TextRange(0, 1)),
+            Triple("ΟΣ", "ς", TextRange(1, 2)),
+        )
+        for ((source, query, range) in samples) {
+            val controller = MarkdownEditorController(source)
+            assertEquals(query, listOf(range), controller.findMatches(query))
+            assertEquals(query, listOf(range), search(source, query).map { it.sourceRange })
+            assertEquals(range, controller.selectNextMatch(query))
+            controller.replaceSelection("!")
+            assertEquals(source.replaceRange(range.min, range.max, "!"), controller.text)
+        }
+        for ((source, query) in listOf("İX" to "\u0307X", "İX" to "ı\u0307X", "ı\u0307X" to "İX")) {
+            assertTrue(MarkdownEditorController(source).findMatches(query).isEmpty())
+            assertTrue(search(source, query).isEmpty())
+        }
+        assertTrue(MarkdownEditorController("i\u0307X").findMatches("İX", caseSensitive = true).isEmpty())
+
+        val mixed = "i\u0307X iX İX"
+        val ranges = listOf(TextRange(0, 3), TextRange(4, 6), TextRange(7, 9))
+        assertEquals(ranges, MarkdownEditorController(mixed).findMatches("İX"))
+        assertEquals(ranges, search(mixed, "İX").map { it.sourceRange })
+        val formatted = search("# **i\u0307X**", "İX").single()
+        assertEquals(TextRange(0, 3), formatted.visibleRange)
+        assertEquals(TextRange(4, 7), formatted.sourceRange)
+    }
+
+    @Test fun matchesRemainNonOverlappingAndCappedInBothModes() {
+        val source = "a".repeat(1002)
+        val expected = List(500) { TextRange(it * 2, it * 2 + 2) }
+        assertEquals(expected, MarkdownEditorController(source).findMatches("aa"))
+        assertEquals(expected, search(source, "aa").map { it.sourceRange })
+    }
+
     @Test fun headingFindUsesVisibleTextAndMapsAroundInlineMarkup() {
         val source = "# **Alpha** [link](https://alpha.example)\n\nPlain alpha"
         val matches = search(source, "ALPHA")
