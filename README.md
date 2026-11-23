@@ -16,6 +16,8 @@ Version `0.5.0` aligns native diagrams, inline formatting, HTML disclosures and 
 
 Version `0.6.0` moves syntax highlighting into the shared Rust core ([smooth-rust-core](https://github.com/JackCaow/smooth-rust-core) 0.2.0, vendored in `rust-core/`): 40 languages, stateful lexing across lines, and identifiers classified by position (definitions, parameters, type positions, calls, members). `highlightedCode`, `normalizedCodeLanguage`, `highlightedLines` (whole-file highlighting split into display lines) and `highlightedDiff` (unified diff rows with line numbers, per-side highlighting and word-level changes) are public. `MarkdownSyntaxColors` gains optional `parameter`, `attribute`, `tag`, `constant` and `escape` accents. Canonical language names now come from the core (for example `tsx`, `xml` and `scss` are distinct). Code blocks render the new token classes.
 
+Version `0.6.1` fixes Unicode search ranges in the source and formatted editors. Searching for `X` in `İX` now selects the original character, and replacing a decomposed dotted I removes its combining dot. Unified diffs retain word-level changes and multiline syntax colors across missing-newline notes. Public APIs and Android requirements are unchanged.
+
 ## Install
 
 ### Compatibility baseline
@@ -24,9 +26,9 @@ Source builds now use Kotlin **1.9.24**, Compose Foundation **1.6.8**, Compose c
 
 Version `0.4.0` lowers the consumer baseline and includes background streaming improvements. The older `0.3.1` artifact remains unchanged and still requires compileSdk 37. See [Android compatibility](docs/android-compatibility.md) for verified consumers and custom-builder migration.
 
-### Install 0.6.0
+### Install 0.6.1
 
-The `0.4.0` reader requires Android API 24+, **compileSdk 35 or newer**, AGP 8.6.0+, Jetpack Compose Foundation 1.6.8+, and Java 17. Kotlin 1.9.22 and 2.1.20 consumers have been verified. Match the Compose compiler to your application's Kotlin version. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
+The `0.6.1` reader requires Android API 24+, **compileSdk 35 or newer**, AGP 8.6.0+, Jetpack Compose Foundation 1.6.8+, and Java 17. Kotlin 1.9.22 and 2.1.20 consumers have been verified. Match the Compose compiler to your application's Kotlin version. Add the public JitPack Maven repository to your app project's `settings.gradle.kts`:
 
 ```kotlin
 dependencyResolutionManagement {
@@ -45,7 +47,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.6.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown:0.6.1")
 }
 ```
 
@@ -57,7 +59,7 @@ For a JVM application without Android or Compose, use the same JitPack repositor
 
 ```kotlin
 dependencies {
-    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.6.0")
+    implementation("com.github.JackCaow.android-smooth-markdown:smoothmarkdown-core:0.6.1")
 }
 ```
 
@@ -72,9 +74,9 @@ Core needs Java 17 and Kotlin's standard library. Its JVM fallback works without
 
 `0.3.0` remains a failed JitPack build tag; `0.3.1` fixes the build environment without replacing that tag.
 
-These are the individual-module coordinates for the `0.6.0` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
+These are the individual-module coordinates for the `0.6.1` release; see [JitPack's multi-module guide](https://docs.jitpack.io/building/#multi-module-projects) and the [release page](https://github.com/JackCaow/android-smooth-markdown/releases). The old `com.github.JackCaow:android-smooth-markdown:0.2.0` coordinate identifies the previous single-module AAR.
 
-**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.5.0` and `io.github.jackcaow:smoothmarkdown-core:0.6.0`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
+**Maven Central has not been published.** Its prepared coordinates are `io.github.jackcaow:smooth-markdown:0.6.1` and `io.github.jackcaow:smoothmarkdown-core:0.6.1`; use the JitPack coordinates above until a Central release is announced. `google()` resolves Android framework dependencies; it does not host this library.
 
 For source integration, pin this repository to a reviewed commit, include both `:smoothmarkdown-core` and `:smoothmarkdown` in `settings.gradle.kts`, and depend on `project(":smoothmarkdown")`. Building these source modules also requires the [Rust/NDK toolchain](docs/rust-parser-build.md). The `app` module is only the Demo.
 
