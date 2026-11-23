@@ -38,6 +38,9 @@ class FormattedSearchTest {
     @Test fun dottedIExpansionSelectsCompleteOriginalSpelling() {
         val samples = listOf(
             Triple("i\u0307X", "İX", TextRange(0, 3)),
+            Triple("I\u0307X", "İX", TextRange(0, 3)),
+            Triple("İX", "I\u0307X", TextRange(0, 2)),
+            Triple("ıX", "İX", TextRange(0, 2)),
             Triple("i\u0307", "İ", TextRange(0, 2)),
             Triple("İX", "i\u0307X", TextRange(0, 2)),
             Triple("İ", "i", TextRange(0, 1)),
@@ -51,8 +54,10 @@ class FormattedSearchTest {
             controller.replaceSelection("!")
             assertEquals(source.replaceRange(range.min, range.max, "!"), controller.text)
         }
-        assertTrue(MarkdownEditorController("İX").findMatches("\u0307X").isEmpty())
-        assertTrue(search("İX", "\u0307X").isEmpty())
+        for ((source, query) in listOf("İX" to "\u0307X", "İX" to "ı\u0307X", "ı\u0307X" to "İX")) {
+            assertTrue(MarkdownEditorController(source).findMatches(query).isEmpty())
+            assertTrue(search(source, query).isEmpty())
+        }
         assertTrue(MarkdownEditorController("i\u0307X").findMatches("İX", caseSensitive = true).isEmpty())
 
         val mixed = "i\u0307X iX İX"

@@ -8,17 +8,23 @@ internal object EditorSearch {
     fun ranges(text: String, query: String, caseSensitive: Boolean): Sequence<TextRange> = sequence {
         if (query.isEmpty()) return@sequence
         // İ is the one code point whose Unicode default lowercase expands to multiple code points.
-        val expanded = if (!caseSensitive && ('İ' in query || '\u0307' in query))
-            query.replace("İ", "i\u0307") else null
+        val lowerQuery = if (!caseSensitive && ('İ' in query || '\u0307' in query)) query.lowercase() else null
+        val lowerText = lowerQuery?.let { text.lowercase() }
+        var mappedUntil = 0
+        var extraUnits = 0
         var cursor = 0
         while (cursor < text.length) {
-            val at = if (expanded == null) text.indexOf(query, cursor, ignoreCase = !caseSensitive)
+            val at = if (lowerQuery == null) text.indexOf(query, cursor, ignoreCase = !caseSensitive)
                 else text.indexOf(query.first(), cursor, ignoreCase = true)
             if (at < 0) break
-            val end = if (expanded == null) at + query.length else {
+            val end = if (lowerQuery == null || lowerText == null) at + query.length else {
+                while (mappedUntil < at) {
+                    if (text[mappedUntil++] == 'İ') extraUnits++
+                }
                 // Prefer the full dotted spelling so replacement also removes the combining dot.
-                expandedEnd(text, at, expanded)
-                    ?: if (text.regionMatches(at, query, 0, query.length, ignoreCase = true)) at + query.length else null
+                val fullEnd = if (lowerText.startsWith(lowerQuery, at + extraUnits))
+                    originalEnd(text, at, lowerQuery.length) else null
+                fullEnd ?: if (text.regionMatches(at, query, 0, query.length, ignoreCase = true)) at + query.length else null
             }
             if (end != null && safeUtf16Boundary(text, at) == at && safeUtf16Boundary(text, end) == end) {
                 yield(TextRange(at, end))
@@ -29,22 +35,13 @@ internal object EditorSearch {
         }
     }
 
-    /** Compare complete source code points, keeping both ends in the original coordinate space. */
-    private fun expandedEnd(text: String, start: Int, expanded: String): Int? {
-        var sourceOffset = start
-        var queryOffset = 0
-        while (queryOffset < expanded.length && sourceOffset < text.length) {
-            if (text[sourceOffset] == 'İ') {
-                if (!expanded.regionMatches(queryOffset, "i\u0307", 0, 2, ignoreCase = true)) return null
-                sourceOffset++
-                queryOffset += 2
-            } else {
-                val width = Character.charCount(text.codePointAt(sourceOffset))
-                if (!text.regionMatches(sourceOffset, expanded, queryOffset, width, ignoreCase = true)) return null
-                sourceOffset += width
-                queryOffset += width
-            }
+    /** Map a matched lowercase span back to source, rejecting a partial final expansion. */
+    private fun originalEnd(text: String, start: Int, lowerLength: Int): Int? {
+        var end = start
+        var remaining = lowerLength
+        while (remaining > 0) {
+            remaining -= if (text[end++] == 'İ') 2 else 1
         }
-        return if (queryOffset == expanded.length) sourceOffset else null
+        return if (remaining == 0) end else null
     }
 }
