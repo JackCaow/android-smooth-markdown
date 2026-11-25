@@ -177,12 +177,12 @@ private fun MermaidDiagramContent(
         Box(accessibleModifier) {
           CompositionLocalProvider(LocalDensity provides Density(hostDensity.density * scale, hostDensity.fontScale / scale)) {
             when (diagram.kind) {
-                MermaidKind.Pie -> MermaidPieView(diagram, layout, Modifier)
-                MermaidKind.Timeline -> MermaidTimelineView(diagram, layout, Modifier)
-                MermaidKind.Gantt -> MermaidGanttView(diagram, layout, Modifier)
-                MermaidKind.Kanban -> MermaidKanbanView(diagram, layout, Modifier)
-                MermaidKind.Radar -> MermaidRadarView(diagram, layout, Modifier)
-                MermaidKind.XYChart -> MermaidXYChartView(diagram, layout, Modifier)
+                MermaidKind.Pie -> MermaidPieView(diagram, layout, Modifier, style.charts)
+                MermaidKind.Timeline -> MermaidTimelineView(diagram, layout, Modifier, style.charts)
+                MermaidKind.Gantt -> MermaidGanttView(diagram, layout, Modifier, style.charts)
+                MermaidKind.Kanban -> MermaidKanbanView(diagram, layout, Modifier, style.charts)
+                MermaidKind.Radar -> MermaidRadarView(diagram, layout, Modifier, style.charts)
+                MermaidKind.XYChart -> MermaidXYChartView(diagram, layout, Modifier, style.charts)
                 MermaidKind.ERDiagram -> MermaidERView(diagram, layout, Modifier, onNodeTap, style)
                 else -> Unit
             }
